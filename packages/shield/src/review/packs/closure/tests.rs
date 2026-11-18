@@ -473,6 +473,7 @@ fn builtin_tracking_root_acquires_and_selects_a_verified_new_release() {
             level: Profile::Strict,
         }],
         Acquisition {
+            exact_versions: BTreeMap::new(),
             pending: BTreeSet::from([instance.clone()]),
             locked: BTreeSet::new(),
             offline: false,
@@ -515,29 +516,23 @@ fn builtin_tracking_root_acquires_and_selects_a_verified_new_release() {
 }
 
 #[test]
-fn update_reports_pinned_roots_it_skips() {
-    let row = |selector: &str, id: &str, pinned: bool, direct: bool| json!({"selector":selector,"id":id,"version":"1.0.0","source_identity":"main","source_alias":"main","pinned":pinned,"direct":direct});
-    let rows = [
-        row("pack:1", "acme/fixed", true, true),
-        row("pack:2", "acme/tracking", false, true),
-        row("pack:3", "acme/child", true, false),
-    ];
-    let ids = |skipped: Vec<Value>| -> Vec<Value> {
-        skipped.into_iter().map(|row| row["id"].clone()).collect()
-    };
-    let all = mutations::skipped_pinned(&rows, &[], None).expect("update all");
-    assert_eq!(ids(all), [json!("acme/fixed")]);
-    let named = mutations::skipped_pinned(&rows, &[], Some("acme/fixed")).expect("named pinned");
-    assert_eq!(named[0]["selector"], "pack:1");
-    // A current alias bound to the row's source identity also names it.
-    let renamed = [("renamed".to_owned(), "main".to_owned())];
-    let aliased = mutations::skipped_pinned(&rows, &renamed, Some("renamed/acme/fixed"))
-        .expect("current alias");
-    assert_eq!(aliased[0]["selector"], "pack:1");
-    assert_eq!(
-        mutations::skipped_pinned(&rows, &[], Some("acme/tracking")).expect("named tracking"),
-        Vec::<Value>::new()
-    );
+fn recovered_direct_main_updates_select_the_verified_builtin_source() {
+    let (_root, context) = crate::review::tests::enrolled();
+    let registered = registries::effective(Some(&context)).unwrap();
+    let row = json!({"id":"acme/inspect","source_identity":"main",
+        "source_alias":"project-files","source":{"identity":"main","location":".shield","key":null},
+        "pinned":true,"direct":true});
+    let instance = identity(&row).unwrap();
+    let (_, source) = enrolled_source(&registered, std::slice::from_ref(&row), &instance).unwrap();
+    assert_eq!(source, registries::main_source().unwrap());
+    for (field, value) in [
+        ("key", json!("0".repeat(64))),
+        ("location", json!("elsewhere")),
+    ] {
+        let mut changed = row.clone();
+        changed["source"][field] = value;
+        assert!(enrolled_source(&registered, &[changed], &instance).is_err());
+    }
 }
 
 #[test]

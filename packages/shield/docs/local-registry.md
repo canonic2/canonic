@@ -65,17 +65,19 @@ shield pack add PACK_SELECTOR --profile strict
 This preserves its retained version and pin and reviews the profile change.
 Profile changes use retained artifacts and can work offline.
 
-To update unpinned selections, run:
+To review updates for all installed direct selections, including pinned packs, run:
 
 ```sh
 shield pack update
 ```
 
 From an agent, the matching MCP tool is `pack_update`: `{}` selects all
-tracking packs and `{"reference":"gate"}` selects one. It prepares the same
+direct packs and `{"reference":"gate"}` selects one. Append `@VERSION` to select
+an exact release. It prepares the same
 candidate and returns `apply_arguments` for `policy_apply` approval.
 
-Review version and permission changes before confirming. Pins are skipped;
+Review version and permission changes before confirming. Updated packs keep
+their profiles and pin mode at the new versions. Updates run only on demand;
 resolution or verification failure leaves policy unchanged.
 
 To remove a selection, use:
@@ -222,8 +224,9 @@ new pack without `--profile`, Shield asks for its profile after resolving the
 release, with Recommended preselected; Enter keeps it. Dependencies follow the
 profile you choose. An exact `@version` pins that release. Adding an installed selector
 without a version preserves its version and pin; `--profile` changes its profile
-without requiring the source to be online. Update skips pinned releases and
-reviews all applicable changes in one transaction. Removal works offline.
+without requiring the source to be online. Explicit update includes pinned releases,
+keeps their pin mode, and reviews all applicable changes in one transaction.
+Removal works offline.
 
 ## Local catalog
 
@@ -439,16 +442,19 @@ The same evidence accompanies failed preconditions and shared command bodies.
 
 ## Updating and removing dependency packs
 
-`shield pack update` resolves one complete compatible closure for all tracking roots;
+`shield pack update` resolves one complete compatible closure for all direct roots;
 direct selections from the built-in `main` registry use its pinned source and
 need no additional registry enrollment.
-Tracking direct selections update to their installed version or a newer release.
+Direct selections update to their installed version or a newer compatible release.
 `shield pack update pack:<uuid>` updates that instance and its reachable dependencies.
-Direct profiles and pinned versions stay fixed. Updating a pinned instance is a
-no-op. Dependencies reachable only from skipped pinned roots retain their versions;
-shared dependencies reached by tracking roots can update within every parent's
-constraints. An unpinned dependency can also be updated explicitly, subject to
-all parent constraints. Source enrollment is checked by captured identity, so
+Direct profiles and pin modes stay fixed; an updated pin names the resulting version.
+Unselected roots retain their exact versions during a targeted update.
+Reachable dependencies can update within every parent's constraints.
+A dependency can also be updated explicitly, including an exact version such as
+`shield pack update acme/child@1.1.0`, subject to all parent constraints. It
+remains a dependency with its derived profile; a conflicting or missing release
+refuses the update without changing policy.
+Source enrollment is checked by captured identity, so
 renaming an alias cannot retarget an installed instance.
 
 Review shows each pack added, removed, updated or given another profile, and how

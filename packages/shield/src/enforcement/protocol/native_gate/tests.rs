@@ -2,6 +2,54 @@
 use super::*;
 
 #[test]
+#[cfg(unix)]
+fn base64_option_paths_preserve_native_protection() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let root = dir.path().canonicalize().unwrap();
+    std::fs::create_dir_all(root.join(".shield/state")).unwrap();
+    std::fs::write(root.join(".shield/state/state.json"), "private").unwrap();
+    let snapshot = crate::configuration::Candidate::from_yaml("schema_version: 1\npacks: []\n")
+        .unwrap()
+        .capture(&[], None)
+        .unwrap();
+    let evaluator =
+        crate::configuration::Evaluator::new(vec![(crate::policy::Scope::Project, snapshot)])
+            .unwrap();
+    for (source, blocked) in [
+        ("base64 -d", false),
+        ("base64 --input=ordinary --output=result", false),
+        ("base64 --input=.shield/state/state.json", true),
+        ("base64 -o.shield/state/state.json", true),
+        ("base64 --output=.shield/state/state.json", true),
+    ] {
+        let analysis = crate::shell::analyze(
+            source,
+            crate::shell::Dialect::Bash,
+            root.to_str().unwrap(),
+            root.to_str().unwrap(),
+            &evaluator,
+        )
+        .unwrap();
+        let finding = paths::protection(
+            &analysis,
+            &root,
+            &root,
+            paths::Guard {
+                cache: None,
+                allow: crate::review::path_access::PathAccess::default(),
+                working_files: None,
+            },
+            paths::Access::Write,
+        );
+        assert_eq!(
+            finding.0 != paths::Protection::None,
+            blocked,
+            "{source}: {finding:?}"
+        );
+    }
+}
+
+#[test]
 fn grep_searches_and_auxiliary_reads_preserve_native_protection() {
     let dir = assert_fs::TempDir::new().unwrap();
     let root = dir.path().canonicalize().unwrap();

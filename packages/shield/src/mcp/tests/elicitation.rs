@@ -298,10 +298,10 @@ fn pack_forms_cancellation_disconnect_and_busy_slot_create_no_proposals() {
         let form = transport.call(json!(10), "pack_configure", &args());
         let second = transport.call(json!(11), "pack_configure", &args());
         assert_eq!(
-            data(&second)["error"]["code"],
-            "input_unavailable",
+            second["error"]["data"]["code"], "human_input_busy",
             "{second}"
         );
+        assert_eq!(second["error"]["data"]["requestId"], 10);
         if disconnect {
             let (_, result) = transport.close();
             assert!(result.is_ok());

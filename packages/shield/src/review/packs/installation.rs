@@ -56,6 +56,7 @@ impl Installation {
         selections: &[Selection],
         local: bool,
     ) -> Result<Self, Error> {
+        let _trace = crate::diagnostics::trace::span("pack.install.prepare");
         if !(1..=16).contains(&selections.len()) {
             return Err(Error::Invalid("select 1-16 packs"));
         }
@@ -173,13 +174,22 @@ impl Installation {
                 "answer every installation setting exactly once",
             ));
         }
+        // Preparation already resolved and validated this exact candidate.
+        // With no answers to apply, rebuilding every installed pack does no
+        // additional work on the settings and can exhaust the MCP deadline.
+        if self.settings.is_empty() {
+            return Ok(changes::Prepared {
+                binding: self.binding.clone(),
+                candidate: self.candidate.clone(),
+                metadata: self.metadata.clone(),
+                comparison: None,
+            });
+        }
         let mut metadata = self.metadata.clone();
-        for (index, row) in metadata["installed"]
+        let rows = metadata["installed"]
             .as_array_mut()
-            .ok_or(Error::Invalid("installed packs missing"))?
-            .iter_mut()
-            .enumerate()
-        {
+            .ok_or(Error::Invalid("installed packs missing"))?;
+        for (index, row) in rows.iter_mut().enumerate() {
             let selected: BTreeMap<_, _> = self
                 .settings
                 .iter()
@@ -200,9 +210,6 @@ impl Installation {
         }
         let artifacts: Vec<String> = serde_json::from_value(self.candidate["packs"].clone())
             .map_err(|_| Error::Invalid("pack artifacts missing"))?;
-        let rows = metadata["installed"]
-            .as_array_mut()
-            .ok_or(Error::Invalid("installed packs missing"))?;
         let candidate = super::rebuild(&self.candidate, rows, &artifacts, None)?;
         super::unbind(rows);
         Ok(changes::Prepared {
@@ -219,6 +226,7 @@ fn collect_settings(
     metadata: &Value,
     requested: &BTreeMap<String, BTreeSet<String>>,
 ) -> Result<Vec<Setting>, Error> {
+    let _trace = crate::diagnostics::trace::span("pack.install.settings");
     // Pending interactions retain source bytes in memory, never an unbounded bundle.
     let bytes = candidate
         .as_object()

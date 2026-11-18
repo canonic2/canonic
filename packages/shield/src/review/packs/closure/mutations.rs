@@ -62,7 +62,7 @@ impl Retained {
                     requirement: "*"
                         .parse()
                         .map_err(|_| Error::Invalid("version requirement"))?,
-                    pin: if floating.contains(&release.instance) && row["pinned"] != true {
+                    pin: if floating.contains(&release.instance) {
                         None
                     } else {
                         Some(release.version.clone())
@@ -73,6 +73,26 @@ impl Retained {
             })
             .collect()
     }
+
+    /// Keep exact retained versions for instances this update did not float.
+    fn retain_locked_versions(&mut self, floating: &BTreeSet<Instance>, roots: &[Root<Profile>]) {
+        self.releases.retain(|release| {
+            self.rows
+                .iter()
+                .find(|row| identity(row).is_ok_and(|i| i == release.instance))
+                .is_none_or(|row| {
+                    if !floating.contains(&release.instance)
+                        || roots
+                            .iter()
+                            .any(|r| r.instance == release.instance && r.pin.is_some())
+                    {
+                        row["version"] == release.version.to_string()
+                    } else {
+                        true
+                    }
+                })
+        });
+    }
 }
 
 pub(in crate::review::packs) fn update(
@@ -82,6 +102,14 @@ pub(in crate::review::packs) fn update(
 ) -> Result<(Value, Value), Error> {
     let mut retained = Retained::load(before)?;
     let aliases = super::super::current_aliases(&before.settings);
+    let requested = reference
+        .and_then(|reference| reference.rsplit_once('@'))
+        .map(|(_, version)| {
+            version
+                .parse::<semver::Version>()
+                .map_err(|_| Error::Invalid("update version must be an exact semantic version"))
+        })
+        .transpose()?;
     let target = reference
         .map(|r| super::super::selection(&retained.rows, &aliases, r))
         .transpose()?;
@@ -90,9 +118,7 @@ pub(in crate::review::packs) fn update(
         .iter()
         .zip(&retained.releases)
         .enumerate()
-        .filter(|(i, (row, _))| {
-            row["pinned"] != true && target.map_or(row["direct"] != false, |t| t == *i)
-        })
+        .filter(|(i, (row, _))| target.map_or(row["direct"] != false, |t| t == *i))
         .map(|(_, (_, r))| r.instance.clone())
         .collect();
     if seeds.is_empty() {
@@ -101,14 +127,28 @@ pub(in crate::review::packs) fn update(
             before.operator.clone(),
         ));
     }
-    let roots = retained.roots(&seeds, &BTreeSet::new())?;
+    let mut roots = retained.roots(&seeds, &BTreeSet::new())?;
+    if let (Some(index), Some(version)) = (target, requested.as_ref())
+        && let Some(root) = roots
+            .iter_mut()
+            .find(|root| root.instance == retained.releases[index].instance)
+    {
+        // Direct exact requests can select prereleases; dependency requests
+        // still need their parents to explicitly permit the prerelease.
+        root.requirement = format!("={version}")
+            .parse()
+            .map_err(|_| Error::Invalid("invalid update version"))?;
+    }
+    let exact_versions = target
+        .zip(requested)
+        .map(|(index, version)| (retained.releases[index].instance.clone(), version))
+        .into_iter()
+        .collect();
     let locked = retained
         .rows
         .iter()
         .zip(&retained.releases)
-        .filter(|(row, r)| {
-            row["direct"] != false && (row["pinned"] == true || !seeds.contains(&r.instance))
-        })
+        .filter(|(row, r)| row["direct"] != false && !seeds.contains(&r.instance))
         .map(|(_, r)| r.instance.clone())
         .collect();
     let floating = acquire_closure(
@@ -117,6 +157,7 @@ pub(in crate::review::packs) fn update(
         &retained.rows,
         &roots,
         Acquisition {
+            exact_versions,
             minimum_versions: retained
                 .rows
                 .iter()
@@ -140,26 +181,9 @@ pub(in crate::review::packs) fn update(
             .iter()
             .map(|r| r.instance.registry.clone()),
     );
-    // Unchanged roots and dependencies reachable only from skipped pinned roots
-    // retain exact locks. Shared dependencies reached by tracking roots can move.
-    retained.releases.retain(|release| {
-        retained
-            .rows
-            .iter()
-            .find(|row| identity(row).is_ok_and(|i| i == release.instance))
-            .is_none_or(|row| {
-                if row["pinned"] == true
-                    || !floating.contains(&release.instance)
-                    || roots
-                        .iter()
-                        .any(|r| r.instance == release.instance && r.pin.is_some())
-                {
-                    row["version"] == release.version.to_string()
-                } else {
-                    true
-                }
-            })
-    });
+    // Only this explicit request floats the selected roots and dependencies.
+    // Rendering preserves each selection's pin mode at the resulting version.
+    retained.retain_locked_versions(&floating, &roots);
     let selected = resolution::resolve(&roots, &retained.releases, &retained.enrolled)?;
     if unchanged(&retained.rows, &selected) {
         return Ok((
@@ -171,28 +195,6 @@ pub(in crate::review::packs) fn update(
     let mut meta = before.operator.clone();
     meta["installed"] = rows;
     Ok((candidate, meta))
-}
-
-/// The pinned roots an update of `reference`, or of every root, leaves at
-/// their exact versions.
-pub(in crate::review::packs) fn skipped_pinned(
-    rows: &[Value],
-    aliases: &[(String, String)],
-    reference: Option<&str>,
-) -> Result<Vec<Value>, Error> {
-    let target = reference
-        .map(|r| super::super::selection(rows, aliases, r))
-        .transpose()?;
-    Ok(rows
-        .iter()
-        .enumerate()
-        .filter(|(i, row)| {
-            row["pinned"] == true && target.map_or(row["direct"] != false, |t| t == *i)
-        })
-        .map(|(_, row)| {
-            serde_json::json!({"selector":row["selector"],"id":row["id"],"version":row["version"]})
-        })
-        .collect())
 }
 
 fn unchanged(rows: &[Value], selected: &[Selection<'_>]) -> bool {

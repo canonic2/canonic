@@ -429,7 +429,10 @@ forms accept missing inputs too: Shield checks their paths and lets the
 tool return its normal file-not-found error. Outside or excluded paths,
 dangling symlinks and other unverifiable inputs remain restricted. Sed supports
 scripts of `p`, `d`, `s`, `y`, `w`, `W`, `r` and `R` commands separated by `;` or
-newlines, each with an optional numeric or `$` address or range; `s` accepts the
+newlines, each with an optional numeric, `$` or slash-delimited regex address
+or range, including mixed ranges, escaped slashes, `I`/`M` regex flags and `!`
+inversion. For example, `sed -n '/start/,/end/p' FILE` reads only FILE.
+`s` accepts the
 `g`, `p`, number, `i`/`I`, `m`/`M` and `w` flags. Files a script writes (`w`,
 `W`, the `w` flag) are write targets and files it reads (`r`, `R`) are read
 targets; a file name runs to the end of its line. In-place editing (`-i`,
@@ -448,7 +451,7 @@ edit, so a named input that does not exist adds no target. A backup or `w` file 
 input, and so could anything else the command runs, so in those cases a missing
 input leaves the edit unmodeled. `-iSUFFIX` means the same to both. Rules decide these targets like any
 other read or write, so an Allow limited to project reads does not cover an
-edit. The `e` command and flag, regex addresses, blocks and GNU's `*` backup
+edit. The `e` command and flag, blocks and GNU's `*` backup
 suffixes remain unmodeled; awk supports print statements of
 numeric fields, optionally with `-F`; jq supports expressions that compute only
 from their input, such as field lookups, `select`, `map`, `sort_by`, `@tsv` and
@@ -459,6 +462,21 @@ loads no input other than the named targets.
 Sort output files, uniq's second output operand and arbitrary programs
 remain unmodeled. Options precede the program and file operands. A `-` operand
 reads standard input. Packs decide whether to allow these forms or ask.
+
+### Base64 transformations
+
+Base64 encoding and decoding model file operands and input options as reads,
+and output options as writes. Standard input/output and `-` name no file.
+A rule can check both read and write targets: a complete stream transformation
+proves when either collection is empty. GNU `-i` ignores garbage; macOS `-i`
+names an input file. The model handles decoding, wrapping, attached values,
+short clusters, repeated file options and `--`; unknown options and malformed
+arguments remain unverified. Every file still needs its usual path permission,
+including resolved symbolic links. Windows Base64 semantics are unmodeled.
+
+For example, baseline coverage can allow `COMMAND | base64 -d | grep PATTERN`.
+The producer and every downstream command keep their own policy decisions;
+decoding grants no permission to execute the decoded data.
 
 ### Create directories and files
 
@@ -551,7 +569,11 @@ such as `-fsSL`, timeouts, retries and `-o` for curl, and `-q`, `--spider` and `
 wget. wget must also pass `--no-hsts`, because otherwise it rewrites
 `~/.wget-hsts`; without `-O` or `--spider` it is excluded. curl long-option values
 must be separate arguments, such as `--output guide.html`; wget also accepts
-`--output-document=guide.html`. Uploads, request
+`--output-document=guide.html`. Curl's `-G`/`--get` also accepts repeated inline
+`--data-urlencode` values in any option order, including `name=value`, `=value`
+and bare content. Shield evaluates the URL with its encoded query included.
+`@file`, `name@file` and `@-` inputs stay outside this fetch model, as do data
+values without `-G` (which send a request body). Uploads, request
 bodies, headers, credentials, cookies, proxies, configuration files (including
 an existing `~/.curlrc`, `~/.wgetrc`, or `~/.netrc` for wget without
 `--no-netrc`) and other options leave the command to

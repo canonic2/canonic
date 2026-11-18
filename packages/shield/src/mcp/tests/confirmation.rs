@@ -704,12 +704,16 @@ fn inspection_runs_while_a_form_is_open_and_a_second_form_is_unavailable() {
     }
     let second = transport.call(json!(7), "policy_apply", &args);
     assert_eq!(second["id"], 7, "{second}");
-    assert_eq!(error_code(&second), "approval_unavailable");
+    assert_eq!(
+        second["error"]["data"]["code"], "human_input_busy",
+        "{second}"
+    );
+    assert_eq!(second["error"]["data"]["requestId"], 3);
     assert_eq!(project.revision(), before);
     let applied = transport.request(&answer(&form, &json!({"action":"accept"})));
     assert_eq!(applied["id"], 3, "{applied}");
-    // The duplicate call could not ask, so the shared attempt was withdrawn.
-    // Its outstanding form cannot activate that closed attempt afterwards.
+    // Refusing the duplicate drops its cancellation guard, closing the shared
+    // review. A late answer to the outstanding form cannot activate it.
     assert_eq!(error_code(&applied), "invalid_input", "{applied}");
     assert!(
         applied["result"]["structuredContent"]["error"]["message"]
@@ -721,10 +725,7 @@ fn inspection_runs_while_a_form_is_open_and_a_second_form_is_unavailable() {
     let outcome =
         crate::review::proposal_outcome(project.root.path(), args["proposal_id"].as_str().unwrap());
     assert_eq!(outcome["status"], "withdrawn", "{outcome}");
-    assert_eq!(
-        outcome["closed_reason"], "approval_unavailable",
-        "{outcome}"
-    );
+    assert_eq!(outcome["closed_reason"], "cancelled", "{outcome}");
     assert_eq!(project.revision(), before);
 }
 

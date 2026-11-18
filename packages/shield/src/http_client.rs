@@ -2,7 +2,7 @@
 //! optional file write describe completely, without executing them.
 //! Any other option, a second URL or an unusual URL leaves the command to
 //! argv policy.
-use std::collections::BTreeMap;
+use std::{borrow::Cow, collections::BTreeMap};
 
 /// The HTTP client a recognized command runs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -15,7 +15,7 @@ pub(crate) enum Client {
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct Fetch<'a> {
     pub(crate) client: Client,
-    pub(crate) url: &'a str,
+    pub(crate) url: Cow<'a, str>,
     pub(crate) method: &'static str,
     /// Whether the client follows redirects: `follow` or `none`.
     pub(crate) redirects: &'static str,
@@ -69,6 +69,8 @@ fn curl<'a>(arguments: &[&'a str]) -> Option<Fetch<'a>> {
     let mut request = None;
     let mut follow = false;
     let mut skips_config = false;
+    let mut get = false;
+    let mut query = Vec::new();
     let mut options = true;
     let mut position = 0;
     while position < arguments.len() {
@@ -87,7 +89,12 @@ fn curl<'a>(arguments: &[&'a str]) -> Option<Fetch<'a>> {
                 "silent" | "show-error" | "fail" | "fail-with-body" | "include" | "globoff"
                 | "compressed" | "retry-connrefused" | "retry-all-errors" => {}
                 "head" => head = true,
+                "get" => get = true,
                 "location" => follow = true,
+                "data-urlencode" => {
+                    query.push(encoded_query(arguments.get(position)?)?);
+                    position += 1;
+                }
                 _ => {
                     let value = *arguments.get(position)?;
                     position += 1;
@@ -100,6 +107,7 @@ fn curl<'a>(arguments: &[&'a str]) -> Option<Fetch<'a>> {
                 match flag {
                     's' | 'S' | 'f' | 'i' | 'g' => {}
                     'I' => head = true,
+                    'G' => get = true,
                     'L' => follow = true,
                     'm' | 'X' | 'w' | 'o' => {
                         let attached = &flags[index + 1..];
@@ -123,6 +131,9 @@ fn curl<'a>(arguments: &[&'a str]) -> Option<Fetch<'a>> {
             }
         }
     }
+    if !query.is_empty() && !get {
+        return None;
+    }
     let method = match (head, request) {
         (true, Some("GET")) => return None,
         (true, _) | (false, Some("HEAD")) => "HEAD",
@@ -130,13 +141,56 @@ fn curl<'a>(arguments: &[&'a str]) -> Option<Fetch<'a>> {
     };
     Some(Fetch {
         client: Client::Curl,
-        url: literal_url(url?)?,
+        url: query_url(literal_url(url?)?, &query)?,
         method,
         redirects: if follow { "follow" } else { "none" },
         output: output.filter(|path| !["-", "/dev/null"].contains(path)),
         skips_config,
         reads_netrc: false,
     })
+}
+
+/// Inline data-urlencode forms only. Before `=`, names are already encoded;
+/// without `=`, any `@` selects file/stdin input and cannot be a plain fetch.
+fn encoded_query(value: &str) -> Option<String> {
+    const HEX: &[u8; 16] = b"0123456789ABCDEF";
+    let (name, content) = match value.split_once('=') {
+        Some((name, content)) => (name, content),
+        None if !value.contains('@') => ("", value),
+        None => return None,
+    };
+    let mut result = String::new();
+    if !name.is_empty() {
+        result.push_str(name);
+        result.push('=');
+    }
+    for byte in content.bytes() {
+        if byte.is_ascii_alphanumeric() || b"-._~".contains(&byte) {
+            result.push(char::from(byte));
+        } else {
+            result.push('%');
+            result.push(char::from(HEX[usize::from(byte >> 4)]));
+            result.push(char::from(HEX[usize::from(byte & 15)]));
+        }
+    }
+    Some(result)
+}
+
+/// Retain the effective query in policy evidence, including an existing query
+/// and fragment. No query means no allocation for ordinary downloads.
+fn query_url<'a>(url: &'a str, query: &[String]) -> Option<Cow<'a, str>> {
+    if query.is_empty() {
+        return Some(Cow::Borrowed(url));
+    }
+    let (base, fragment) = url.split_at(url.find('#').unwrap_or(url.len()));
+    let separator = match base.split_once('?') {
+        Some((_, previous)) if previous.is_empty() || previous.ends_with('&') => "",
+        Some(_) => "&",
+        None => "?",
+    };
+    let effective = format!("{base}{separator}{}{fragment}", query.join("&"));
+    literal_url(&effective)?;
+    Some(Cow::Owned(effective))
 }
 
 fn curl_value<'a>(
@@ -233,7 +287,7 @@ fn wget<'a>(arguments: &[&'a str]) -> Option<Fetch<'a>> {
     }
     Some(Fetch {
         client: Client::Wget,
-        url: literal_url(url?)?,
+        url: literal_url(url?)?.into(),
         method: "GET",
         redirects: if follow { "follow" } else { "none" },
         output: output.filter(|path| !["-", "/dev/null"].contains(path)),
@@ -348,7 +402,7 @@ mod tests {
             fetch,
             Fetch {
                 client: Client::Curl,
-                url: URL,
+                url: URL.into(),
                 method: "GET",
                 redirects: "none",
                 output: Some("/tmp/catalog.json"),
@@ -415,6 +469,66 @@ mod tests {
             "/opt/acme/bin/curl https://registry.example.com/",
         ] {
             assert_eq!(recognized(source), None, "{source}");
+        }
+    }
+
+    #[test]
+    fn curl_query_data_is_inline_and_requires_get_in_any_option_order() {
+        for arguments in [
+            vec!["-sG", "--data-urlencode", "query=sum(rate(x[2m]))", URL],
+            vec![URL, "--data-urlencode", "query=sum(rate(x[2m]))", "--get"],
+        ] {
+            let found = fetch("curl", &arguments).unwrap();
+            assert_eq!(found.method, "GET");
+            assert_eq!(
+                found.url,
+                format!("{URL}?query=sum%28rate%28x%5B2m%5D%29%29")
+            );
+        }
+        let found = fetch(
+            "curl",
+            &[
+                "-GI",
+                "--data-urlencode",
+                "a=one two",
+                "--data-urlencode",
+                "=x@y",
+                "--data-urlencode",
+                "caf\u{e9}",
+                "https://registry.example.com/?old=1#section",
+            ],
+        )
+        .unwrap();
+        assert_eq!(found.method, "HEAD");
+        assert_eq!(
+            found.url,
+            "https://registry.example.com/?old=1&a=one%20two&x%40y&caf%C3%A9#section"
+        );
+        for arguments in [
+            vec!["--data-urlencode", "query=x", URL],
+            vec!["-G", "--data-urlencode", "@notes.txt", URL],
+            vec!["-G", "--data-urlencode", "query@notes.txt", URL],
+            vec!["-G", "--data-urlencode", "@-", URL],
+            vec!["-G", "--data-urlencode"],
+            vec!["-G", "--data-urlencode", "q=x", "-X", "POST", URL],
+            vec!["-G", "--data-urlencode", "q=x", "-d", "@notes.txt", URL],
+        ] {
+            assert_eq!(fetch("curl", &arguments), None, "{arguments:?}");
+        }
+        // An @ after '=' is literal data, not a file selector.
+        assert!(fetch("curl", &["-G", "--data-urlencode", "q=@notes.txt", URL]).is_some());
+        // curl searches for '=' first, and only considers '@' when '=' is absent.
+        // These are inline query names, even though '@' precedes '='.
+        for value in ["q@notes.txt=x", "@notes.txt=x", "q@secrets="] {
+            let found = fetch("curl", &["-G", "--data-urlencode", value, URL]).unwrap();
+            assert_eq!(found.url, format!("{URL}?{value}"));
+        }
+        for url in [
+            "https://registry.example.com/?",
+            "https://registry.example.com/?old=1&",
+        ] {
+            let found = fetch("curl", &["-G", "--data-urlencode", "q=x", url]).unwrap();
+            assert_eq!(found.url, format!("{url}q=x"));
         }
     }
 

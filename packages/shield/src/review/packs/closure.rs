@@ -25,8 +25,25 @@ struct Acquisition {
     pending: BTreeSet<Instance>,
     locked: BTreeSet<Instance>,
     minimum_versions: BTreeMap<Instance, semver::Version>,
+    exact_versions: BTreeMap<Instance, semver::Version>,
     offline: bool,
     catalogs: BTreeMap<String, Catalog>,
+}
+
+impl Acquisition {
+    fn matches_exact_version(&self, instance: &Instance, version: &semver::Version) -> bool {
+        self.exact_versions
+            .get(instance)
+            .is_none_or(|exact| version == exact)
+    }
+
+    fn accepts_version(&self, instance: &Instance, version: &semver::Version) -> bool {
+        self.matches_exact_version(instance, version)
+            && self
+                .minimum_versions
+                .get(instance)
+                .is_none_or(|minimum| version >= minimum)
+    }
 }
 
 fn identity(row: &Value) -> Result<Instance, Error> {
@@ -42,12 +59,22 @@ fn identity(row: &Value) -> Result<Instance, Error> {
     })
 }
 
+#[derive(serde::Deserialize)]
+pub(super) struct Metadata {
+    pub(super) id: String,
+    pub(super) version: String,
+    #[serde(default)]
+    pub(super) dependencies: Vec<policy::Declaration>,
+}
+
 fn release(row: &Value, bytes: &str) -> Result<Release, Error> {
     // Installed artifacts already carry exact retained identities. Fresh
     // acquisitions pass the strict candidate_artifact decoder before this call.
-    let pack = Pack::from_retained_yaml(bytes)?;
-    if pack.id() != row["id"]
-        || pack.version() != row["version"]
+    // Closure bookkeeping needs identity and dependency declarations, not a
+    // second prepared evaluator for already admitted artifact bytes.
+    let pack: Metadata = policy::parse(bytes)?;
+    if pack.id != row["id"]
+        || pack.version != row["version"]
         || row["digest"].as_str().is_none_or(|digest| {
             policy::fingerprint(bytes.as_bytes()) != digest.to_ascii_lowercase()
         })
@@ -59,11 +86,11 @@ fn release(row: &Value, bytes: &str) -> Result<Release, Error> {
     Ok(Release {
         instance: identity(row)?,
         version: pack
-            .version()
+            .version
             .parse()
             .map_err(|_| Error::Invalid("invalid release version"))?,
         dependencies: pack
-            .dependencies()
+            .dependencies
             .iter()
             .map(policy::Declaration::parsed)
             .collect::<Result<_, _>>()
@@ -154,6 +181,7 @@ pub(super) fn prepare(
             offline,
             catalogs,
             minimum_versions: BTreeMap::new(),
+            exact_versions: BTreeMap::new(),
         },
         &mut releases,
         &mut artifacts,
@@ -170,10 +198,14 @@ fn acquire_closure(
     registered: Option<&Effective>,
     rows: &[Value],
     roots: &[Root<Profile>],
-    acquisition: Acquisition,
+    mut acquisition: Acquisition,
     releases: &mut Vec<Release>,
     artifacts: &mut Artifacts,
 ) -> Result<BTreeSet<Instance>, Error> {
+    // Constrain candidate inventory rather than inventing a direct root.
+    // Dependency roles/profiles and all incoming requirements remain derived.
+    releases
+        .retain(|release| acquisition.matches_exact_version(&release.instance, &release.version));
     let current = if registered.is_none() && !acquisition.offline {
         Some(registries::effective(Some(context))?)
     } else {
@@ -189,13 +221,13 @@ fn acquire_closure(
     let mut known = known_instances(
         releases,
         roots,
-        acquisition.pending,
+        std::mem::take(&mut acquisition.pending),
         &acquisition.locked,
         acquisition.offline,
     )?;
     let mut pending = BTreeSet::new();
     let mut acquired = BTreeSet::new();
-    let mut catalogs = acquisition.catalogs;
+    let mut catalogs = std::mem::take(&mut acquisition.catalogs);
     loop {
         let request =
             match resolution::resolve_pending(roots, releases, &enrolled, &known, &pending) {
@@ -231,12 +263,7 @@ fn acquire_closure(
                 for entry in catalog
                     .releases(&instance.pack)
                     .into_iter()
-                    .filter(|entry| {
-                        acquisition
-                            .minimum_versions
-                            .get(&instance)
-                            .is_none_or(|minimum| entry.version >= *minimum)
-                    })
+                    .filter(|entry| acquisition.accepts_version(&instance, &entry.version))
                 {
                     if releases
                         .iter()
@@ -390,10 +417,18 @@ fn enrolled_source(
             "dependency registry identity is not enrolled",
         ));
     };
-    if rows
-        .iter()
-        .any(|row| row["source_identity"] == instance.registry && row["source"] != json!(source))
-    {
+    if rows.iter().any(|row| {
+        row["source_identity"] == instance.registry
+            && row["source"] != json!(source)
+            // Source-only recovery records no signing authority. An explicit
+            // update may acquire a verified replacement from the enrolled
+            // identity; it does not confer trust on the old local bytes.
+            && !(row["direct"] != false
+                && row["source_alias"] == "project-files"
+                && row["source"]["identity"] == row["source_identity"]
+                && row["source"]["location"] == ".shield"
+                && row["source"]["key"].is_null())
+    }) {
         return Err(Error::Invalid("retained registry identity binding changed"));
     }
     Ok((alias.to_owned(), source.clone()))

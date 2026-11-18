@@ -13,10 +13,10 @@ asks. Nothing changes until the user approves the proposal.
 ## 1. Read what is installed
 
 `pack_list` lists each installed selection with its selector, version, profile,
-tracking or pinned mode and dependency edges. An update moves tracking
-selections to their newest compatible release. Pinned selections, installed
-with an exact `@version`, stay at that version, and dependencies follow the
-constraints of the packs that need them.
+tracking or pinned mode and dependency edges. An explicit update moves selected
+packs, including pins, to their newest compatible release. Profiles and pin mode
+are preserved at the resulting versions. Dependencies follow their parents'
+constraints. Nothing updates automatically.
 
 ## 2. Refresh release metadata
 
@@ -33,16 +33,15 @@ failed. Never report packs as current from it.
 
 ## 3. Prepare one update
 
-Call `pack_update` with `{}` for every tracking selection, or with
+Call `pack_update` with `{}` for every direct selection, including pins, or with
 `{"reference":"<selector>"}` for one selection and its dependencies.
 
 - If a release adds settings, Shield asks the user in a form. Do not guess
   values or fill them in yourself.
 - `unchanged` means no newer compatible release exists. Report it and stop.
-- `skipped_pinned` lists pinned selections the update left alone. Report them.
-  Move a pin only when the user asks: `pack_add` with
-  `{"reference":"<publisher>/<pack>@<version>"}` pins that selection to the new
-  version and keeps its profile.
+- For an exact release, use `pack_update` with
+  `{"reference":"<publisher>/<pack>@<version>"}`. Updating a pin requires no
+  reinstall or separate unpin step.
 - Compare each proposed version with the newest advertised one in
   `pack_updates`. When the proposal stops short, the newer release needs a
   newer Shield, other settings or compatible dependencies. `pack_info` on that
@@ -77,7 +76,7 @@ unchanged. Then check what the update changes for this project's real work:
 Report in a few lines:
 
 - each pack's old and new version;
-- pinned selections left alone, and releases held back with the reason;
+- pin modes retained, and releases held back with the reason;
 - the decisions that changed.
 
 Custom rules written to work around a gap the update closed may now be

@@ -1253,7 +1253,7 @@ impl Analysis<'_> {
         let web = Input::Web {
             action: "fetch".into(),
             query: None,
-            url: Some(fetch.url.into()),
+            url: Some(fetch.url.as_ref().into()),
             method: Some(fetch.method.into()),
             conditions: json!({"client":"shell","redirects":fetch.redirects}),
             original_input: json!(request),

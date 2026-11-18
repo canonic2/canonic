@@ -1558,11 +1558,6 @@ fn propose_input(
     let old = views.clone();
     let mut handles = None;
     let presentation = std::cell::RefCell::new(None);
-    // Pinned-root reporting resolves aliases through the project's registries.
-    let settings = super::settings::current(
-        std::path::Path::new(&context.project_root),
-        &super::settings::Legacy::default(),
-    );
     let result = changes::propose(
         context,
         input,
@@ -1572,14 +1567,13 @@ fn propose_input(
             Ok(())
         },
         &|proposal| {
-            let mut data = apply::proposal_result(context, proposal);
+            let data = apply::proposal_result(context, proposal);
             presentation.replace(Some((
                 apply::argument_binding(context, proposal),
                 data["apply_arguments"].clone(),
                 super::publication::mcp_changed(&proposal.base_candidate, &proposal.candidate)
                     .unwrap_or(true),
             )));
-            skipped_pinned(&mut data, input, &proposal.base_metadata, &settings);
             data
         },
     );
@@ -1600,36 +1594,6 @@ fn propose_input(
     data["before_candidate_id"] = json!(before);
     data["after_candidate_id"] = json!(after);
     Ok(data)
-}
-/// Report the pinned roots each `pack_update` leaves at their exact versions,
-/// as `skipped_pinned` rows of selector, id and version.
-fn skipped_pinned(
-    data: &mut Value,
-    input: &changes::Input,
-    base: &Value,
-    settings: &crate::configuration::settings::Values,
-) {
-    let updates = input
-        .change
-        .iter()
-        .chain(input.changes.iter().flatten())
-        .filter_map(|change| match change {
-            changes::Change::PackUpdate { reference } => Some(reference.as_deref()),
-            _ => None,
-        });
-    let mut skipped: Vec<Value> = Vec::new();
-    for reference in updates {
-        // Preparation already resolved the reference against this base; a
-        // reference that names a pack an earlier batch change adds has none.
-        for row in packs::update_skipped(base, settings, reference).unwrap_or_default() {
-            if !skipped.contains(&row) {
-                skipped.push(row);
-            }
-        }
-    }
-    if !skipped.is_empty() {
-        data["skipped_pinned"] = json!(skipped);
-    }
 }
 pub(super) fn fields(value: &Value, allowed: &[&str]) -> Result<(), Error> {
     if value

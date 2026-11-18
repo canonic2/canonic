@@ -2,10 +2,12 @@
 //! files it edits in place or names in its script. Program effects remain
 //! explicitly bounded.
 use super::{Descendants, Target, Targets};
+mod base64;
 mod jq;
 use std::{fs, path::Path};
 
 /// A recognized filter invocation.
+#[derive(Default)]
 struct Parsed {
     operands: Vec<String>,
     /// The backup suffix when sed edits its operands in place; empty for none.
@@ -21,11 +23,16 @@ struct Parsed {
     /// footprint joins this GNU reading's.
     alternative: Option<Box<Parsed>>,
     complete: bool,
+    /// Base64's complete file footprint may use stdin and/or stdout instead.
+    stream: bool,
 }
 
 impl Parsed {
     fn read_only(&self) -> bool {
-        self.complete && self.in_place.is_none() && self.writes.is_empty() && self.reads.is_empty()
+        self.complete
+            && self.in_place.is_none()
+            && self.writes.is_empty()
+            && (self.reads.is_empty() || self.stream)
     }
     /// Each named file with whether the filter writes it, operands first,
     /// then the files only the alternative reading names.
@@ -144,6 +151,8 @@ pub(super) fn collect(
     Some(Targets {
         items,
         complete,
+        reads_input: parsed.stream,
+        exhaustive_actions: parsed.stream,
         ..Targets::default()
     })
 }
@@ -229,6 +238,9 @@ fn parse_reading(executable: &str, arguments: &[String]) -> Option<Parsed> {
     if executable != leaf && ![Path::new("/bin"), Path::new("/usr/bin")].contains(&path.parent()?) {
         return None;
     }
+    if leaf == "base64" {
+        return Some(base64::parse(arguments));
+    }
     let (flags, values, long, max) = match leaf {
         "sed" => ("nEru", "", "", 256),
         "awk" => ("", "F", "", 256),
@@ -262,14 +274,8 @@ fn parse_reading(executable: &str, arguments: &[String]) -> Option<Parsed> {
     let total = arguments.len();
     let mut arguments = arguments.iter().peekable();
     let mut parsed = Parsed {
-        operands: Vec::new(),
-        in_place: None,
-        writes: Vec::new(),
-        reads: Vec::new(),
-        script: None,
-        separate_suffix: None,
-        alternative: None,
         complete: cfg!(any(unix, windows)),
+        ..Parsed::default()
     };
     let mut options = true;
     let mut literal = false;
@@ -377,8 +383,8 @@ struct SedFiles {
 }
 
 /// Scripts of `p`, `d`, `s`, `y`, `w`, `W`, `r` and `R` commands, each with an
-/// optional line address, and the files they name. `e` and the `e` flag run
-/// programs, so scripts using them, regex addresses or blocks are not modeled.
+/// optional numeric or slash-delimited regex address/range, and the files they
+/// name. `e` and the `e` flag run programs; they and blocks are not modeled.
 fn sed(script: &str) -> Option<SedFiles> {
     let mut files = SedFiles::default();
     let mut rest = script;
@@ -388,16 +394,7 @@ fn sed(script: &str) -> Option<SedFiles> {
         if rest.is_empty() {
             return (commands > 0).then_some(files);
         }
-        let end = rest
-            .find(|c: char| !(c.is_ascii_digit() || c == '$' || c == ','))
-            .unwrap_or(rest.len());
-        let (address, tail) = rest.split_at(end);
-        if !address.is_empty() {
-            let parts: Vec<_> = address.split(',').collect();
-            if parts.len() > 2 || !parts.iter().all(|part| *part == "$" || digits(part)) {
-                return None;
-            }
-        }
+        let tail = sed_addresses(rest)?;
         let mut chars = tail.chars();
         let after = match chars.next()? {
             'p' | 'd' => chars.as_str(),
@@ -420,6 +417,50 @@ fn sed(script: &str) -> Option<SedFiles> {
         rest = after;
         commands += 1;
     }
+}
+
+/// Addresses only select lines; they never add a file or process effect.
+/// A regex is scanned as data, so embedded command letters and escaped slashes
+/// cannot be mistaken for the command that follows it.
+fn sed_addresses(text: &str) -> Option<&str> {
+    fn address(text: &str) -> Option<&str> {
+        if let Some(tail) = text.strip_prefix('$') {
+            return Some(tail);
+        }
+        if let Some(regex) = text.strip_prefix('/') {
+            let mut escaped = false;
+            for (index, c) in regex.char_indices() {
+                if c == '\n' {
+                    return None;
+                }
+                if escaped {
+                    escaped = false;
+                } else if c == '\\' {
+                    escaped = true;
+                } else if c == '/' {
+                    return Some(regex[index + 1..].trim_start_matches(['I', 'M']));
+                }
+            }
+            return None;
+        }
+        let end = text
+            .find(|c: char| !c.is_ascii_digit())
+            .unwrap_or(text.len());
+        (end > 0).then_some(&text[end..])
+    }
+    let addressed = text.starts_with(['/', '$']) || text.starts_with(|c: char| c.is_ascii_digit());
+    if !addressed {
+        return Some(text);
+    }
+    let mut tail = address(text)?.trim_start_matches([' ', '\t']);
+    if let Some(second) = tail.strip_prefix(',') {
+        tail = address(second.trim_start_matches([' ', '\t']))?.trim_start_matches([' ', '\t']);
+    }
+    Some(
+        tail.strip_prefix('!')
+            .unwrap_or(tail)
+            .trim_start_matches([' ', '\t']),
+    )
 }
 
 /// A file name runs to the end of the line, `;` included, as sed reads it.
@@ -601,6 +642,10 @@ mod tests {
             "s/a\\/b/c/; 3d; y/abc/xyz/",
             "s/;/,/g\n$p",
             "s/a/b/w /dev/stdout",
+            "/acme/p",
+            "/^  rabbitmq:/,/^  redis:/p",
+            "/path\\/name/,200!p",
+            "1,/end/Id",
         ] {
             let files = sed(script).unwrap_or_else(|| panic!("{script}"));
             assert!(
@@ -618,6 +663,8 @@ mod tests {
                 vec!["notes.txt"],
             ),
             ("s/a/b/w one\ns/c/d/w two", vec!["one", "two"], vec![]),
+            ("/start/,/end/w out", vec!["out"], vec![]),
+            ("/start/r notes.txt", vec![], vec!["notes.txt"]),
         ] {
             let files = sed(script).unwrap_or_else(|| panic!("{script}"));
             assert_eq!(files.writes, writes, "{script}");
@@ -635,7 +682,12 @@ mod tests {
             "sgagbg",
             "s a b ",
             "y/a/b/g",
-            "/acme/p",
+            "/acme/e id",
+            "/acme/s/a/b/e",
+            "/acme/p; e id",
+            "/unclosed p",
+            "/a/,p",
+            "/a\nb/p",
             "1{p}",
             "1,2,3p",
         ] {

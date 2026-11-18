@@ -64,6 +64,14 @@ Keep the scope as small as the need:
   for a temporary need.
 - Pass `"layer":"local"` for a personal preference that should not be shared.
 
+For recurring development-server fetches, inspect the project's instructions
+and service routing and edit its existing web allowance when possible. Choose
+the reusable host group and redirect boundary justified by that configuration.
+Use a web rule shared across query strings and curl spellings; do not add one
+command rule per request or one rule per temporary hostname. An observed URL
+alone does not authorize other hosts. Propose the reviewed scope now and let
+`policy_apply` collect the user's confirmation.
+
 An exact command in the project:
 
 ```json

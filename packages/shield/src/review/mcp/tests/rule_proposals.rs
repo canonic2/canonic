@@ -200,16 +200,23 @@ fn development_rule_proposals_complete_without_activating_policy() {
 
 #[test]
 fn development_pack_proposals_complete_without_activating_policy() {
+    use clap::Parser as _;
     let (root, mut context, connection) = fixture();
     context.agent = Some("codex".into());
     let source = dependency_registry(&root, &context, &json!([]), false);
-    let development: Value = serde_json::from_str(&development_pack()).unwrap();
+    // Optional immutable public artifact for the reported pack-add workload;
+    // no project identity, credentials or settings enter this fixture.
+    let development: Value = match std::env::var_os("SHIELD_PACK_PROFILE_ARTIFACT") {
+        Some(path) => crate::policy::parse(&std::fs::read_to_string(path).unwrap()).unwrap(),
+        None => serde_json::from_str(&development_pack()).unwrap(),
+    };
     let catalog_path = source.path().join("catalog.json");
     let mut catalog: Value =
         serde_json::from_slice(&std::fs::read(&catalog_path).unwrap()).unwrap();
     for (index, name) in ["parent", "child"].into_iter().enumerate() {
         let mut pack = development.clone();
         pack["id"] = json!(format!("acme/{name}"));
+        pack["version"] = json!("1.0.0");
         let bytes = pack.to_string();
         std::fs::write(source.path().join(format!("{name}.yml")), &bytes).unwrap();
         catalog["packs"][index]["sha256"] = json!(crate::policy::fingerprint(bytes.as_bytes()));
@@ -228,18 +235,37 @@ fn development_pack_proposals_complete_without_activating_policy() {
         .read()
         .unwrap()
         .policy_revision;
+    // Keep payload-free stage timings for deadline failures, whose transport
+    // panic otherwise reports only Timeout. Logs are test-owned, printed only
+    // on failure, and the original panic is resumed without changing deadlines.
+    let logs = assert_fs::TempDir::new().unwrap();
+    let cli = crate::cli::Cli::parse_from([
+        "shield",
+        "--debug-log-dir",
+        logs.path().to_str().unwrap(),
+        "status",
+    ]);
+    let log = std::sync::Arc::new(crate::diagnostics::Log::open(&cli));
+    let path = log.path().unwrap().to_owned();
     let transport = crate::mcp::tests::Transport::start(
-        crate::mcp::Server::for_review(context.clone()).unwrap(),
+        crate::mcp::Server::for_review(context.clone())
+            .unwrap()
+            .with_log(log),
     );
     let [initialize, ready] = crate::mcp::tests::initialize(&json!({}), "codex");
     assert!(transport.request(&initialize)["error"].is_null());
     transport.send(&ready);
-    let response = transport.call(
-        json!(10),
-        "policy_propose",
-        &json!({
-        "change":{"kind":"pack_add","reference":"acme-dependencies/acme/parent"}}),
-    );
+    let response = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        transport.call(
+            json!(10),
+            "pack_add",
+            &json!({"reference":"acme-dependencies/acme/parent"}),
+        )
+    }))
+    .unwrap_or_else(|panic| {
+        eprintln!("{}", std::fs::read_to_string(&path).unwrap());
+        std::panic::resume_unwind(panic)
+    });
     assert!(response["error"].is_null(), "{response}");
     let proposed = &response["result"]["structuredContent"];
     assert!(proposed["error"].is_null(), "{proposed}");

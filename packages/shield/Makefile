@@ -40,6 +40,7 @@ TEST_TARGET ?= --lib
 # The apply-cost regression may clone only immutable pack artifacts from this
 # optional enrolled project into its test-owned fixture; the source is read-only.
 APPLY_PROFILE_PROJECT ?=
+PACK_PROFILE_ARTIFACT ?=
 PREVIOUS_BINARY ?=
 .PHONY: dev test-focus
 
@@ -49,7 +50,7 @@ dev: ## Build incrementally without release optimization or installation
 test-focus: ## Run matching library tests; FILTER is required, TEST_TARGET selects other targets
 	$(if $(strip $(FILTER)),,$(error Set FILTER to a test name or module; optionally set TEST_TARGET='--test integration'))
 	$(if $(filter -%,$(FILTER)),$(error FILTER must be a test-name substring, not a flag))
-	$(if $(strip $(APPLY_PROFILE_PROJECT)),SHIELD_APPLY_PROFILE_PROJECT="$(APPLY_PROFILE_PROJECT)") $(if $(strip $(PREVIOUS_BINARY)),SHIELD_PREVIOUS_BINARY="$(PREVIOUS_BINARY)") "$(CARGO)" nextest run --locked $(TEST_TARGET) $(CARGO_FLAGS) "$(FILTER)"
+	$(if $(strip $(PACK_PROFILE_ARTIFACT)),SHIELD_PACK_PROFILE_ARTIFACT="$(PACK_PROFILE_ARTIFACT)") $(if $(strip $(APPLY_PROFILE_PROJECT)),SHIELD_APPLY_PROFILE_PROJECT="$(APPLY_PROFILE_PROJECT)") $(if $(strip $(PREVIOUS_BINARY)),SHIELD_PREVIOUS_BINARY="$(PREVIOUS_BINARY)") "$(CARGO)" nextest run --locked $(TEST_TARGET) $(CARGO_FLAGS) "$(FILTER)"
 
 .PHONY: test-adapter-focus
 test-adapter-focus: dev ## Run one named Node adapter/SDK test against the current development binary

@@ -150,14 +150,49 @@ pub(super) fn approval_note(
         return None;
     }
     let explanation = crate::review::observations::asked_explanation(root, session, id)?;
+    Some(completed_ask_note(&explanation))
+}
+
+fn completed_ask_note(explanation: &Value) -> String {
     let mut note = "Shield: this Ask call completed through the host; that alone does not prove individual approval.".to_owned();
     if let Some(reason) = explanation["guidance"][0]["message"].as_str() {
         note.push_str(" It asked because ");
         note.push_str(reason.trim_end_matches('.'));
         note.push('.');
     }
-    note.push_str(" The same request will ask again unless policy changes. If requests like it will recur, propose a narrow custom rule now with rule_add, following skill://shield/custom-rules/SKILL.md.");
-    Some(note)
+    note.push_str(" The same request will ask again unless policy changes.");
+    if let Some(offer) = web_offer(&explanation["guidance"][0], &Value::Null, None) {
+        note.push(' ');
+        note.push_str(&offer);
+    } else {
+        note.push_str(" If requests like it will recur, propose a narrow custom rule now with rule_add, following skill://shield/custom-rules/SKILL.md.");
+    }
+    note
+}
+
+/// Web recovery stays a web rule, shared across query strings and command
+/// spellings. The agent must inspect project routing before expanding hosts.
+fn web_offer(guidance: &Value, operation: &Value, entry: Option<&str>) -> Option<String> {
+    use crate::proposal_draft;
+    let change = if operation["kind"] == "web" {
+        if operation["action"] == "search" {
+            return Some(proposal_draft::offer(&proposal_draft::arguments(
+                &proposal_draft::web_search(),
+                entry,
+            )));
+        }
+        operation["url"]
+            .as_str()
+            .and_then(proposal_draft::host_web_fetch)
+    } else {
+        guidance["fetch_url"]
+            .as_str()
+            .and_then(proposal_draft::web_fetch)
+    }?;
+    Some(format!(
+        "For recurring web access, use rule_list/rule_edit and skill://shield/custom-rules/SKILL.md to review a reusable web allowance. {}",
+        proposal_draft::offer(&proposal_draft::arguments(&change, entry))
+    ))
 }
 
 /// Native permission prompts address the user. Alternatives and proposal payloads
@@ -251,23 +286,8 @@ fn draft(
     if outside.is_none() {
         // Blocked web access retains its immediate operator-review route.
         // Fallback-allowed requests use the later recurrence queue instead.
-        let web = if operation["kind"] == "web" {
-            if operation["action"] == "search" {
-                Some(proposal_draft::web_search())
-            } else {
-                operation["url"]
-                    .as_str()
-                    .and_then(proposal_draft::host_web_fetch)
-            }
-        } else {
-            guidance["fetch_url"]
-                .as_str()
-                .and_then(proposal_draft::web_fetch)
-        };
-        if let Some(change) = web {
-            return Some(proposal_draft::offer(&proposal_draft::arguments(
-                &change, entry,
-            )));
+        if let Some(offer) = web_offer(guidance, operation, entry) {
+            return Some(offer);
         }
         // Only policy_propose links a proposal to the refused request.
         let source = entry.map_or_else(String::new, |id| {
@@ -588,6 +608,29 @@ fn sensitive_prompt(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn completed_web_asks_offer_reusable_project_scope_for_human_review() {
+        let note = completed_ask_note(&json!({"guidance":[{
+            "message":"Fetch requires approval.",
+            "fetch_url":"http://prometheus.workspace.localhost:3000/api/v1/query?query=x"
+        }]}));
+        for expected in [
+            "rule_list",
+            "rule_edit",
+            "skill://shield/custom-rules/SKILL.md",
+            "policy_apply",
+            "\"domain\":\"web\"",
+            "prometheus.workspace.localhost",
+        ] {
+            assert!(note.contains(expected), "{expected}: {note}");
+        }
+        assert!(!note.contains("query=x"), "{note}");
+        let command =
+            completed_ask_note(&json!({"guidance":[{"message":"Command requires approval."}]}));
+        assert!(!command.contains("\"domain\":\"web\""));
+        assert!(command.contains("rule_add"));
+    }
 
     #[test]
     fn protected_access_marker_survives_every_group_and_native_adapter() {

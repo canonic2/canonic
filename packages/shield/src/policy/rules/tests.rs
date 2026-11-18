@@ -225,6 +225,76 @@ fn interleaved_leading_options_match_between_prefix_words_only_when_declared() {
 }
 
 #[test]
+#[cfg(unix)]
+fn base64_checks_input_and_output_paths_including_standard_streams() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let root = dir.path().canonicalize().unwrap();
+    std::fs::write(root.join("input"), "QWNtZQ==").unwrap();
+    let outside = assert_fs::TempDir::new().unwrap();
+    std::os::unix::fs::symlink(outside.path(), root.join("escape")).unwrap();
+    let within = json!({"within":{"root":"project"},"exclude":[{"root":"project","path":".aws"},{"root":"project","path":".git"}]});
+    let evaluator = prepared(vec![
+        json!({"id":"base64","decision":"allow","conditions":{"domain":"argv","executable":{"one_of":["base64","/usr/bin/base64"]},"arguments":{"kind":"any"}},"requirements":{"targets":[{"action":"read","all":within},{"action":"write","all":within}]},"on_unmet":{"decision":"deny"}}),
+    ]);
+    let restored =
+        configuration::Evaluator::from_authenticated_compiled(evaluator.compiled_bytes().to_vec())
+            .unwrap();
+    for (words, expected) in [
+        (vec![], Decision::Allow),
+        (vec!["-d"], Decision::Allow),
+        (vec!["-D", "-"], Decision::Allow),
+        (vec!["--decode", "input"], Decision::Allow),
+        (vec!["-w0", "input"], Decision::Allow),
+        (vec!["--wrap=72", "input", "--decode"], Decision::Allow),
+        (vec!["--input=input", "--output=out"], Decision::Allow),
+        (vec!["-d", "-oout"], Decision::Allow),
+        (vec!["--input=-", "--output=-"], Decision::Allow),
+        (vec!["--", "-input"], Decision::Allow),
+        (vec!["--input=../outside"], Decision::Deny),
+        (vec!["--output=../outside"], Decision::Deny),
+        (vec!["input", "-o.git/config"], Decision::Deny),
+        (vec!["--input=.aws/credentials"], Decision::Deny),
+        (vec!["--input=escape/input"], Decision::Deny),
+        (vec!["--output=escape/output"], Decision::Deny),
+        (vec!["-o../outside", "-oout"], Decision::Deny),
+        (vec!["--input=../outside", "--input=input"], Decision::Deny),
+        (vec!["--unknown"], Decision::Deny),
+        (vec!["-o"], Decision::Deny),
+        (vec!["-w"], Decision::Deny),
+        (vec!["-wno"], Decision::Deny),
+        (vec!["input", "second"], Decision::Deny),
+    ] {
+        for executable in ["base64", "/usr/bin/base64"] {
+            let req = Request {
+                executable: executable.into(),
+                arguments: words.iter().map(|w| (*w).into()).collect(),
+                cwd: root.to_string_lossy().into(),
+                project: root.to_string_lossy().into(),
+            };
+            for candidate in [&evaluator, &restored] {
+                assert_eq!(
+                    candidate.evaluate(&req).unwrap().decision,
+                    expected,
+                    "{executable} {words:?}"
+                );
+            }
+        }
+    }
+    let words = if cfg!(target_os = "macos") {
+        vec!["-diinput", "-b64"]
+    } else {
+        vec!["-di", "input"]
+    };
+    let req = Request {
+        executable: "base64".into(),
+        arguments: words.iter().map(|w| (*w).into()).collect(),
+        cwd: root.to_string_lossy().into(),
+        project: root.to_string_lossy().into(),
+    };
+    assert_eq!(evaluator.evaluate(&req).unwrap().decision, Decision::Allow);
+}
+
+#[test]
 fn argument_paths_validate_declared_values_and_do_not_claim_runtime_footprints() {
     let root = assert_fs::TempDir::new().unwrap();
     let root = root.path().canonicalize().unwrap();

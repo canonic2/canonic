@@ -285,6 +285,55 @@ fn http_client_evaluator(fetch: &Value, explicit: Option<&str>) -> Evaluator {
 const REGISTRY_FETCH: &str = r#"{"domain":"web","action":"fetch","url":{"schemes":["https"],"hosts":["registry.example.com"]}}"#;
 
 #[test]
+fn curl_query_fetches_keep_web_output_and_upload_boundaries() {
+    let root = assert_fs::TempDir::new().unwrap();
+    let cwd = root.path().to_str().unwrap();
+    let evaluator = http_client_evaluator(&serde_json::from_str(REGISTRY_FETCH).unwrap(), None);
+    for (source, expected) in [
+        (
+            "curl -s -m 10 -G https://registry.example.com/api/v1/query --data-urlencode 'query=sum(rate(x[2m]))'",
+            "allow",
+        ),
+        (
+            "curl --data-urlencode 'query=x' --get https://registry.example.com/ -o result.json",
+            "allow",
+        ),
+        (
+            "curl -G --data-urlencode 'query=x' https://other.example.com/",
+            "ask",
+        ),
+        (
+            "curl -G --data-urlencode 'query=x' https://blocked.example.com/",
+            "deny",
+        ),
+        (
+            "curl -G --data-urlencode 'query=x' https://registry.example.com/ -o ../outside.json",
+            "deny",
+        ),
+        (
+            "curl -G --data-urlencode 'query@notes.txt' https://registry.example.com/",
+            "ask",
+        ),
+        (
+            "curl --data-urlencode 'query=x' https://registry.example.com/",
+            "ask",
+        ),
+    ] {
+        let result = analyze(source, Dialect::Bash, cwd, cwd, &evaluator).unwrap();
+        assert_eq!(result["decision"], expected, "{source}: {result}");
+        if source.contains("other.example.com") {
+            assert!(
+                result["operations"][0]["policy_request"]["url"]
+                    .as_str()
+                    .unwrap()
+                    .contains("?query=x"),
+                "{result}"
+            );
+        }
+    }
+}
+
+#[test]
 fn recognized_downloads_use_web_and_file_policy_without_overriding_explicit_rules() {
     let root = assert_fs::TempDir::new().unwrap();
     let cwd = root.path().to_str().unwrap();

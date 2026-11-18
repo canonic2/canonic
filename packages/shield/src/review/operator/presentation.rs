@@ -109,32 +109,6 @@ pub(super) fn review(value: &Value) -> String {
         .unwrap_or_else(|| fallback(&value))
 }
 
-/// The progress line of an update, naming the pinned packs it skips.
-pub(super) fn update_progress(skipped: &[Value]) -> String {
-    if skipped.is_empty() {
-        "Checking for newer releases…".into()
-    } else {
-        format!(
-            "Checking for newer releases; keeping pinned {}…",
-            pinned_list(skipped)
-        )
-    }
-}
-
-/// Pinned packs by name and version, the first eight and a count of the rest.
-fn pinned_list(skipped: &[Value]) -> String {
-    let mut text = skipped
-        .iter()
-        .take(8)
-        .map(|row| format!("{} {}", pack_name(&row["id"]), label(&row["version"])))
-        .collect::<Vec<_>>()
-        .join(", ");
-    if skipped.len() > 8 {
-        let _ = write!(text, " and {} more", skipped.len() - 8);
-    }
-    text
-}
-
 /// Prints a command's concise human result.
 pub(super) fn print(input: &crate::cli::Cli, value: &Value) {
     let output = result(&input.command, value);
@@ -618,19 +592,10 @@ fn pack_result(command: &PackCommand, value: &Value) -> String {
             serde_json::to_string_pretty(value).expect("JSON page")
         ),
         PackCommand::Info { .. } => packs::info(value),
-        PackCommand::Add { .. } | PackCommand::Remove { .. } | PackCommand::Configure { .. } => {
-            policy::receipt(value)
-        }
-        PackCommand::Update { .. } => {
-            let skipped = value["skipped_pinned"]
-                .as_array()
-                .map_or(&[][..], Vec::as_slice);
-            let mut output = policy::receipt(value);
-            if !skipped.is_empty() {
-                let _ = writeln!(output, "Kept pinned {}.", pinned_list(skipped));
-            }
-            output
-        }
+        PackCommand::Add { .. }
+        | PackCommand::Remove { .. }
+        | PackCommand::Configure { .. }
+        | PackCommand::Update { .. } => policy::receipt(value),
     }
 }
 

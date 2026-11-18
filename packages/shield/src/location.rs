@@ -141,6 +141,9 @@ struct Targets {
     /// A complete model's operation reads its standard input and no file
     /// besides `items`, so no file target is missing when `items` is empty.
     reads_input: bool,
+    /// A fixed stream transformer proves the complete read/write footprint,
+    /// including the absence of either action when it uses a standard stream.
+    exhaustive_actions: bool,
     /// Failed search observations, bounded by operands and without raw OS errors.
     unavailable: Vec<(PathBuf, &'static str)>,
 }
@@ -482,8 +485,9 @@ impl Observer {
                 let action = item["action"].as_str().ok_or(Error::Syntax)?;
                 // Every file such a request reads is within any bound.
                 if targets.complete
-                    && targets.reads_input
-                    && targets.items.is_empty()
+                    && ((targets.reads_input && targets.items.is_empty())
+                        || (targets.exhaustive_actions
+                            && !targets.items.iter().any(|t| t.action == action)))
                     && item.get("all").is_some()
                 {
                     continue;

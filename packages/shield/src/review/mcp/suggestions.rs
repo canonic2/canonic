@@ -36,7 +36,7 @@ fn collected(
                         )
                         .collect();
                 let web = crate::http_client::fetch(words[0], &words[1..])
-                    .and_then(|fetch| proposal_draft::web_fetch(fetch.url));
+                    .and_then(|fetch| proposal_draft::web_fetch(&fetch.url));
                 let identity = json!([request.session, web.as_ref().unwrap_or(&observed)]);
                 if counted.contains(&identity) {
                     continue;

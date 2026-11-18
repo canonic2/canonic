@@ -255,9 +255,7 @@ pub(super) fn update(
 ) -> Result<Value, Error> {
     let mut tty = Terminal::required(json_mode)?;
     let (before, base) = crate::review::project::load_prepared(context)?;
-    let skipped =
-        crate::review::packs::update_skipped(&before.operator, &before.settings, reference)?;
-    tty.progress(&super::presentation::update_progress(&skipped))?;
+    tty.progress("Checking for newer releases…")?;
     let (candidate, meta) = prepare_update(context, &before, reference)?;
     let (candidate, meta) = settle_first(
         &mut tty,
@@ -267,9 +265,7 @@ pub(super) fn update(
         meta,
         &setup::Edits::default(),
     )?;
-    let mut result = finish(context, &before, candidate, meta, &mut tty, &base)?;
-    result["skipped_pinned"] = json!(skipped);
-    Ok(result)
+    finish(context, &before, candidate, meta, &mut tty, &base)
 }
 fn finish(
     context: &Context,

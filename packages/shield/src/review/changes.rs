@@ -420,24 +420,9 @@ pub(super) fn propose(
     }
     checkpoint()?;
     if files.values().all(|texts| texts.before == texts.after) && meta == before.operator {
-        let mut result =
-            json!({"unchanged":true,"committed":false,"policy_revision":before.policy_revision});
-        let mut skipped = Vec::new();
-        for change in &changes {
-            if let Change::PackUpdate { reference } = change {
-                for row in super::packs::update_skipped(
-                    &before.operator,
-                    &before.settings,
-                    reference.as_deref(),
-                )? {
-                    if !skipped.contains(&row) {
-                        skipped.push(row);
-                    }
-                }
-                result["skipped_pinned"] = json!(skipped);
-            }
-        }
-        return Ok(result);
+        return Ok(
+            json!({"unchanged":true,"committed":false,"policy_revision":before.policy_revision}),
+        );
     }
     // The complete base was validated above. Under the writer lock, bind to
     // those exact source bytes and metadata instead of hydrating every retained

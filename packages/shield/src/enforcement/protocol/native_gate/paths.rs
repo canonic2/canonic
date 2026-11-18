@@ -263,7 +263,7 @@ fn access(request: &Value) -> Access {
         }
         "echo" | "printf" => Access::Output,
         "rg" if arguments.contains(&"--files") => Access::Index,
-        "sed" | "awk" | "sort" | "uniq" | "cut" | "nl" | "comm" | "paste" | "column"
+        "sed" | "awk" | "sort" | "uniq" | "cut" | "nl" | "comm" | "paste" | "column" | "base64"
             if crate::location::text_read_only(executable, &arguments) =>
         {
             Access::Read

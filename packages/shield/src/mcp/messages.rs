@@ -266,7 +266,6 @@ impl Serialize for Projection<'_> {
                     "status",
                     "unchanged",
                     "committed",
-                    "skipped_pinned",
                     "report_resources",
                     "preparation_task_id",
                     "review_arguments",

@@ -229,10 +229,161 @@ fn rename_source(context: &Context, from: &str, to: &str) {
     });
 }
 
-/// After the update, each row keeps its source and profile, pinned rows stay
-/// at 1.0.0, unpinned rows take the newest allowed release, and the shared
-/// bridge keeps both incoming constraints.
-fn assert_refreshed_unpinned_rows(before: &review::model::State, after: &review::model::State) {
+#[test]
+fn exact_dependency_updates_preserve_dependency_role_and_every_parent_constraint() {
+    for (version, compatible) in [
+        ("1.1.0", true),
+        ("1.2.0", false),
+        ("2.0.0", false),
+        ("9.0.0", false),
+    ] {
+        let (_root, context, connection) = fixture();
+        let (mut a, _b) = sources(&context);
+        a.publish("parent", "1.0.0", edge(&a.identity, "child", "^1"));
+        a.publish("sibling", "1.0.0", edge(&a.identity, "child", "<1.2"));
+        add(&context, &connection, "a/acme/parent@1.0.0", "parent");
+        add(&context, &connection, "a/acme/sibling@1.0.0", "sibling");
+        for version in ["1.1.0", "1.2.0", "2.0.0"] {
+            a.publish("child", version, json!([]));
+        }
+        let before = read(&context);
+        let child = before.operator["installed"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|row| row["id"] == "acme/child")
+            .unwrap();
+        assert_eq!(child["direct"], false);
+        let proposed = pack_change(
+            &context,
+            &connection,
+            json!({"kind":"pack_update","reference":format!("a/acme/child@{version}")}),
+            "exact-child",
+        );
+        unchanged_policy(&before, &read(&context));
+        if !compatible {
+            assert!(proposed["error"].is_object(), "{version}: {proposed}");
+            assert_eq!(read(&context).proposals.len(), before.proposals.len());
+            continue;
+        }
+        assert!(proposed["error"].is_null(), "{proposed}");
+        review::operator::commit_proposal_fixture(
+            &context,
+            proposed["data"]["proposal_id"].as_str().unwrap(),
+        )
+        .unwrap();
+        let after = read(&context);
+        let rows = after.operator["installed"].as_array().unwrap();
+        let updated = rows.iter().find(|row| row["id"] == "acme/child").unwrap();
+        assert_eq!(updated["version"], version);
+        for field in ["selector", "direct", "pinned", "profile", "source_identity"] {
+            assert_eq!(updated[field], child[field], "{field}");
+        }
+        assert_eq!(updated["incoming"].as_array().unwrap().len(), 2);
+        for parent in rows.iter().filter(|row| row["direct"] == true) {
+            assert_eq!(parent["version"], "1.0.0");
+            assert_eq!(parent["pinned"], true);
+        }
+    }
+}
+
+#[test]
+fn pinned_pack_updates_are_on_demand_reviewed_and_honor_exact_versions() {
+    for target in [
+        "all",
+        "name",
+        "selector-version",
+        "selector-prerelease",
+        "recovered",
+    ] {
+        let (_root, context, connection) = fixture();
+        let (mut a, _b) = sources(&context);
+        a.publish("fixed", "1.0.0", json!([]));
+        a.publish("other", "1.0.0", json!([]));
+        add(&context, &connection, "a/acme/fixed@1.0.0", "fixed");
+        add(&context, &connection, "a/acme/other@1.0.0", "other");
+        let before = read(&context);
+        let fixed = before.operator["installed"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|row| row["id"] == "acme/fixed")
+            .unwrap();
+        let selector = fixed["selector"].as_str().unwrap();
+        a.publish("fixed", "1.1.0", json!([]));
+        a.publish("fixed", "1.1.0-beta.1", json!([]));
+        a.publish("fixed", "2.0.0", json!([]));
+        a.publish("other", "2.0.0", json!([]));
+        // Registry publication and ordinary inspection never move a selection.
+        unchanged_policy(&before, &read(&context));
+        if target == "recovered" {
+            let mut recovered = read(&context);
+            for row in recovered.operator["installed"].as_array_mut().unwrap() {
+                row["source_alias"] = json!("project-files");
+                row["source"] = json!({"identity":a.identity,"location":".shield","key":null});
+            }
+            let (_, metadata) =
+                review::packs::prepare_update(&context, &recovered, Some(selector)).unwrap();
+            let replacement = metadata["installed"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|row| row["selector"] == selector)
+                .unwrap();
+            assert_eq!(replacement["version"], "2.0.0");
+            assert_eq!(replacement["source"]["identity"], a.identity);
+            assert_eq!(replacement["source"]["location"], a.source()["location"]);
+            assert!(replacement["source"]["key"].is_null());
+            assert_eq!(replacement["pinned"], true);
+            unchanged_policy(&before, &read(&context));
+            continue;
+        }
+        let mut change = json!({"kind":"pack_update"});
+        if target != "all" {
+            change["reference"] = json!(if target == "selector-version" {
+                format!("{selector}@1.1.0")
+            } else if target == "selector-prerelease" {
+                format!("{selector}@1.1.0-beta.1")
+            } else {
+                "a/acme/fixed".into()
+            });
+        }
+        let proposed = pack_change(&context, &connection, change, "update");
+        assert!(proposed["error"].is_null(), "{target}: {proposed}");
+        unchanged_policy(&before, &read(&context));
+        review::operator::commit_proposal_fixture(
+            &context,
+            proposed["data"]["proposal_id"].as_str().unwrap(),
+        )
+        .unwrap();
+        let after = read(&context);
+        for row in after.operator["installed"].as_array().unwrap() {
+            assert_eq!(row["pinned"], true);
+            assert_eq!(row["profile"], "strict");
+            let expected = if row["id"] == "acme/fixed" {
+                if target == "selector-version" {
+                    "1.1.0"
+                } else if target == "selector-prerelease" {
+                    "1.1.0-beta.1"
+                } else {
+                    "2.0.0"
+                }
+            } else if target == "all" {
+                "2.0.0"
+            } else {
+                "1.0.0"
+            };
+            assert_eq!(row["version"], expected, "{target}: {row}");
+            if row["id"] == "acme/fixed" {
+                assert_eq!(row["selector"], selector);
+            }
+        }
+    }
+}
+
+/// Explicit updates preserve profiles and pin mode while moving every root;
+/// the shared bridge keeps both incoming constraints.
+fn assert_refreshed_rows(before: &review::model::State, after: &review::model::State) {
     for row in after.operator["installed"].as_array().unwrap() {
         let old = before.operator["installed"]
             .as_array()
@@ -242,18 +393,15 @@ fn assert_refreshed_unpinned_rows(before: &review::model::State, after: &review:
             .unwrap();
         assert_eq!(row["source_identity"], old["source_identity"]);
         assert_eq!(row["profile"], old["profile"]);
-        if row["pinned"] == true {
-            assert_eq!(row["version"], "1.0.0");
-        } else {
-            assert_eq!(
-                row["version"],
-                if row["id"] == "acme/parent" {
-                    "2.0.0"
-                } else {
-                    "1.1.0"
-                }
-            );
-        }
+        assert_eq!(row["pinned"], old["pinned"]);
+        assert_eq!(
+            row["version"],
+            match row["id"].as_str().unwrap() {
+                "acme/parent" => "2.0.0",
+                "acme/sibling" => "1.0.0",
+                _ => "1.1.0",
+            }
+        );
     }
     let bridge = after.operator["installed"]
         .as_array()
@@ -291,7 +439,7 @@ fn cross_source_updates_refresh_foreign_dependencies_and_preserve_pins_and_share
     );
     assert_eq!(updated["error"], Value::Null, "{updated}");
     unchanged_policy(&before, &read(&context));
-    // Pinned roots are reported as skipped.
+    // Pin mode is retained; explicit updates no longer skip these roots.
     let pinned: Vec<_> = before.operator["installed"]
         .as_array()
         .unwrap()
@@ -300,26 +448,20 @@ fn cross_source_updates_refresh_foreign_dependencies_and_preserve_pins_and_share
         .map(|row| json!({"selector":row["selector"],"id":row["id"],"version":row["version"]}))
         .collect();
     assert_eq!(pinned.len(), 2, "{}", before.operator);
-    assert_eq!(
-        updated["data"]["skipped_pinned"],
-        json!(pinned),
-        "{updated}"
-    );
-    drop(a);
-    drop(b);
+    assert!(updated["data"].get("skipped_pinned").is_none());
     review::operator::commit_proposal_fixture(
         &context,
         updated["data"]["proposal_id"].as_str().unwrap(),
     )
     .unwrap();
     let after = read(&context);
-    assert_refreshed_unpinned_rows(&before, &after);
+    assert_refreshed_rows(&before, &after);
     // The current alias bound to the retained source identity names its rows.
     let child = after.operator["installed"]
         .as_array()
         .unwrap()
         .iter()
-        .find(|r| r["id"] == "acme/child" && r["source_alias"] == "b")
+        .find(|r| r["id"] == "acme/child" && r["pinned"] == true)
         .unwrap()
         .clone();
     assert_eq!(child["pinned"], true);
@@ -330,11 +472,8 @@ fn cross_source_updates_refresh_foreign_dependencies_and_preserve_pins_and_share
         "renamed-update",
     );
     assert_eq!(named["error"], Value::Null, "{named}");
-    assert_eq!(
-        named["data"]["skipped_pinned"],
-        json!([{"selector":child["selector"],"id":"acme/child","version":"1.0.0"}]),
-        "{named}"
-    );
+    assert_eq!(named["data"]["unchanged"], true, "{named}");
+    assert!(named["data"].get("skipped_pinned").is_none());
     // Adding an installed selection without a version keeps its version and pin.
     let readded = pack_change(
         &context,
@@ -352,7 +491,7 @@ fn cross_source_updates_refresh_foreign_dependencies_and_preserve_pins_and_share
         .find(|r| r["selector"] == child["selector"])
         .unwrap();
     assert_eq!(kept["pinned"], true, "{kept}");
-    assert_eq!(kept["version"], "1.0.0", "{kept}");
+    assert_eq!(kept["version"], "1.1.0", "{kept}");
     assert_eq!(
         rows.len(),
         after.operator["installed"].as_array().unwrap().len()

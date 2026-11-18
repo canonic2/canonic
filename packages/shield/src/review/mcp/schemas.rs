@@ -494,7 +494,7 @@ fn policy_inventory() -> Vec<Definition> {
         pack_configure(),
         (
             "pack_update",
-            "Prepare an inactive update of one installed pack, or all tracking packs when reference is omitted; pinned packs stay fixed. Copy returned apply_arguments unchanged to policy_apply for user approval.",
+            "Prepare an inactive update of one installed pack, or all direct packs when reference is omitted, including pinned packs. Pins and profiles are preserved at the updated versions. Append @version to request an exact release. Nothing updates automatically. Copy returned apply_arguments unchanged to policy_apply for user approval.",
             || {
                 object(
                     json!({"reference":string(),"idempotency_key":id(),"agent_reason":string()}),

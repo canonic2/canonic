@@ -307,7 +307,7 @@ fn signed_https_dependency_failures_preserve_active_policy_and_create_no_proposa
 }
 
 #[test]
-fn signed_https_pinned_parents_skip_refresh_and_constrain_explicit_dependency_updates() {
+fn signed_https_pinned_parents_constrain_targeted_updates_and_move_on_update_all() {
     let mut registry = Registry::new();
     let (root, context, connection) = project(&registry);
     let added = call(
@@ -323,13 +323,6 @@ fn signed_https_pinned_parents_skip_refresh_and_constrain_explicit_dependency_up
     registry.release("child", "1.1.0", None);
     registry.publish(2);
     registry.clear();
-    let skipped = propose(&context, &connection, "pack_update", "skip-pins");
-    commit(&context, &skipped);
-    assert_eq!(registry.requests("catalog.json"), 0);
-    assert_eq!(
-        Store::open(root.path()).unwrap().read().unwrap().operator,
-        before.operator
-    );
     let updated = call(
         &context,
         &connection,
@@ -337,7 +330,10 @@ fn signed_https_pinned_parents_skip_refresh_and_constrain_explicit_dependency_up
         &json!({"change":{"kind":"pack_update","reference":"acme/child"},"idempotency_key":"dependency"}),
         &|| Ok(()),
     );
-    drop(registry);
+    assert_eq!(
+        Store::open(root.path()).unwrap().read().unwrap().operator,
+        before.operator
+    );
     commit(&context, &updated);
     let after = Store::open(root.path()).unwrap().read().unwrap();
     let rows = after.operator["installed"].as_array().unwrap();
@@ -349,6 +345,20 @@ fn signed_https_pinned_parents_skip_refresh_and_constrain_explicit_dependency_up
     assert_eq!(child["version"], "1.1.0");
     assert_eq!(child["direct"], false);
     assert_eq!(child["profile"], "strict");
+    let updated = propose(&context, &connection, "pack_update", "update-pins");
+    assert!(registry.requests("catalog.json") > 0);
+    drop(registry);
+    commit(&context, &updated);
+    let after = Store::open(root.path()).unwrap().read().unwrap();
+    let parent = after.operator["installed"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["id"] == "acme/parent")
+        .unwrap();
+    assert_eq!(parent["version"], "2.0.0");
+    assert_eq!(parent["pinned"], true);
+    assert_eq!(parent["profile"], "strict");
 }
 
 #[test]

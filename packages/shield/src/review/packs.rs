@@ -808,7 +808,9 @@ fn binding(
         return fields(row);
     }
     let mut binding = earlier.map_or_else(|| Ok(policy::Binding::default()), fields)?;
-    if let Some(artifact) = artifact {
+    if (!binding.variables.is_empty() || !binding.overrides.is_empty())
+        && let Some(artifact) = artifact
+    {
         policy::retain_declared(artifact, &mut binding)?;
     }
     Ok(binding)
@@ -971,8 +973,8 @@ pub(in crate::review) fn repair_disabled_metadata(
             rows.push(row);
             continue;
         }
-        let pack = policy::Pack::from_retained_yaml(bytes)?;
-        if entry["id"] != pack.id() || entry["version"] != pack.version() {
+        let pack: closure::Metadata = policy::parse(bytes)?;
+        if entry["id"] != pack.id || entry["version"] != pack.version {
             return Err(policy::Error::ArtifactMismatch.into());
         }
         if recovered_rows.is_none() {
@@ -1058,12 +1060,8 @@ pub(in crate::review) fn refresh_shared_metadata(
                 .find(|row| same_selection(selection, row))
                 .ok_or(Error::Invalid("shared pack metadata missing"))?
                 .clone();
-            declarations.push((
-                parent,
-                policy::Pack::from_retained_yaml(bytes)?
-                    .dependencies()
-                    .to_vec(),
-            ));
+            let pack: closure::Metadata = policy::parse(bytes)?;
+            declarations.push((parent, pack.dependencies));
         }
     }
     for row in &mut rows {
@@ -1321,18 +1319,6 @@ pub(super) fn prepare_update(
     refresh_after_mutation(before, &candidate, &mut meta)?;
     Ok((candidate, meta))
 }
-/// The pinned roots an update of `meta`'s installed packs leaves unchanged,
-/// for the operator's review and the agent's proposal result.
-pub(super) fn update_skipped(
-    meta: &Value,
-    settings: &crate::configuration::settings::Values,
-    reference: Option<&str>,
-) -> Result<Vec<Value>, Error> {
-    let rows: Vec<Value> = serde_json::from_value(meta["installed"].clone())
-        .map_err(|_| Error::Invalid("installed packs missing"))?;
-    closure::mutations::skipped_pinned(&rows, &current_aliases(settings), reference)
-}
-
 pub(super) fn prepare_change(
     context: &Context,
     before: &super::model::State,

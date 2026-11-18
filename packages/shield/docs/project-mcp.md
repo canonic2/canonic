@@ -288,11 +288,11 @@ approval in the form:
   comes from this machine's request history, so it keeps rules that look
   unused but whose target still exists.
 - `pack-update`: ask your agent to update the installed packs. It refreshes
-  release metadata, prepares one update of the packs that track the latest
-  release, and tells you each version change and which commands now decide
-  differently before you approve it. Pinned packs stay at their version unless
-  you ask to move them, and a release that needs a newer Shield is reported
-  rather than installed.
+  release metadata, prepares one on-demand update of installed packs, including
+  pins, and tells you each version change and which commands now decide
+  differently before you approve it. Profiles and pin modes are preserved at the
+  reviewed versions. A release that needs a newer Shield is reported rather than
+  installed; no pack updates automatically.
 
 The server also publishes the `install_pack` prompt through
 `prompts/list` and `prompts/get`. Discovery and reads return private cache
@@ -485,10 +485,12 @@ that installed packs are current. The operator can launch Shield with
 terminal behavior.
 
 The CLI and MCP use the same pack verbs. Call `pack_update` with `{}` to
-update all tracking packs, or with `{"reference":"gate"}` to update one
-selection and its dependencies. Pinned versions stay fixed and are listed in
-`skipped_pinned`. Call `pack_remove` with `{"reference":"gate"}` to remove
-one selection using the same dependency checks as `shield pack remove`.
+update all direct packs, including pins, or with `{"reference":"gate"}` to update
+one selection and its dependencies. Use `{"reference":"main/canonic/gate@0.2.7"}`
+to request an exact release. Profiles and pin modes are retained, and applying
+changes requires review and approval. Call `pack_remove` with
+`{"reference":"gate"}` to remove one selection using the same dependency checks
+as `shield pack remove`.
 
 To let the person choose installed packs, call `pack_remove` with `{}`. The form
 shows exact installed selectors and accepts 1–16 selections from a list of at

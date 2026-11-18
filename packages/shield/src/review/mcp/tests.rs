@@ -814,8 +814,16 @@ fn dependency_updates_honor_pinned_parents_shared_constraints_and_explicit_depen
             },
         )
         .unwrap();
-        assert_eq!(result.0, before.candidates["project"]);
-        assert_eq!(result.1, before.operator);
+        assert_ne!(result.0, before.candidates["project"]);
+        let rows = result.1["installed"].as_array().unwrap();
+        assert_eq!(
+            rows.iter().find(|r| r["id"] == "acme/parent").unwrap()["pinned"],
+            true
+        );
+        assert_eq!(
+            rows.iter().find(|r| r["id"] == "acme/child").unwrap()["version"],
+            "1.1.0"
+        );
     }
     commit_pack_change(
         &context,
@@ -867,8 +875,15 @@ fn dependency_updates_honor_pinned_parents_shared_constraints_and_explicit_depen
         &review::changes::Change::PackUpdate { reference: None },
     )
     .unwrap();
-    assert_eq!(result.0, before.candidates["project"]);
-    assert_eq!(result.1, before.operator);
+    assert_ne!(result.0, before.candidates["project"]);
+    let child = result.1["installed"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["id"] == "acme/child")
+        .unwrap();
+    assert_eq!(child["version"], "1.3.0");
+    assert_eq!(child["pinned"], true);
 }
 
 #[test]

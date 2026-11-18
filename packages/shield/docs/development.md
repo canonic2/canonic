@@ -20,6 +20,14 @@ try changes. `test-focus` uses nextest with a required substring filter and
 defaults to library tests. Replace the integration example's placeholder with
 a real test name; nextest fails if nothing matches.
 
+For a pack-add timeout, run the five-second MCP regression with an immutable
+public pack artifact. The fixture copies its rules into test-owned releases;
+it never modifies the artifact or an enrolled project:
+
+```sh
+make test-focus FILTER=development_pack_proposals_complete PACK_PROFILE_ARTIFACT=/path/to/pack.yml
+```
+
 Keep `target/` between iterations to reuse Cargo's cache. Use release builds
 for performance measurements.
 
