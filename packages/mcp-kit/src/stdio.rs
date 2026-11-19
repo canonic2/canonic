@@ -473,6 +473,12 @@ impl Context {
         &self.control
     }
 
+    /// Shares cancellation and the deadline with a scoped operation.
+    #[must_use]
+    pub fn control_handle(&self) -> Arc<Control> {
+        Arc::clone(&self.control)
+    }
+
     /// Succeeds while the request may continue.
     ///
     /// # Errors
