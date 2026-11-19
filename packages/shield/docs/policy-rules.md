@@ -421,6 +421,28 @@ as `--version` and options ripgrep does not define remain unverified. `--no-conf
 and evaluates the submitted arguments; flags injected by `RIPGREP_CONFIG_PATH`
 are outside these checks. Use `--no-config` when config-free execution is desired.
 
+### Write Git diff output
+
+Shield checks explicit output files as write targets for `git diff`,
+`git show`, `git log`, `git diff-tree`, `git diff-index` and `git whatchanged`.
+For example, `git diff HEAD --output=review.diff` can satisfy
+`targets: {action: write, all: {within: {root: write}}}` when the output
+resolves inside a writable root. Relative destinations use Git's working
+directory, including changes from `-C` that the policy normalizes. The model
+accepts one leading `--no-pager` or `-P` and leaves other global options
+unverified.
+
+Shield checks every `--output=FILE` and `--output FILE` before `--`.
+Recognized options such as `--line-prefix` consume their values first.
+Unknown option syntax, missing or empty output values, apparent output options
+after `--`, and earlier shell operations that may change the filesystem leave
+the write footprint unverified. A direct file comparison can read outside the
+repository even without `--no-index`. When `git diff` can compare files directly,
+a writable output alone supplies insufficient coverage.
+Commands without `--output` supply no write evidence. In a pack, use a
+precondition that matches the output option so Git commands that print
+to standard output continue through the pack's ordinary rules.
+
 ### Read and transform file content
 
 Fixed `sed`, `awk`, `jq`, `sort`, `uniq`, `cut`, `diff` and `cmp` forms model

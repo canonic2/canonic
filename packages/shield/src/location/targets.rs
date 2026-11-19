@@ -49,7 +49,7 @@ fn argv(executable: &str, arguments: &[String], cwd: &Path, alone: bool, stable:
     let path = Path::new(executable);
     let leaf = if [
         "rm", "rmdir", "cp", "mv", "cat", "head", "tail", "wc", "ls", "grep", "rg", "find",
-        "mkdir", "touch", "tee", "ln", "chmod", "chown",
+        "mkdir", "touch", "tee", "ln", "chmod", "chown", "git",
     ]
     .contains(&executable)
     {
@@ -75,6 +75,9 @@ fn argv(executable: &str, arguments: &[String], cwd: &Path, alone: bool, stable:
     }
     if leaf == "find" {
         return find_argv(arguments, cwd);
+    }
+    if leaf == "git" {
+        return super::git::output(arguments, cwd, stable);
     }
     if leaf == "touch" {
         let words: Vec<_> = arguments.iter().map(String::as_str).collect();

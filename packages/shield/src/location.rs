@@ -14,6 +14,7 @@ use std::{
 };
 
 pub(crate) mod directory;
+mod git;
 mod node;
 mod targets;
 pub(crate) use targets::{grep_parse, rg_auxiliary_reads};
@@ -774,6 +775,107 @@ fn resolve(
 mod tests {
     use super::*;
     use crate::policy::rules::resources::Resources;
+
+    fn git_input(args: &[&str]) -> Input {
+        Input::Argv {
+            executable: "git".into(),
+            arguments: args.iter().map(|word| (*word).into()).collect(),
+            original_input: serde_json::json!({}),
+        }
+    }
+
+    #[test]
+    fn git_output_collects_each_relative_destination_after_one_pager_option() {
+        let cwd = crate::test_support::absolute("/acme/worktree");
+        let cwd = Path::new(cwd.as_ref());
+        for pager in ["--no-pager", "-P"] {
+            let input = git_input(&[
+                pager,
+                "diff",
+                "HEAD",
+                "--output",
+                "review.diff",
+                "--output=details.diff",
+                "--",
+                "README.md",
+            ]);
+            let targets = targets::collect(&input, cwd, true, true);
+            assert!(targets.complete, "{pager}");
+            assert_eq!(targets.items.len(), 2, "{pager}");
+            for (target, name) in targets.items.iter().zip(["review.diff", "details.diff"]) {
+                assert_eq!(target.action, "write");
+                assert_eq!(target.path, cwd.join(name));
+            }
+        }
+    }
+
+    #[test]
+    fn git_output_uses_option_arity_to_distinguish_a_prefix_from_a_destination() {
+        let cwd = crate::test_support::absolute("/acme/worktree");
+        let cwd = Path::new(cwd.as_ref());
+        for prefix in [
+            &["--line-prefix", "--output=../label.diff"][..],
+            &["--line-prefix=--output=../label.diff"][..],
+        ] {
+            let mut args = vec!["diff", "HEAD"];
+            args.extend_from_slice(prefix);
+            args.push("--output=review.diff");
+            let targets = targets::collect(&git_input(&args), cwd, true, true);
+            assert!(targets.complete, "{args:?}");
+            assert_eq!(targets.items.len(), 1, "{args:?}");
+            assert_eq!(targets.items[0].path, cwd.join("review.diff"));
+        }
+    }
+
+    #[test]
+    fn git_output_leaves_ambiguous_or_unstable_invocations_unverified() {
+        let cwd = crate::test_support::absolute("/acme/worktree");
+        let cwd = Path::new(cwd.as_ref());
+        for (args, stable) in [
+            (&["diff", "--output"][..], true),
+            (&["diff", "--output", "--"][..], true),
+            (&["diff", "--output="][..], true),
+            (&["log", "--", "--output=review.diff"][..], true),
+            (&["log", "--grep", "--", "--output=review.diff"][..], true),
+            // Git log can consume the apparent separator in its first option pass.
+            (
+                &["log", "--decorate-refs", "--", "--output=review.diff"][..],
+                true,
+            ),
+            (
+                &["diff", "--output=first.diff", "--", "--output=review.diff"][..],
+                true,
+            ),
+            (
+                &["-P", "--no-pager", "diff", "--output=review.diff"][..],
+                true,
+            ),
+            (
+                &["diff", "--future-option", "--output=review.diff"][..],
+                true,
+            ),
+            (
+                &["diff", "--decorate-refs", "--output=review.diff"][..],
+                true,
+            ),
+            (&["diff", "--output=review.diff"][..], false),
+        ] {
+            let targets = targets::collect(&git_input(args), cwd, true, stable);
+            assert!(!targets.complete, "{args:?}, stable={stable}");
+        }
+    }
+
+    #[test]
+    fn git_output_requires_a_destination_for_write_evidence() {
+        let cwd = crate::test_support::absolute("/acme/worktree");
+        let input = git_input(&["diff", "HEAD"]);
+        let observer = Observer::new(&input, &cwd, &cwd, None);
+        let requirement = serde_json::json!({
+            "targets": {"action": "write", "all": {"within": {"root": "write"}}}
+        });
+        assert!(!observer.coverage(&[&requirement]));
+        assert!(observer.targets.get().unwrap().items.is_empty());
+    }
 
     #[test]
     fn ripgrep_missing_operand_evidence_reuses_observations_and_retains_target() {
