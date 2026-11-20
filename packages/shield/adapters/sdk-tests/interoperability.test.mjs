@@ -74,7 +74,10 @@ test('official SDK negotiates lifecycle and validates all decisions with strict 
     assert.equal(client.getServerVersion().name, 'shield');
     await client.ping();
     const tools = await client.listTools();
-    assert.equal(tools.tools.length, 20);
+    // The Rust catalog test owns the exact inventory; here every tool is unique and typed.
+    const names = tools.tools.map(tool => tool.name);
+    assert.equal(new Set(names).size, names.length);
+    for (const name of ['policy_evaluate', 'policy_propose', 'policy_apply', 'status']) assert.ok(names.includes(name), name);
     assert.ok(tools.tools.every(tool => tool.inputSchema && tool.outputSchema));
     assert.ok(!tools.tools.some(tool => tool.name.startsWith('shield_preview')));
     const report = await client.callTool({ name: 'policy_evaluate', arguments: normalized(root) });

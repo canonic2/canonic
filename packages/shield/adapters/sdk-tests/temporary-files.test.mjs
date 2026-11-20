@@ -28,7 +28,6 @@ test('Claude reads and writes arbitrary temporary files through shell and native
     { id: 'cat', decision: 'allow', conditions: { domain: 'argv', executable: 'cat', arguments: { kind: 'any' } }, requirements: { targets: { action: 'read', all: { within: { root: 'read' } } } }, on_unmet: { decision: 'deny' } },
   );
   await writeFile(path, JSON.stringify(rules));
-  await f.operator(['policy', 'review'], 'manual\nyes\n');
   await f.operator(['mcp', 'setup', '--agent', 'claude']);
   const provider = await scriptedProvider(t, [
     { name: 'Bash', input: { command: `cat '${existing}'` } },

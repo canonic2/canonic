@@ -807,7 +807,9 @@ literal text, never a pattern. Declare a string `match` constraint to require th
 complete setting's shape. Separators contain 1–16 bytes without NUL; indexes are
 0–15. Missing or empty selected parts refuse preparation. An unset setting leaves
 the referencing entry inactive, as with ordinary variable selectors. Parts apply
-to string and choice settings; lists, booleans and paths cannot be split.
+to string and choice settings, and to lists inside a precondition's
+`requires_any` ([several values](#several-values-in-one-check)); booleans and
+paths cannot be split.
 
 ### Prefixes built from a variable
 
@@ -828,7 +830,41 @@ arguments:
 For `repository: acme/web`, the operand must start with `repos/acme/web/`; end the
 parts with a separator so `repos/acme/web-other/` does not match. The joined text
 is never a pattern. A part list holds 1–16 parts and at least one reference; an
-unset reference leaves the entry inactive. Lists, booleans and paths cannot be parts.
+unset reference leaves the entry inactive. Booleans and paths cannot be parts;
+lists can inside a precondition's `requires_any`, described next.
+
+### Several values in one check
+
+A project often works with more than one value of a setting, such as a fork and
+its upstream repository. Declare the setting as a list of strings and project it
+inside a precondition's `requires_any`. With `variable-list-branches-v1`, Shield
+repeats each branch that splits a list or uses it as a prefix part once per
+item, so every part in one copy comes from the same item:
+
+```yaml
+variables:
+  repository:
+    type: list
+    description: Exact OWNER/REPO values
+    items: {type: string, match: {regex: "[A-Za-z0-9-]+/[A-Za-z0-9_.-]+"}}
+    max_items: 8
+preconditions:
+  - id: repository-scope
+    conditions: {domain: mcp, server: github, tool: {glob: "*"}}
+    requires_any:
+      - fields:
+          /owner: {text: {var: repository, split: {separator: /, index: 0}}}
+          /repo: {text: {var: repository, split: {separator: /, index: 1}}}
+    on_unmet: {decision: deny, message: "Use one of {{repository}}."}
+```
+
+For `repository: [acme/web, example/web-fork]`, a request for `acme` and `web`
+or for `example` and `web-fork` passes; `acme` with `web-fork` is denied because
+no single item supplies both parts. Each copy counts toward the 16
+`requires_any` alternatives at the list's `max_items`, so declare a `max_items`
+that fits. Rules and precondition `conditions` cannot split a list or use it as
+a prefix part. A single string written for a list setting is a one-item list,
+so changing a setting from a string to a list keeps existing bindings.
 
 ### Optional checks
 

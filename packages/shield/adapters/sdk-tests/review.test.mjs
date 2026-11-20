@@ -35,7 +35,9 @@ test('MCP proposal, CLI review, MCP receipt, reconnect and history share durable
   const call = async (name, args) => client.callTool({ name, arguments: args });
   const tools = await client.listTools();
   assert.ok(tools.tools.some(tool => tool.name === 'policy_propose'));
-  assert.equal(tools.tools.some(tool => tool.name.includes('approve')), false);
+  // The only approval tools ask the person through a form; none applies a proposal.
+  assert.deepEqual(tools.tools.map(tool => tool.name).filter(name => name.includes('approve')).sort(),
+    ['request_approve', 'session_grant_approve']);
   const args = { change: { kind: 'rule_add', rule }, idempotency_key: 'acme-one', agent_reason: 'Inspect Acme' };
   const proposed = data(await call('policy_propose', args));
   assert.equal(proposed.status, 'pending');
@@ -73,7 +75,7 @@ test('MCP proposal, CLI review, MCP receipt, reconnect and history share durable
   assert.equal((await call('policy_receipt', { proposal_id: removal.proposal_id })).isError, true);
 });
 
-test('active MCP diagnostics reload only operator activation and retain authorization after purge', { timeout: 60000 }, async t => {
+test('active MCP diagnostics follow only applied policy and retain authorization after purge', { timeout: 60000 }, async t => {
   const root = await mkdtemp(join(tmpdir(), 'shield-runtime-sdk-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const config = join(root, 'config.json');
@@ -85,9 +87,10 @@ test('active MCP diagnostics reload only operator activation and retain authoriz
   t.after(() => client.close());
   const call = async (name, args = {}) => client.callTool({ name, arguments: args });
   const check = async () => call('policy_evaluate', request(root));
+  const revision = async () => data(await call('policy_show')).policy_revision;
   assert.equal(data(await check()).decision, 'ask');
-  const first = data(await call('status')).active;
-  assert.ok(first.activation_id);
+  const first = await revision();
+  assert.ok(first);
   assert.equal((await call('status', { project: '/other' })).isError, true);
   await assert.rejects(() => call('shield_runtime_activate'), {
     code: -32602, message: 'MCP error -32602: Unknown tool',
@@ -97,16 +100,15 @@ test('active MCP diagnostics reload only operator activation and retain authoriz
   assert.equal((await call('policy_receipt', { proposal_id: proposed.proposal_id })).isError, true);
   assert.equal(data(await check()).decision, 'ask');
   await reviewProposal(root, proposed.proposal_id);
-  const second = data(await call('status')).active;
-  assert.ok(second.activation_id);
+  const second = await revision();
   await call('policy_receipt', { proposal_id: proposed.proposal_id });
-  assert.notEqual(first.activation_id, second.activation_id);
+  assert.notEqual(first, second);
+  // Turning history off and purging it changes no policy.
   await historySettings(root, false, true);
   const result = data(await check());
   assert.equal(result.decision, 'allow');
-  assert.equal(data(await call('status')).active.activation_id, second.activation_id);
   assert.equal(result.disposition, 'preview');
-  assert.equal(data(await call('status')).active.activation_id, second.activation_id);
+  assert.equal(await revision(), second);
 });
 
 test('pack proposals retain acquired bytes and instance-qualified rules for offline review', { timeout: 60000 }, async t => {

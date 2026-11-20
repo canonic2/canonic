@@ -12,7 +12,7 @@ for (const action of ['accept', 'decline']) {
     const f = await enrolledRuntime(t);
     // Explicit initial human review enables this project's MCP form channel.
     await f.operator(['mcp', 'setup', '--agent', 'claude']);
-    const before = JSON.parse(await readFile(f.statePath, 'utf8')).active;
+    const before = await f.revision();
     const forms = [];
     const options = await createClaudeReadOnlySession({ binary, project: f.root,
       onElicitation: async request => {
@@ -23,7 +23,7 @@ for (const action of ['accept', 'decline']) {
         assert.doesNotMatch(request.message, /ACME_ASKED_TEXT/);
         const state = JSON.parse(await readFile(f.statePath, 'utf8'));
         assert.equal(state.read_requests[0].status, 'pending');
-        assert.deepEqual(state.active, before);
+        assert.equal(await f.revision(), before);
         return { action, content: {} };
       } });
     const decisions = [];
@@ -52,8 +52,7 @@ for (const action of ['accept', 'decline']) {
     assert.equal(forms.length, 1, JSON.stringify(provider.results));
     assert.deepEqual(decisions.filter(([name]) => name === 'Read').map(([, decision]) => decision), action === 'accept' ? ['deny', 'allow', 'deny'] : ['deny', 'deny']);
     assert.equal(decisions.find(([name]) => name === 'mcp__shield__request_approve')?.[1], 'allow');
-    const state = JSON.parse(await readFile(f.statePath, 'utf8'));
-    assert.deepEqual(state.active, before);
+    assert.equal(await f.revision(), before);
     // Consumed read grants are reclaimed from minimum authority immediately;
     // their optional history remains separate from consumption authority.
     const issued = (await f.events()).filter(event => event.kind === 'read_grant_issued');

@@ -8,7 +8,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { enrolledRuntime } from '../fixtures/runtime.mjs';
 import { approvalHost } from './codex-host.mjs';
-import { preparePolicyChange } from './policy-proposal.mjs';
+import { policyChange, applyArguments } from './policy-proposal.mjs';
 const exec = promisify(execFile);
 
 for (const hooks of [true, false]) {
@@ -38,9 +38,14 @@ test(`Codex Shield MCP ${approval} with native hooks ${hooks ? 'enabled' : 'disa
     conditions: { domain: 'argv', executable: 'acme', arguments: { kind: 'exact', values: ['inspect'] } },
   } }, idempotency_key: 'acme-mcp-approval', agent_reason: 'Acme MCP autoapproval fixture' };
   const applying = approval !== 'proposal';
-  const arguments_ = applying ? await preparePolicyChange(f.root, 'codex') : proposal;
-  const name = applying ? 'policy_apply' : 'policy_propose';
+  // Applying proposes on the same connection first, since only it may apply.
+  let applied;
+  const calls = applying
+    ? [['policy_propose', () => ({ change: policyChange })],
+      ['policy_apply', body => (applied = applyArguments(body.input?.filter(item => item.type === 'function_call_output')))]]
+    : [['policy_propose', () => proposal]];
   const before = JSON.parse(await readFile(f.statePath, 'utf8'));
+  const revision = await f.revision();
   let count = 0;
   const requests = [];
   server = createServer(async (req, res) => {
@@ -49,10 +54,12 @@ test(`Codex Shield MCP ${approval} with native hooks ${hooks ? 'enabled' : 'disa
     const body = JSON.parse(bytes || '{}');
     requests.push(body);
     const namespace = body.tools?.find(tool => tool.type === 'namespace' && tool.name === 'mcp__shield');
-    const tool = namespace?.tools?.find(tool => tool.name === name);
-    const item = count++ === 0
-      ? { type: 'function_call', id: 'fc_acme', call_id: 'call_acme', namespace: namespace?.name, name: tool?.name ?? (namespace ? name : `mcp__shield__${name}`), arguments: JSON.stringify(arguments_) }
+    const step = calls[count];
+    const tool = step && namespace?.tools?.find(tool => tool.name === step[0]);
+    const item = step
+      ? { type: 'function_call', id: `fc_acme_${count}`, call_id: `call_acme_${count}`, namespace: namespace?.name, name: tool?.name ?? (namespace ? step[0] : `mcp__shield__${step[0]}`), arguments: JSON.stringify(step[1](body)) }
       : { type: 'message', id: 'msg_acme', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: 'Acme proposal submitted.', annotations: [] }] };
+    count++;
     const response = { id: `resp_acme_${count}`, object: 'response', created_at: 0, model: body.model, status: 'completed', output: [item], usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 } };
     res.writeHead(200, { 'content-type': 'text/event-stream' });
     for (const event of [
@@ -75,11 +82,11 @@ test(`Codex Shield MCP ${approval} with native hooks ${hooks ? 'enabled' : 'disa
   if (prompting) {
     const prompt = JSON.stringify(result.mcpApprovals);
     assert.match(prompt, /policy_apply/);
-    const description = [arguments_.change, arguments_.details ?? ''].join('\n');
+    const description = [applied.change, applied.details ?? ''].join('\n');
     for (const line of description.split('\n').filter(Boolean)) {
       assert.ok(prompt.includes(line), prompt);
     }
-    assert.ok(prompt.includes(arguments_.reference), prompt);
+    assert.ok(prompt.includes(applied.reference), prompt);
     assert.doesNotMatch(prompt, /candidate_digest|proposal_id|"changes"/);
     assert.match(prompt, /acme-host-approved/);
   }
@@ -89,17 +96,15 @@ test(`Codex Shield MCP ${approval} with native hooks ${hooks ? 'enabled' : 'disa
   if (!['decline', 'never'].includes(approval)) assert.match(outputs, /proposal_id/, outputs);
   if (approval === 'never') assert.match(outputs, /requires approval|approval policy is never|unsupported call/i);
   const after = JSON.parse(await readFile(f.statePath, 'utf8'));
-  assert.equal(after.proposals.length, before.proposals.length + (applying ? 0 : 1));
+  assert.equal(after.proposals.length, before.proposals.length + 1);
+  // Codex asks before calling the tool, so a declined call never reaches Shield.
   assert.equal(after.proposals.at(-1).status, approval === 'accept' ? 'applied' : 'pending');
   if (approval === 'accept') {
     assert.equal(after.proposals.at(-1).operator.mechanism, 'host-tool-permission');
-    assert.notEqual(after.policy_revision, before.policy_revision);
-    assert.notDeepEqual(after.active, before.active);
+    assert.notEqual(await f.revision(), revision);
   } else {
     assert.equal(after.proposals.at(-1).operator, null);
-    assert.deepEqual(after.active, before.active);
-    assert.deepEqual(after.candidates, before.candidates);
-    assert.equal(after.policy_revision, before.policy_revision);
+    assert.equal(await f.revision(), revision);
   }
 });
 }

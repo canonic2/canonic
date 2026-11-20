@@ -23,7 +23,6 @@ test('Claude reads its own tool results with jq interpolation and selection with
     requirements: { targets: { action: 'read', all: { within: { root: 'read' } } } }, on_unmet: { decision: 'deny' } },
   { id: 'head', decision: 'allow', conditions: { domain: 'argv', executable: 'head', arguments: { kind: 'any' } } });
   await writeFile(rulesPath, JSON.stringify(rules));
-  await f.operator(['policy', 'review'], 'manual\nyes\n');
   await f.operator(['mcp', 'setup', '--agent', 'claude']);
   let resolveResult;
   const resultReady = new Promise(resolve => { resolveResult = resolve; });

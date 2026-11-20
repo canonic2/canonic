@@ -7,7 +7,7 @@ import { promisify } from 'node:util';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import { enrolledRuntime } from '../fixtures/runtime.mjs';
 import { scriptedProvider } from './claude-provider.mjs';
-import { preparePolicyChange } from './policy-proposal.mjs';
+import { policyChangeSteps, reviewStatus } from './policy-proposal.mjs';
 
 const exec = promisify(execFile);
 const quote = s => `'${s.replaceAll("'", "'\\''")}'`;
@@ -20,7 +20,6 @@ test('Claude can cd to its current project before permitted Git inspection witho
     rules.rules.push({ id, decision: 'allow', conditions: { domain: 'argv', executable, arguments: { kind: 'exact', values } } });
   }
   await writeFile(rulesPath, JSON.stringify(rules));
-  await f.operator(['policy', 'review'], 'manual\nyes\n');
   await f.operator(['mcp', 'setup', '--agent', 'claude']);
   const source = `node -v; npm -v; cd ${quote(f.root)} && git status --short`;
   const provider = await scriptedProvider(t, [{ name: 'Bash', input: { command: source } }]);
@@ -60,10 +59,8 @@ for (const permissionMode of ['default', 'auto', 'bypassPermissions']) {
     test(`Claude policy confirmation in ${permissionMode} mode honors ${action}`, { timeout: 60000 }, async t => {
       const f = await enrolledRuntime(t);
       await f.operator(['mcp', 'setup', '--agent', 'claude']);
-      const args = await preparePolicyChange(f.root, 'claude');
-      const before = JSON.parse(await readFile(f.statePath, 'utf8'));
-      const name = 'mcp__shield__policy_apply';
-      const provider = await scriptedProvider(t, [{ name, input: args }]);
+      const before = await f.revision();
+      const provider = await scriptedProvider(t, policyChangeSteps());
       const calls = [];
       const toolApprovals = [];
       await host(t, f, provider, { permissionMode, allowDangerouslySkipPermissions: true,
@@ -72,26 +69,24 @@ for (const permissionMode of ['default', 'auto', 'bypassPermissions']) {
           return { behavior: 'deny', message: 'Policy confirmation must use the MCP form.' };
         },
         onElicitation: async request => {
-          calls.push({ request, active: JSON.parse(await readFile(f.statePath, 'utf8')).active });
+          calls.push({ request, revision: await f.revision() });
           return action === 'accept' ? { action, content: {} } : { action };
         },
       });
       assert.deepEqual(toolApprovals, [], 'Policy confirmation must use the MCP form, independently of ordinary tool approval.');
       assert.equal(calls.length, 1, JSON.stringify(provider.results));
-      const [{ request, active }] = calls;
+      const [{ request, revision }] = calls;
       assert.equal(request.serverName, 'shield');
       assert.match(request.message, /Approve this Shield policy change/);
       assert.match(request.message, /Rule ID: acme-host-approved/);
       assert.doesNotMatch(request.message, /candidate_digest|proposal_id|apply_arguments/);
       assert.deepEqual(request.requestedSchema.properties, {});
-      assert.deepEqual(active, before.active);
+      // The open form has changed nothing yet.
+      assert.equal(revision, before);
       const after = JSON.parse(await readFile(f.statePath, 'utf8'));
-      assert.equal(after.proposals.at(-1).status, action === 'accept' ? 'applied' : 'pending', JSON.stringify(provider.results));
-      if (action === 'accept') assert.notEqual(after.policy_revision, before.policy_revision);
-      else {
-        assert.deepEqual(after.active, before.active);
-        assert.equal(after.policy_revision, before.policy_revision);
-      }
+      assert.equal(after.proposals.at(-1).status, reviewStatus[action], JSON.stringify(provider.results));
+      if (action === 'accept') assert.notEqual(await f.revision(), before);
+      else assert.equal(await f.revision(), before);
     });
   }
 }
@@ -135,7 +130,7 @@ test('Claude receives proposal context after its first native Ask', { timeout: 6
   const after = JSON.parse(await readFile(f.statePath, 'utf8'));
   const before = JSON.parse(f.state);
   assert.deepEqual(after.proposals, before.proposals);
-  assert.deepEqual(after.active, before.active);
+  assert.equal(await f.revision(), f.policyRevision);
 });
 
 test('installed Claude command hooks discover native reads and withhold unanswered Ask/Deny', { timeout: 60000 }, async t => {
@@ -156,7 +151,7 @@ test('installed Claude command hooks discover native reads and withhold unanswer
   assert.ok(events.some(e => e.kind === 'decision' && e.provenance.agent === 'claude'));
   assert.ok(events.some(e => e.kind === 'completion'));
   assert.doesNotMatch(JSON.stringify(events), /ACME_ALLOWED_TEXT|ACME_DENIED_TEXT/);
-  assert.equal((await f.cli(['status'])).coverage.live_host_verification, 'unverified');
+  assert.equal((await f.cli(['status'])).coverage.live_host_verification, 'unchecked');
 });
 
 for (const behavior of ['allow', 'deny']) {
@@ -215,7 +210,6 @@ test('installed Claude hooks allow Git staging and deny destructive Git policy',
       conditions: { domain: 'argv', executable: 'git', arguments: { kind: 'exact', values } } });
   }
   await writeFile(rulesPath, JSON.stringify(rules));
-  await f.operator(['policy', 'review'], 'manual\nyes\n');
   await f.operator(['mcp', 'setup', '--agent', 'claude']);
   const provider = await scriptedProvider(t, [
     { name: 'Bash', input: { command: 'git add allowed.txt' } },

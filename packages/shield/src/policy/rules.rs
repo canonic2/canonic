@@ -31,7 +31,7 @@ mod validation;
 fn timestamp(value: &str) -> Option<canonic_registry_kit::timestamp::Parts> {
     canonic_registry_kit::timestamp::parse(value).filter(|parts| parts.0 > 0)
 }
-pub(crate) use preconditions::Precondition;
+pub(crate) use preconditions::{MAX_ALTERNATIVES, Precondition};
 use predicates::{Failures, checks, domain_matches};
 
 /// Options grammars that pass over options they do not declare.

@@ -148,7 +148,8 @@ test('general runtime client fresh invocation cannot select an earlier approval 
   const aliasEvents = await fixture.events();
   const aliasDecision = aliasEvents.find(event => event.kind === 'decision' && event.provenance.tool_use_id === aliased.tool_use_id);
   assert.equal(aliasDecision.details.reported_cwd, alias);
-  assert.equal(aliasDecision.provenance.cwd, fixture.root);
+  // History records the canonical working directory relative to the project.
+  assert.equal(aliasDecision.provenance.cwd, '.');
   assert.equal(aliasEvents.filter(event => event.kind === 'completion').at(-1).links.decision_event_id, aliasDecision.event_id);
   await client.close();
 });

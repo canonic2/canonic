@@ -9,17 +9,10 @@ import { promisify } from 'node:util';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import { enrolledRuntime } from '../fixtures/runtime.mjs';
 import { scriptedProvider } from './claude-provider.mjs';
+import { applyArguments, returnedData } from './policy-proposal.mjs';
 
 const exec = promisify(execFile);
 
-function returnedData(body) {
-  const results = body.messages.flatMap(message => Array.isArray(message.content) ? message.content : [])
-    .filter(block => block.type === 'tool_result');
-  return results.flatMap(result => Array.isArray(result.content) ? result.content : [{ text: result.content }])
-    .flatMap(block => {
-      try { return [JSON.parse(block.text).data]; } catch { return []; }
-    }).filter(Boolean);
-}
 
 for (const behavior of ['allow', 'deny']) {
   test(`Claude pack review needs only the final policy approval and honors ${behavior}`, { timeout: 60000 }, async t => {
@@ -39,7 +32,7 @@ for (const behavior of ['allow', 'deny']) {
       version: '1.0.0', path: 'pack.json', sha256: createHash('sha256').update(pack).digest('hex') }] }));
     await f.operator(['registry', 'add', 'acme', source]);
     await f.operator(['mcp', 'setup', '--agent', 'claude']);
-    const before = JSON.parse(await readFile(f.statePath, 'utf8'));
+    const before = await f.revision();
     const reference = 'acme/acme/runtime';
     const provider = await scriptedProvider(t, [
       { name: 'mcp__shield__pack_info', input: { reference } },
@@ -52,11 +45,7 @@ for (const behavior of ['allow', 'deny']) {
         assert.equal(summary.profiles.recommended.rule_outcomes.allow, 192);
       } },
       { name: 'mcp__shield__policy_propose', input: { change: { kind: 'pack_add', reference }, agent_reason: 'Review Acme runtime inspection permissions.' } },
-      { name: 'mcp__shield__policy_apply', input: body => {
-        const proposal = returnedData(body).find(data => data.apply_arguments);
-        assert.ok(proposal?.apply_arguments, JSON.stringify(body.messages));
-        return proposal.apply_arguments;
-      } },
+      { name: 'mcp__shield__policy_apply', input: body => applyArguments(body.messages) },
     ]);
     const prompts = [];
     const executable = (await exec('which', ['claude'])).stdout.trim();
@@ -72,7 +61,7 @@ for (const behavior of ['allow', 'deny']) {
         assert.match(request.message, /Without asking:/);
         assert.doesNotMatch(request.message, /candidate_digest|proposal_id|apply_arguments/);
         assert.deepEqual(request.requestedSchema.properties, {});
-        assert.deepEqual(JSON.parse(await readFile(f.statePath, 'utf8')).active, before.active);
+        assert.equal(await f.revision(), before);
         return behavior === 'allow' ? { action: 'accept', content: {} } : { action: 'decline' };
       },
       env: { ...process.env, ANTHROPIC_API_KEY: 'acme-local-test-key', ANTHROPIC_BASE_URL: provider.url,
@@ -88,9 +77,10 @@ for (const behavior of ['allow', 'deny']) {
       assert.doesNotMatch(JSON.stringify(result), /tool-results\/|persisted-output|output too large/i);
     }
     const after = JSON.parse(await readFile(f.statePath, 'utf8'));
-    assert.equal(after.proposals.at(-1).status, behavior === 'allow' ? 'applied' : 'pending');
-    if (behavior === 'allow') assert.notEqual(after.policy_revision, before.policy_revision);
-    else assert.deepEqual(after.active, before.active);
+    // A declined form rejects the review.
+    assert.equal(after.proposals.at(-1).status, behavior === 'allow' ? 'applied' : 'rejected');
+    if (behavior === 'allow') assert.notEqual(await f.revision(), before);
+    else assert.equal(await f.revision(), before);
     const events = await f.events();
     assert.equal(events.some(event => event.details?.operation?.kind === 'shell'), false);
   });

@@ -49,7 +49,6 @@ async function fixture(t, mode) {
     const rules = await f.readRules();
     rules.rules.push({ id: 'syntax-source', decision: 'allow', conditions: { domain: 'file', action: 'read', sources: { all: { exact: { root: 'absolute', path: source } } } } });
     await writeFile(path, JSON.stringify(rules));
-    await f.operator(['policy', 'review'], 'manual\nyes\n');
   }
   if (temporary) {
     const path = join(f.root, '.shield/rules.yml');
@@ -61,7 +60,6 @@ async function fixture(t, mode) {
       { id: 'temporary-cat', decision: 'allow', conditions: { domain: 'argv', executable: 'cat', arguments: { kind: 'any' } }, requirements: { targets: { action: 'read', all: { within: { root: 'read' } } } }, on_unmet: { decision: 'deny' } },
     );
     await writeFile(path, JSON.stringify(rules));
-    await f.operator(['policy', 'review'], 'manual\nyes\n');
   }
   if (anchoredGit || bareGit) {
     if (bareGit) await writeFile(join(f.root, 'acme.txt'), 'Acme initial file');
@@ -74,7 +72,6 @@ async function fixture(t, mode) {
     for (const subcommand of ['init', 'status', 'add', 'diff']) rules.rules.push({ id: `git-${subcommand}`, decision: 'allow', reason: 'Acme Git command policy',
       conditions: { domain: 'argv', executable: 'git', arguments: { kind: 'prefix', values: [subcommand] } } });
     await writeFile(path, JSON.stringify(rules));
-    await f.operator(['policy', 'review'], 'manual\nyes\n');
   }
   if (mode === 'exact-deny') {
     const rule = (id, decision, conditions) => ({ id, decision, conditions, reason: 'Acme exact request fixture' });
@@ -83,7 +80,6 @@ async function fixture(t, mode) {
       rule('exact-deny', 'deny', { domain: 'exact_request', input: { kind: 'shell', source: command, dialect: 'posix', dialect_version: null,
         original_input: { command } }, context: { cwd: f.root, environment: null }, executable: null }),
     ] }));
-    await f.operator(['policy', 'review'], 'manual\nyes\n');
   }
   if (['allow', 'policy-deny', 'permission-allow', 'permission-deny', 'permission-workdir', 'permission-ask', 'permission-approve'].includes(mode)) {
     const path = join(f.root, '.shield/rules.yml');
@@ -94,7 +90,6 @@ async function fixture(t, mode) {
       conditions: { domain: 'exact_request', input: { kind: 'shell', source: command, dialect: 'posix', dialect_version: null,
         original_input: { command, description: 'Acme permission-request fixture' } }, context: { cwd: f.root, environment: null }, executable: null } });
     await writeFile(path, JSON.stringify(rules));
-    await f.operator(['policy', 'review'], 'manual\nyes\n');
   }
   if (mode === 'required-option') {
     const path = join(f.root, '.shield/rules.yml');
@@ -105,7 +100,6 @@ async function fixture(t, mode) {
       requirements: { arguments: { kind: 'options', prefix: [], flags: ['-c'], values: [], operands: true, require_all: ['-c'] } },
       on_unmet: { decision: 'deny', message: 'Add -c before touching a file and submit again.', alternatives: ['touch -c existing.txt'] } });
     await writeFile(path, JSON.stringify(rules));
-    await f.operator(['policy', 'review'], 'manual\nyes\n');
   }
   await f.operator(['mcp', 'setup', '--agent', 'codex']);
   if (mode === 'deny') {

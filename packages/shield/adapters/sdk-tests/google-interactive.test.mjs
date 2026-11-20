@@ -8,7 +8,7 @@ import { mkdir, writeFile, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { enrolledRuntime } from '../fixtures/runtime.mjs';
-import { preparePolicyChange } from './policy-proposal.mjs';
+import { geminiPolicyChangeSteps, policyChange, reviewStatus } from './policy-proposal.mjs';
 import { geminiProvider } from './gemini-provider.mjs';
 
 const exec = promisify(execFile);
@@ -90,17 +90,12 @@ for (const agent of ['gemini', 'agy']) {
     }, async t => {
       const f = await interactiveRuntime(t);
       await f.operator(['mcp', 'setup', '--agent', agent]);
-      const args = await preparePolicyChange(f.root, agent);
       const state = async () => JSON.parse(await readFile(f.statePath, 'utf8'));
-      const before = await state();
+      const before = await f.revision();
       let env = { ...process.env, TERM: 'xterm-256color', NO_COLOR: '1' };
       let argv, provider;
       if (agent === 'gemini') {
-        provider = await geminiProvider(t, [{
-          name: body => body.tools?.flatMap(tool => tool.functionDeclarations ?? [])
-            .find(tool => tool.name === 'policy_apply' || tool.name?.endsWith('_policy_apply'))?.name,
-          input: args,
-        }]);
+        provider = await geminiProvider(t, geminiPolicyChangeSteps());
         env = await geminiEnvironment(f.root, provider);
         argv = [(await exec('which', ['gemini'])).stdout.trim(), '--skip-trust', '--approval-mode', 'yolo',
           '--model', 'gemini-2.5-flash', '--prompt-interactive', 'Perform the Acme fixture tool exactly once.'];
@@ -117,12 +112,13 @@ for (const agent of ['gemini', 'agy']) {
       }
       const ui = await f.terminal(argv, env);
       if (agent === 'gemini') {
-        await ui.wait(text => /Select Theme/.test(text) || text.replace(/\s/g, '').includes('ApprovethisShieldpolicychange?') || (provider?.results.length > 0));
+        // The first result is the proposal; the second is the apply attempt.
+        await ui.wait(text => /Select Theme/.test(text) || text.replace(/\s/g, '').includes('ApprovethisShieldpolicychange?') || (provider?.results.length > 1));
         if (/Select Theme/.test(ui.text())) ui.send('\r');
-        await ui.wait(() => provider.results.length > 0);
-        assert.match(JSON.stringify(provider.results), /approval_unavailable/);
-        assert.equal((await state()).policy_revision, before.policy_revision);
-        assert.equal((await state()).proposals.at(-1).status, 'pending');
+        await ui.wait(() => provider.results.length > 1);
+        assert.match(JSON.stringify(provider.results.slice(1)), /approval_unavailable/);
+        assert.equal(await f.revision(), before);
+        assert.equal((await state()).proposals.at(-1).status, reviewStatus.unavailable);
         return;
       }
       await ui.wait(text => text.includes('Do you trust the contents of this project?') || text.includes('for shortcuts'));
@@ -139,16 +135,16 @@ for (const agent of ['gemini', 'agy']) {
         ui.send('\x1b');
         await ui.wait(text => text.slice(offset).includes('for shortcuts'));
       }
-      ui.send(`Call the shield MCP policy_apply tool exactly once with these exact arguments: ${JSON.stringify(args)}. Do not run other tools or retry. Stop after its response.`);
-      await ui.wait(text => text.includes('Call the shield MCP policy_apply tool exactly once'));
+      ui.send(`Call the shield MCP policy_propose tool once with arguments ${JSON.stringify({ change: policyChange })}, then call policy_apply exactly once with the apply_arguments it returns. Do not run other tools or retry. Stop after its response.`);
+      await ui.wait(text => text.includes('Call the shield MCP policy_propose tool once'));
       ui.send('\r');
       const trace = async () => (await readFile(join(f.root, 'mcp-trace.jsonl'), 'utf8').catch(() => ''))
         .trim().split('\n').filter(Boolean).map(line => JSON.parse(line));
       await ui.wait(async () => (await trace()).some(frame => frame.errorCode === 'approval_declined'));
       assert.ok((await trace()).some(frame => frame.responseAction === 'cancel' || frame.inputActions?.confirmation === 'cancel'));
       const after = await state();
-      assert.equal(after.proposals.at(-1).status, 'pending');
-      assert.equal(after.policy_revision, before.policy_revision);
+      assert.equal(after.proposals.at(-1).status, reviewStatus.cancel);
+      assert.equal(await f.revision(), before);
     });
   }
 }

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Add `variable-list-branches-v1`: a precondition's `requires_any` branch that
+  splits a list variable or uses it as a joined prefix part is repeated once per
+  item, so a setting such as several `OWNER/REPO` values keeps each value's
+  components paired. Copies count against the 16-alternative limit at the
+  list's `max_items`. A string bound to a list variable reads as a one-item
+  list, so a pack release that turns a string setting into a list keeps
+  existing bindings.
+
 - Include pinned direct packs in status/list update availability and CLI/MCP
   notices. Replace `pack_updates.excluded_pinned` with `direct_total`, and report
   “No direct pack selections to check.” when the inspected scope has none.

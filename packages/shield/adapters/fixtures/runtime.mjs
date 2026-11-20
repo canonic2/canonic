@@ -38,7 +38,14 @@ export async function operator(root, args, answers = 'yes\n', env = process.env)
   return { output: output.terminal };
 }
 
-export async function initialize(root, config, env = process.env, answers = 'yes\n') {
+// The policy revision requests are decided by.
+export async function revision(root, env = process.env) {
+  return JSON.parse((await exec(binary, ['policy', 'show', '--json', '--project', root], { env })).stdout).policy_revision;
+}
+
+// With a `cache` folder the project keeps its compiled plans there. The policy
+// files already exist and no baseline or agent is set up, so `init` asks nothing.
+export async function initialize(root, config, cache, env = process.env) {
   const candidate = JSON.parse(await readFile(config, 'utf8'));
   await mkdir(join(root, '.shield'), { recursive: true });
   if (candidate.rules) {
@@ -49,34 +56,41 @@ export async function initialize(root, config, env = process.env, answers = 'yes
     await writeFile(join(root, '.shield', pack.path), await readFile(join(root, pack.path)));
   }
   await writeFile(join(root, '.shield/config.yml'), JSON.stringify(candidate));
-  await operator(root, ['init'], answers, env);
-  return JSON.parse((await exec(binary, ['status', '--json', '--project', root], { env })).stdout).active;
+  await operator(root, cache ? ['init', '--cache-dir', cache] : ['init'], [], env);
+  return revision(root, env);
 }
 
 export async function reviewProposal(root, id, action = 'accept', env = process.env) {
-  const state = JSON.parse(await readFile(join(root, '.shield/review/state.json'), 'utf8'));
+  const state = JSON.parse(await readFile(join(root, '.shield/state/state.json'), 'utf8'));
   const pending = state.proposals.filter(proposal => proposal.status === 'pending');
-  if (!pending.some(proposal => proposal.proposal_id === id)) throw new Error('Pending fixture proposal not found');
-  // The UI reviews each pending proposal in order; leave unrelated proposals pending.
-  return operator(root, ['policy', 'review'], ['review', ...pending.map(proposal => proposal.proposal_id === id ? action : 'leave')], env);
+  const index = pending.findIndex(proposal => proposal.proposal_id === id);
+  if (index < 0) throw new Error('Pending fixture proposal not found');
+  // Review lists "Cancel review" first, then each live change in order; select
+  // this one, then decide it. Other proposals stay pending.
+  return operator(root, ['policy', 'review'], ['review', { keys: `${index + 2}\r` }, action], env);
 }
 
+// History settings live in the policy files; this reviews and confirms the change.
 export const historySettings = (root, enabled = true, purge = false, env = process.env) =>
-  operator(root, ['policy', 'review'], `history\n${enabled ? 'yes' : 'no'}\n5000\n${purge ? 'yes' : 'no'}\nyes\n`, env);
+  operator(root, ['history', 'configure', '--enabled', String(enabled), ...(purge ? ['--purge'] : [])], ['yes'], env);
 
-// Read the canonical document through the CLI, independent of its YAML spelling.
-export async function readRules(root, env = process.env) {
-  return JSON.parse((await exec(binary, ['policy', 'show', '--json', '--project', root], { env })).stdout).project_rules;
+// The fixture writes the rules file as JSON and nothing here rewrites it.
+export async function readRules(root) {
+  return JSON.parse(await readFile(join(root, '.shield/rules.yml'), 'utf8'));
+}
+
+// The policy files are the policy: an edit decides the next request with no
+// review step. Returns the new policy revision.
+export async function writeRules(root, rules, env = process.env) {
+  await writeFile(join(root, '.shield/rules.yml'), JSON.stringify(rules));
+  return revision(root, env);
 }
 
 export async function reactivate(root, env = process.env) {
-  const path = join(root, '.shield/rules.yml');
-  const rules = await readRules(root, env);
+  const rules = await readRules(root);
   rules.rules.push({ id: `fixture-${rules.rules.length}`, decision:'deny',
     reason:'Acme unrelated policy change', conditions:{ domain:'argv', executable:'acme-unrelated', arguments:{kind:'any'} } });
-  await writeFile(path, JSON.stringify(rules));
-  await operator(root, ['policy', 'review'], 'manual\nyes\n', env);
-  return JSON.parse((await exec(binary, ['status', '--json', '--project', root], { env })).stdout).active;
+  return writeRules(root, rules, env);
 }
 
 export async function enrolledRuntime(t, { env: selectedEnvironment = process.env } = {}) {
@@ -104,15 +118,19 @@ export async function enrolledRuntime(t, { env: selectedEnvironment = process.en
   // The history reader's event view, with reader-derived completion links.
   const events = async () =>
     JSON.parse((await exec(binary, ['__internal', 'history-events', '--project', root], { env })).stdout).events;
-  const active = await initialize(root, config, env);
-  const statePath = join(root, '.shield/review/state.json');
+  const cache = await realpath(await mkdtemp(join(tmpdir(), 'shield-cache-acme-')));
+  t.after(() => rm(cache, { recursive: true, force: true }));
+  const policyRevision = await initialize(root, config, cache, env);
+  const statePath = join(root, '.shield/state/state.json');
   const state = await readFile(statePath);
-  return { root, allowed, denied, asked, cli, events, active, statePath, state,
+  return { root, cache, allowed, denied, asked, cli, events, policyRevision, statePath, state,
     operator: (args, answers) => operator(root, args, answers, env),
     historySettings: (enabled, purge) => historySettings(root, enabled, purge, env),
-    readRules: () => readRules(root, env),
+    revision: () => revision(root, env),
+    readRules: () => readRules(root),
+    writeRules: rules => writeRules(root, rules, env),
     reactivate: () => reactivate(root, env),
-    initialize: (answers) => initialize(root, config, env, answers) };
+    initialize: () => initialize(root, config, cache, env) };
 }
 
 export function hostInput(root, tool, input, id = 'tool_acme_1') {
@@ -121,10 +139,8 @@ export function hostInput(root, tool, input, id = 'tool_acme_1') {
 }
 
 export function authorizationState(bytes) {
+  // The policy itself lives in the policy files, not in this state.
   const state = JSON.parse(bytes);
-  // Source-stat hints are disposable cache metadata, not authorization state.
-  if (state.active?.compiled) delete state.active.compiled.input_hints;
-  return { project_id: state.project_id, project_root: state.project_root, candidates: state.candidates,
-    policy_revision: state.policy_revision, active: state.active, proposals: state.proposals,
+  return { project_id: state.project_id, proposals: state.proposals,
     authorization_events: state.authorization_events };
 }

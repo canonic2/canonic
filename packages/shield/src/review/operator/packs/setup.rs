@@ -57,11 +57,7 @@ pub(in crate::review::operator) fn walk(
     settings: &mut Settings,
     options: Options,
 ) -> Result<Step<()>, Error> {
-    let flow = Flow {
-        declarations: policy::ordered_declarations(artifact)?,
-        current: settings.effective().variables,
-        scope: options.scope,
-    };
+    let flow = Flow::new(artifact, settings.effective().variables, options.scope)?;
     let mut answers = Answers::new();
     // Declarations asked in this walk, in order; going back pops one.
     let mut history: Vec<usize> = Vec::new();
@@ -200,6 +196,26 @@ struct Flow {
 }
 
 impl Flow {
+    /// Read saved values in their declared shape, as resolution does: a list
+    /// item saved alone, before the variable became a list, is a one-item list.
+    fn new(
+        artifact: &str,
+        mut current: BTreeMap<String, Value>,
+        scope: Walk,
+    ) -> Result<Self, Error> {
+        let declarations = policy::ordered_declarations(artifact)?;
+        for (name, declaration) in &declarations {
+            if let Some(value) = current.get_mut(name) {
+                *value = declaration.normalize(value);
+            }
+        }
+        Ok(Self {
+            declarations,
+            current,
+            scope,
+        })
+    }
+
     /// Whether this walk asks the variable now: in scope, and every `ask_when`
     /// test holds for the answers so far, or current values where unanswered.
     fn asks(&self, name: &str, declaration: &Declaration, answers: &Answers) -> bool {
@@ -377,4 +393,47 @@ fn suggests_local(settings: &Settings, name: &str, declaration: &Declaration) ->
     let current = settings.layer(name);
     current == "local"
         || (current != "project" && declaration.layer() == policy::model::variables::Layer::Local)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn a_list_item_saved_alone_shows_the_same_dependent_questions_as_a_list() {
+        let pack = json!({"schema_version":1,"kind":"pack","id":"acme/build","version":"0.1.0",
+            "description":"Acme build","license":"UNLICENSED","maintainers":["Acme"],"engines":{"shield":"*"},
+            "capabilities":["structured-rules-v1","argument-rules-v1","variables-v1"],
+            "variables":{
+                "tools":{"type":"list","description":"Build tools","items":{"type":"string"},"max_items":4},
+                "target":{"type":"string","description":"Make target",
+                    "setup":{"ask_when":[{"var":"tools","contains":"make"}]}}},
+            "rules":[{"id":"tools","decision":"allow",
+                "conditions":{"domain":"argv","executable":{"var":"tools"},"arguments":{"kind":"any"}}}]})
+        .to_string();
+        let (name, declaration) = {
+            let flow = Flow::new(&pack, BTreeMap::new(), Walk::All).unwrap();
+            flow.declarations
+                .into_iter()
+                .find(|(name, _)| name == "target")
+                .unwrap()
+        };
+        for saved in [json!("make"), json!(["make"])] {
+            let flow = Flow::new(
+                &pack,
+                BTreeMap::from([("tools".into(), saved.clone())]),
+                Walk::All,
+            )
+            .unwrap();
+            assert!(flow.asks(&name, &declaration, &Answers::new()), "{saved}");
+        }
+        let flow = Flow::new(
+            &pack,
+            BTreeMap::from([("tools".into(), json!("cargo"))]),
+            Walk::All,
+        )
+        .unwrap();
+        assert!(!flow.asks(&name, &declaration, &Answers::new()));
+    }
 }

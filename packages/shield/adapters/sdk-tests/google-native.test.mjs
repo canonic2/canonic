@@ -6,7 +6,7 @@ import { mkdir, writeFile, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { enrolledRuntime } from '../fixtures/runtime.mjs';
 import { geminiProvider } from './gemini-provider.mjs';
-import { preparePolicyChange } from './policy-proposal.mjs';
+import { geminiPolicyChangeSteps, reviewStatus } from './policy-proposal.mjs';
 
 const exec = promisify(execFile);
 async function geminiEnvironment(root, provider) {
@@ -21,16 +21,15 @@ async function geminiEnvironment(root, provider) {
 test('Gemini policy form cannot activate a proposal in headless yolo mode',{timeout:60000},async t=>{
   const f=await enrolledRuntime(t);
   await f.operator(['mcp','setup','--agent','gemini']);
-  const args=await preparePolicyChange(f.root,'gemini');
-  const before=JSON.parse(await readFile(f.statePath,'utf8'));
-  const provider=await geminiProvider(t,[{name:body=>body.tools?.flatMap(tool=>tool.functionDeclarations??[]).find(tool=>tool.name==='policy_apply'||tool.name?.endsWith('_policy_apply'))?.name,input:args}]);
+  const before=await f.revision();
+  const provider=await geminiProvider(t,geminiPolicyChangeSteps());
   const output=await exec('gemini',['--skip-trust','--approval-mode','yolo','--output-format','json','--model','gemini-2.5-flash','--prompt','Perform the Acme fixture tool exactly once.'],
     {cwd:f.root,timeout:25000,maxBuffer:1024*1024,env:await geminiEnvironment(f.root,provider)});
-  assert.ok(provider.results.length,`No MCP result: ${output.stderr}`);
-  assert.match(JSON.stringify(provider.results),/approval_|not approved|confirmation.*unavailable/i);
+  assert.ok(provider.results.length>1,`No apply result: ${output.stderr}`);
+  assert.match(JSON.stringify(provider.results.slice(1)),/approval_|not approved|confirmation.*unavailable/i);
   const after=JSON.parse(await readFile(f.statePath,'utf8'));
-  assert.equal(after.policy_revision,before.policy_revision);
-  assert.equal(after.proposals.at(-1).status,'pending');
+  assert.equal(await f.revision(),before);
+  assert.equal(after.proposals.at(-1).status,reviewStatus.unavailable);
 });
 test('Gemini native hooks enforce Allow, Ask and Deny with a local scripted provider', { timeout: 90000 }, async t => {
   const f = await enrolledRuntime(t);

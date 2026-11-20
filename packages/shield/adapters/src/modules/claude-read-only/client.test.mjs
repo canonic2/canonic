@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile, writeFile, symlink, link, rm, chmod, mkdir } from 'node:fs/promises';
+import { readFile, readdir, writeFile, symlink, link, rm, chmod, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 // Capture real polling before virtualizing the transport's deadline timers.
 import { setTimeout as wait } from 'node:timers/promises';
@@ -10,24 +10,29 @@ import { binary, enrolledRuntime, hostInput, authorizationState } from '../../..
 const callback = hooks => hooks.PreToolUse[0].hooks[0];
 const decision = result => result.hookSpecificOutput.permissionDecision;
 
-test('missing compiled policy recovers and unrecoverable cache still blocks', async t => {
+test('a missing or unusable compiled plan is compiled again from the policy files', async t => {
   const fixture = await enrolledRuntime(t);
   const call = callback(await createClaudeReadOnlyHooks({ binary, project: fixture.root }));
-  const { active: { compiled } } = JSON.parse(await readFile(fixture.statePath, 'utf8'));
-  const path = join(compiled.directory, 'compiled', compiled.project_key, `${compiled.plan_key}.bin`);
-  await rm(path);
   const input = hostInput(fixture.root, 'Read', { file_path: fixture.allowed });
+  // The first request compiles the project's one plan into its cache folder.
+  assert.equal(decision(await call(input)), 'allow');
+  const plans = (await readdir(join(fixture.cache, 'plans'))).filter(name => name.endsWith('.bin'));
+  assert.equal(plans.length, 1);
+  const path = join(fixture.cache, 'plans', plans[0]);
+  await rm(path);
   assert.equal(decision(await call(input)), 'allow');
   assert.deepEqual(authorizationState(await readFile(fixture.statePath)), authorizationState(fixture.state));
   await readFile(path);
+  // A plan entry that cannot be read or replaced is only a cache: each request
+  // compiles the files instead, so their decisions hold in both directions.
   await rm(path);
   await mkdir(path);
-  const blocked = await call(input);
-  assert.equal(decision(blocked), 'deny');
-  assert.ok(blocked.hookSpecificOutput.permissionDecisionReason.includes(`shield doctor --project '${fixture.root}'`));
+  assert.equal(decision(await call(input)), 'allow');
+  assert.equal(decision(await call(hostInput(fixture.root, 'Read', { file_path: fixture.denied }))), 'deny');
   assert.deepEqual(authorizationState(await readFile(fixture.statePath)), authorizationState(fixture.state));
   await rm(path, { recursive: true });
   assert.equal(decision(await call(input)), 'allow');
+  await readFile(path);
 });
 
 test('operator-approved read is consumed once across concurrent SDK retries', async t => {
@@ -95,11 +100,10 @@ test('registered read callback preserves captured window and reloads active poli
     assert.equal(decision(await call(hostInput(fixture.root, 'Read', { file_path: path }))), 'deny');
   }
   assert.deepEqual(authorizationState(await readFile(fixture.statePath)), authorizationState(fixture.state));
-  const path = join(fixture.root, '.shield/rules.yml');
+  // An edit to the policy files decides the next request.
   const rules = await fixture.readRules();
   rules.rules = rules.rules.filter(rule => rule.id !== 'read');
-  await writeFile(path, JSON.stringify(rules));
-  await fixture.operator(['policy', 'review'], 'manual\nyes\n');
+  await fixture.writeRules(rules);
   assert.equal(decision(await call(hostInput(fixture.root, 'Read', { file_path: fixture.allowed }))), 'deny');
 });
 
@@ -150,7 +154,7 @@ test('invalid host claims, mismatched IDs, changed enrollment and cancelled call
   assert.equal(decision(await call(input, 'another-tool')), 'deny');
   assert.equal(decision(await call(input, input.tool_use_id, { signal: AbortSignal.abort() })), 'deny');
   await rm(join(fixture.root, '.shield'), { recursive: true });
-  await fixture.initialize([]);
+  await fixture.initialize();
   assert.equal(decision(await call(input)), 'deny');
 });
 
@@ -355,20 +359,20 @@ test('history correlates exact reads, deduplicates completion and respects missi
   assert.deepEqual(authorizationState(await readFile(fixture.statePath)), authorizationState(fixture.state));
 });
 
-test('post-tool history retains the original activation after operator reactivation', async t => {
+test('post-tool history retains the original policy revision after a policy edit', async t => {
   const fixture = await enrolledRuntime(t);
   const hooks = await createClaudeReadOnlyHooks({ binary, project: fixture.root });
   const input = hostInput(fixture.root, 'Read', { file_path: fixture.allowed }, 'tool-original-activation');
   assert.equal(decision(await callback(hooks)(input)), 'allow');
-  const active = await fixture.reactivate();
-  assert.equal(typeof active.activation_id, 'string');
-  assert.notEqual(active.activation_id, fixture.active.activation_id);
+  const revision = await fixture.reactivate();
+  assert.equal(typeof revision, 'string');
+  assert.notEqual(revision, fixture.policyRevision);
   assert.deepEqual(await hooks.PostToolUseFailure[0].hooks[0]({ ...input, hook_event_name: 'PostToolUseFailure',
     error: 'PRIVATE_ERROR_SENTINEL', is_interrupt: true }), {});
   const events = (await fixture.events());
   const before = events.find(e => e.kind === 'decision');
   const after = events.find(e => e.kind === 'completion');
-  assert.equal(before.details.activation_id, fixture.active.activation_id);
+  assert.equal(before.details.policy_revision, fixture.policyRevision);
   assert.equal(after.links.decision_event_id, before.event_id);
   assert.equal(after.details.status, 'cancelled');
   assert.equal('exit_code' in after.details, false);

@@ -20,7 +20,8 @@ export async function geminiProvider(t, steps) {
     }
     const step = body.tools?.some(tool => tool.functionDeclarations?.length) ? steps[index++] : undefined;
     const name = typeof step?.name === 'function' ? step.name(body) : step?.name;
-    const parts = step && name ? [{ functionCall: { name, args: step.input } }]
+    const args = typeof step?.input === 'function' ? step.input(body) : step?.input;
+    const parts = step && name ? [{ functionCall: { name, args } }]
       : [{ text: 'Acme fixture finished.' }];
     const result = { candidates: [{ content: { role: 'model', parts }, finishReason: 'STOP', index: 0 }],
       usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 10, totalTokenCount: 20 }, modelVersion: 'gemini-2.5-flash' };

@@ -8,9 +8,9 @@ import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
-import { binary } from '../fixtures/runtime.mjs';
+import { binary, revision } from '../fixtures/runtime.mjs';
 import { scriptedProvider } from './claude-provider.mjs';
-import { preparePolicyChange } from './policy-proposal.mjs';
+import { policyChangeSteps, reviewStatus } from './policy-proposal.mjs';
 
 const exec = promisify(execFile);
 const helper = fileURLToPath(new URL('./claude-terminal.py', import.meta.url));
@@ -30,11 +30,10 @@ for (const mode of ['auto', 'bypassPermissions']) {
         { timeout: 35000 })).stdout);
       assert.equal(initialized.code, 0);
       assert.equal(initialized.activated, true);
-      const args = await preparePolicyChange(root, 'claude');
-      const statePath = join(root, '.shield/review/state.json');
+      const statePath = join(root, '.shield/state/state.json');
       const state = async () => JSON.parse(await readFile(statePath, 'utf8'));
-      const before = await state();
-      const provider = await scriptedProvider(t, [{ name: 'mcp__shield__policy_apply', input: args }]);
+      const before = await revision(root);
+      const provider = await scriptedProvider(t, policyChangeSteps());
       const config = join(root, 'claude-config');
       await mkdir(config);
       const metadata = { hasCompletedOnboarding: true, theme: 'dark', bypassPermissionsModeAccepted: true,
@@ -89,22 +88,19 @@ writeFileSync(${JSON.stringify(observed)},JSON.stringify({mode:h.permission_mode
         assert.equal(JSON.parse(await readFile(observed, 'utf8')).mode, mode);
         // A visible form must remain pending without keyboard input in both modes.
         await delay(500);
-        assert.deepEqual((await state()).active, before.active);
-        assert.equal((await state()).policy_revision, before.policy_revision);
-        assert.equal(provider.results.length, 0);
+        assert.equal(await revision(root), before);
+        // Only the proposal has returned; the apply call waits on the form.
+        assert.equal(provider.results.length, 1);
         if (action === 'decline') {
           send({ input: '\x1b[B' });
           await delay(200);
         }
         send({ input: action === 'cancel' ? '\x1b' : '\r' });
-        await wait(() => provider.results.length > 0);
+        await wait(() => provider.results.length > 1);
         const after = await state();
-        assert.equal(after.proposals.at(-1).status, action === 'accept' ? 'applied' : 'pending');
-        if (action === 'accept') assert.notEqual(after.policy_revision, before.policy_revision);
-        else {
-          assert.equal(after.policy_revision, before.policy_revision);
-          assert.deepEqual(after.active, before.active);
-        }
+        assert.equal(after.proposals.at(-1).status, reviewStatus[action]);
+        if (action === 'accept') assert.notEqual(await revision(root), before);
+        else assert.equal(await revision(root), before);
       } finally {
         if (!exited) send({ stop: true });
         await closed;

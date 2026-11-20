@@ -284,6 +284,9 @@ impl PackDocument {
         if features.selectors.prefixes {
             extra.insert("variable-prefixes-v1".to_owned());
         }
+        if features.selectors.list_branches {
+            extra.insert("variable-list-branches-v1".to_owned());
+        }
         if features.templates {
             extra.insert("templates-v1".to_owned());
         }

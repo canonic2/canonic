@@ -370,6 +370,7 @@ Declare exactly the capabilities used anywhere in the document, once each.
 | `variables-v1` | Pack variables, variable selectors, or activation tests. |
 | `variable-parts-v1` | Literal parts of string/choice variables selected with `split`. |
 | `variable-prefixes-v1` | A `prefix` text selector joined from literal text and string/choice variables. |
+| `variable-list-branches-v1` | A precondition `requires_any` branch that splits a list variable or uses it as a prefix part, repeated once per item. |
 | `preconditions-v1` | Pack preconditions. |
 | `directory-options-v1` | Directory option declarations. |
 | `templates-v1` | Variable templates in pack explanation text. |

@@ -37,7 +37,8 @@ test('native Claude retries an operator-approved Ask read exactly once', { timeo
   assert.deepEqual(seen.map(v => v.decision), ['deny', 'allow', 'deny']);
   assert.equal(new Set(seen.map(v => v.id)).size, 3);
   assert.equal(new Set(provider.results.filter(v => JSON.stringify(v).includes('ACME_ASKED_TEXT')).map(v => v.tool_use_id)).size, 1);
-  await assert.rejects(fixture.cli(['request', 'show', grant.request_id]));
+  // The consumed request stays inspectable and can never be used again.
+  assert.equal((await fixture.cli(['request', 'show', grant.request_id])).status, 'consumed');
   const events = (await fixture.events());
   assert.equal(events.filter(e => e.kind === 'read_grant_consumed').length, 1);
   const granted = events.find(e => e.kind === 'decision' && e.details.host_decision === 'allow');
@@ -53,6 +54,7 @@ test('Claude setup preapproves Shield MCP without native hooks or SDK permission
   const fixture = await enrolledRuntime(t);
   await fixture.operator(['mcp', 'setup', '--agent', 'claude']);
   const before = JSON.parse(await readFile(fixture.statePath, 'utf8'));
+  const revision = await fixture.revision();
   const path = join(fixture.root, '.claude/settings.local.json');
   const settings = JSON.parse(await readFile(path, 'utf8'));
   settings.disableAllHooks = true;
@@ -89,13 +91,12 @@ test('Claude setup preapproves Shield MCP without native hooks or SDK permission
   const after = JSON.parse(await readFile(fixture.statePath, 'utf8'));
   assert.equal(after.proposals.length, before.proposals.length + 1, JSON.stringify(provider.results));
   assert.equal(after.proposals.at(-1).status, 'pending');
-  assert.deepEqual(after.active, before.active);
-  assert.deepEqual(after.candidates, before.candidates);
+  assert.equal(await fixture.revision(), revision);
   delete settings.disableAllHooks;
   await writeFile(path, JSON.stringify(settings));
   const status = await fixture.cli(['status']);
   assert.equal(status.coverage.registered_integrations[0].status, 'registered');
-  assert.equal(status.coverage.live_host_verification, 'unverified');
+  assert.equal(status.coverage.live_host_verification, 'unchecked');
   assert.equal(status.coverage.installed_integrations[0].surface, 'native-hooks');
 });
 async function host(t, fixture, provider, hooks, signal) {

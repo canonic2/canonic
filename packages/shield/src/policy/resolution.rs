@@ -10,11 +10,14 @@ use super::{
         PackDocument, templates,
         variables::{self, Declaration, Test},
     },
-    rules::{Decisions, Precondition, Rule},
+    rules::{Decisions, MAX_ALTERNATIVES, Precondition, Rule},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
+
+/// List variables bound to one item while resolving a repeated branch.
+type Items = BTreeMap<String, Value>;
 
 pub(crate) mod compiled;
 pub(crate) mod diagnostics;
@@ -169,7 +172,7 @@ pub(super) fn sample(document: &PackDocument) -> Result<(PackDocument, Features)
     let values = document
         .variables
         .iter()
-        .map(|(name, declaration)| (name.clone(), declaration.sample()))
+        .map(|(name, declaration)| (name.clone(), declaration.normalize(&declaration.sample())))
         .collect();
     let mut resolver = Resolver {
         declarations: &document.variables,
@@ -219,9 +222,9 @@ pub(super) fn resolve(
                 Error::Contract(reason) => Error::binding(name, reason),
                 other => other,
             })?;
-            values.insert(name.clone(), value.clone());
+            values.insert(name.clone(), declaration.normalize(value));
         } else if let Some(default) = &declaration.default {
-            values.insert(name.clone(), default.clone());
+            values.insert(name.clone(), declaration.normalize(default));
         } else if declaration.required() {
             missing.push(Entry {
                 id: name.clone(),
@@ -429,11 +432,11 @@ impl Resolver<'_> {
             .as_str()
             .unwrap_or_default()
             .to_owned();
-        let mut trees = vec![("conditions", &mut rule.conditions)];
+        let mut trees = vec![("conditions", &mut rule.conditions, Items::new())];
         trees.extend(
             rule.requirements
                 .as_mut()
-                .map(|value| ("requirements", value)),
+                .map(|value| ("requirements", value, Items::new())),
         );
         let mut texts = Vec::new();
         texts.extend(rule.reason.as_mut().map(|text| ("reason", text, 4096)));
@@ -512,12 +515,16 @@ impl Resolver<'_> {
 
     fn precondition(&mut self, precondition: &mut Precondition) -> Result<Activity, Error> {
         let domain = precondition.domain().to_owned();
-        let mut trees = vec![("conditions", &mut precondition.conditions)];
+        let branches = std::mem::take(&mut precondition.requires_any);
+        let (branches, items) = self.list_branches(&precondition.id, &domain, branches)?;
+        precondition.requires_any = branches;
+        let mut trees = vec![("conditions", &mut precondition.conditions, Items::new())];
         trees.extend(
             precondition
                 .requires_any
                 .iter_mut()
-                .map(|value| ("requires_any", value)),
+                .zip(items)
+                .map(|(value, items)| ("requires_any", value, items)),
         );
         let mut texts = Vec::new();
         texts.extend(
@@ -550,12 +557,74 @@ impl Resolver<'_> {
         )
     }
 
+    /// Repeat each `requires_any` branch once per item of every bound list it
+    /// projects, in item order, pairing each copy with its items so every
+    /// projection in one copy reads the same item. Unset lists keep the branch
+    /// unexpanded, so ordinary substitution leaves the entry inactive. Copies
+    /// count against the alternatives limit at each list's `max_items`.
+    fn list_branches(
+        &mut self,
+        id: &str,
+        domain: &str,
+        branches: Vec<Value>,
+    ) -> Result<(Vec<Value>, Vec<Items>), Error> {
+        let mut output = (Vec::new(), Vec::new());
+        let mut most = 0usize;
+        let mut projected = BTreeSet::new();
+        for branch in branches {
+            let mut names = BTreeSet::new();
+            variables::projections(&branch, domain, &mut names);
+            names.retain(|name| {
+                self.declarations
+                    .get(name)
+                    .is_some_and(|d| d.kind == variables::Kind::List)
+            });
+            // The declared bounds cap the copies, so check them before
+            // building any combination: bound items never exceed them.
+            let copies = names.iter().fold(1usize, |copies, name| {
+                copies.saturating_mul(self.declarations[name].max_items())
+            });
+            most = most.saturating_add(copies);
+            projected.extend(names.iter().cloned());
+            if most > MAX_ALTERNATIVES {
+                return Err(Error::Contract(
+                    "list items can repeat requires_any past 16 alternatives; lower max_items",
+                )
+                .in_resolution(id, "requires_any", &projected));
+            }
+            let mut combinations = vec![Items::new()];
+            for name in &names {
+                let Some(Value::Array(values)) = self.values.get(name) else {
+                    continue;
+                };
+                combinations = combinations
+                    .into_iter()
+                    .flat_map(|items| {
+                        values.iter().map(move |item| {
+                            let mut items = items.clone();
+                            items.insert(name.clone(), item.clone());
+                            items
+                        })
+                    })
+                    .collect();
+            }
+            for items in combinations {
+                output.0.push(branch.clone());
+                output.1.push(items);
+            }
+        }
+        if !projected.is_empty() {
+            self.used.features.list_branches = true;
+        }
+        Ok(output)
+    }
+
     fn entry(
         &mut self,
         id: &str,
         when: Option<&[Test]>,
         domain: &str,
-        trees: Vec<(&str, &mut Value)>,
+        trees: Vec<(&str, &mut Value, Items)>,
         texts: Vec<(&str, &mut String, usize)>,
     ) -> Result<Activity, Error> {
         let mut names = BTreeSet::new();
@@ -563,14 +632,14 @@ impl Resolver<'_> {
             return Ok(activity);
         }
         let mut trees = trees;
-        for (field, tree) in &mut trees {
+        for (field, tree, _) in &mut trees {
             let mut referenced = BTreeSet::new();
             variables::references(tree, domain, &mut referenced);
             self.optional_checks(tree, domain, &mut names)
                 .map_err(|error| error.in_resolution(id, field, &referenced))?;
         }
         let mut unset = BTreeSet::new();
-        for (field, tree) in trees {
+        for (field, tree, items) in trees {
             let mut referenced = BTreeSet::new();
             variables::references(tree, domain, &mut referenced);
             if referenced.is_empty() {
@@ -587,6 +656,9 @@ impl Resolver<'_> {
                         name,
                         "boolean variables cannot be selectors",
                     ));
+                }
+                if let Some(item) = items.get(name) {
+                    return Ok(Some(item.clone()));
                 }
                 Ok(self
                     .values

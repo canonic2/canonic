@@ -23,7 +23,6 @@ test('Claude receives denied-command guidance separately from its visible refusa
     requirements: { targets: { action: 'read', all: { within: { root: 'read' } } } }, on_unmet: { decision: 'deny' } });
   rules.rules.push({ id: 'denied-cat', decision: 'deny', conditions: { domain: 'argv', executable: 'cat', arguments: { kind: 'any' } } });
   await writeFile(rulesPath, JSON.stringify(rules));
-  await f.operator(['policy', 'review'], 'manual\nyes\n');
   await f.operator(['mcp', 'setup', '--agent', 'claude']);
   const provider = await scriptedProvider(t, [{ name: 'Bash', input: { command: `cat '${path}'` } }]);
   const executable = (await promisify(execFile)('which', ['claude'])).stdout.trim();

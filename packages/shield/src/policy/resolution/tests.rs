@@ -229,6 +229,151 @@ fn variable_prefixes_join_literal_and_bound_parts_into_one_literal_prefix() {
     assert!(Pack::from_yaml(&literal.to_string()).is_err());
 }
 
+#[test]
+fn list_projections_repeat_requires_any_branches_per_item_and_keep_components_paired() {
+    let owner = json!({"var":"repositories","split":{"separator":"/","index":0}});
+    let name = json!({"var":"repositories","split":{"separator":"/","index":1}});
+    let path = json!({"prefix":["repos/",{"var":"repositories"},"/"]});
+    let source = document(
+        &[
+            "structured-rules-v1",
+            "argument-rules-v1",
+            "variables-v1",
+            "variable-parts-v1",
+            "variable-prefixes-v1",
+            "variable-list-branches-v1",
+            "preconditions-v1",
+            "templates-v1",
+        ],
+        json!({"repositories":{"type":"list","description":"Explicit OWNER/REPO values",
+            "items":{"type":"string"},"max_items":8}}),
+        json!([rule(
+            "inspect",
+            json!("acme"),
+            json!({"kind":"any"}),
+            "allow"
+        )]),
+        json!([
+            {"id":"pair","conditions":argv("acme",json!({"kind":"prefix","values":["repo"]})),
+                "requires_any":[{"arguments":{"kind":"exact","values":["repo",owner,name]}}],
+                "on_unmet":{"decision":"deny","message":"Use one of {{repositories}}."}},
+            {"id":"path","conditions":argv("acme",json!({"kind":"prefix","values":["api"]})),
+                "requires_any":[{"arguments":{"kind":"prefix","values":["api",path]}}],
+                "on_unmet":{"decision":"deny"}}
+        ]),
+    );
+    let unset = Pack::from_yaml(&source).unwrap();
+    assert_eq!(
+        decide(&unset, &["acme", "repo", "other", "web"]),
+        Decision::Allow
+    );
+    let pack = Pack::from_yaml_bound(
+        &source,
+        &bound(json!({"repositories":["team/web","acme/api"]})),
+        true,
+    )
+    .unwrap();
+    for allowed in [
+        &["acme", "repo", "team", "web"][..],
+        &["acme", "repo", "acme", "api"],
+        &["acme", "api", "repos/team/web/pulls"],
+        &["acme", "api", "repos/acme/api/issues/3"],
+    ] {
+        assert_eq!(decide(&pack, allowed), Decision::Allow, "{allowed:?}");
+    }
+    // Components of different items never combine into an unlisted repository.
+    for denied in [
+        &["acme", "repo", "team", "api"][..],
+        &["acme", "repo", "acme", "web"],
+        &["acme", "api", "repos/team/api/pulls"],
+        &["acme", "api", "repos/acme/web-other/pulls"],
+    ] {
+        assert_eq!(decide(&pack, denied), Decision::Deny, "{denied:?}");
+    }
+    let pair = &pack.document.preconditions[0];
+    assert_eq!(pair.requires_any.len(), 2);
+    assert_eq!(
+        pair.on_unmet.message.as_deref(),
+        Some("Use one of team/web, acme/api.")
+    );
+    assert!(
+        Pack::from_yaml_bound(&source, &bound(json!({"repositories":["team"]})), true).is_err()
+    );
+    // A binding written before the setting became a list keeps its meaning.
+    let single =
+        Pack::from_yaml_bound(&source, &bound(json!({"repositories":"team/web"})), true).unwrap();
+    assert_eq!(
+        decide(&single, &["acme", "repo", "team", "web"]),
+        Decision::Allow
+    );
+    assert_eq!(
+        decide(&single, &["acme", "repo", "acme", "api"]),
+        Decision::Deny
+    );
+    assert!(Pack::from_yaml_bound(&source, &bound(json!({"repositories":"team"})), true).is_err());
+    let refused = |change: &dyn Fn(&mut Value)| {
+        let mut invalid: Value = serde_json::from_str(&source).unwrap();
+        change(&mut invalid);
+        Pack::from_yaml(&invalid.to_string()).is_err()
+    };
+    assert!(refused(&|invalid| invalid["capabilities"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|cap| cap != "variable-list-branches-v1")));
+    // Copies at max_items must fit the alternatives limit: 9 + 9 would not.
+    assert!(refused(&|invalid| {
+        let branch = invalid["preconditions"][0]["requires_any"][0].clone();
+        invalid["preconditions"][0]["requires_any"] = json!([branch.clone(), branch]);
+        invalid["preconditions"][0]["requires_any"][1]["arguments"]["values"][0] = json!("other");
+        invalid["variables"]["repositories"]["max_items"] = json!(9);
+    }));
+    assert!(refused(
+        &|invalid| invalid["variables"]["repositories"]["max_items"] = json!(17)
+    ));
+    // A rule condition has no alternatives to repeat, so a list projection refuses.
+    assert!(refused(
+        &|invalid| invalid["rules"][0]["conditions"]["arguments"] = json!({"kind":"exact","values":[{"var":"repositories","split":{"separator":"/","index":0}}]})
+    ));
+}
+
+#[test]
+fn list_equals_tests_compare_whole_lists_however_the_binding_writes_one_item() {
+    let source = |expected: Value| {
+        let mut deny = rule(
+            "acme-push",
+            json!("acme"),
+            json!({"kind":"prefix","values":["push"]}),
+            "deny",
+        );
+        deny["when"] = json!([{"var":"repositories","equals":expected}]);
+        document(
+            &["structured-rules-v1", "argument-rules-v1", "variables-v1"],
+            json!({"repositories":{"type":"list","description":"Explicit OWNER/REPO values",
+                "items":{"type":"string"},"max_items":8}}),
+            json!([
+                rule("acme", json!("acme"), json!({"kind":"any"}), "allow"),
+                deny
+            ]),
+            json!([]),
+        )
+    };
+    // A lone item never equals a list, so it would silently disable the deny.
+    assert!(Pack::from_yaml(&source(json!("team/web"))).is_err());
+    let guarded = source(json!(["team/web"]));
+    for binding in [json!("team/web"), json!(["team/web"])] {
+        let pack =
+            Pack::from_yaml_bound(&guarded, &bound(json!({"repositories":binding})), true).unwrap();
+        assert_eq!(
+            decide(&pack, &["acme", "push"]),
+            Decision::Deny,
+            "{binding}"
+        );
+    }
+    let other = Pack::from_yaml_bound(&guarded, &bound(json!({"repositories":["acme/api"]})), true)
+        .unwrap();
+    assert_eq!(decide(&other, &["acme", "push"]), Decision::Allow);
+}
+
 fn node_pack() -> String {
     document(
         NODE_CAPABILITIES,
@@ -620,11 +765,20 @@ fn lists_paths_and_tests_resolve_by_type() {
         .find(|e| e.id == "clean")
         .unwrap();
     assert_eq!(entry.variables["scratch"], json!("tmp/scratch"));
+    // One list item written alone binds as a one-item list.
+    let single = Pack::from_yaml_bound(&source, &bound(json!({"tools":"make"})), true).unwrap();
+    let listed = Pack::from_yaml_bound(&source, &bound(json!({"tools":["make"]})), true).unwrap();
+    for (command, decision) in [
+        (&["make"][..], Decision::Allow),
+        (&["cargo", "build"], Decision::Ask),
+    ] {
+        assert_eq!(decide(&single, command), decision, "{command:?}");
+        assert_eq!(decide(&listed, command), decision, "{command:?}");
+    }
     for invalid in [
         json!({"tools":[]}),
         json!({"tools":["make","make"]}),
         json!({"tools":["a","b","c","d","e"]}),
-        json!({"tools":"make"}),
         json!({"scratch":"../outside"}),
         json!({"scratch":"/absolute"}),
         json!({"strict":"yes"}),

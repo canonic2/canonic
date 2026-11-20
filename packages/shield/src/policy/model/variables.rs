@@ -372,6 +372,15 @@ impl Declaration {
         Ok(())
     }
 
+    /// The most items a value may hold: a list's `max_items`, otherwise one.
+    pub(crate) fn max_items(&self) -> usize {
+        if self.kind == Kind::List {
+            self.bounds().1
+        } else {
+            1
+        }
+    }
+
     fn bounds(&self) -> (usize, usize) {
         (
             self.min_items.unwrap_or(1),
@@ -411,6 +420,7 @@ impl Declaration {
                 }
             }
             Kind::List => {
+                let value = self.normalize(value);
                 let items = value
                     .as_array()
                     .ok_or(Error::Contract("variable value has the wrong type"))?;
@@ -438,6 +448,15 @@ impl Declaration {
             ));
         }
         Ok(())
+    }
+
+    /// The value in its declared shape: a list item written alone, such as a
+    /// binding made before the variable became a list, is a one-item list.
+    pub(crate) fn normalize(&self, value: &Value) -> Value {
+        match (self.kind, value) {
+            (Kind::List, Value::String(_)) => json!([value]),
+            _ => value.clone(),
+        }
     }
 
     /// Selector denoted by a value, or None for booleans.
@@ -729,6 +748,12 @@ pub(crate) fn validate_tests(
             return Err(Error::Contract("each when test has exactly one operator"));
         }
         if let Some(value) = &test.equals {
+            // A binding may write one list item alone, but `equals` compares
+            // the whole list: a lone item would never match and silently
+            // disable what the test guards.
+            if declaration.kind == Kind::List && !value.is_array() {
+                return Err(Error::Contract("equals on a list variable takes a list"));
+            }
             declaration.check(value)?;
         }
         for values in [&test.within, &test.not_in].into_iter().flatten() {
@@ -773,6 +798,7 @@ impl Test {
             return !values.contains(value);
         }
         if let Some(item) = &self.contains {
+            // Resolution stores every list value as an array.
             return value.as_array().is_some_and(|items| items.contains(item));
         }
         false
@@ -790,14 +816,20 @@ pub(crate) struct Usage {
     pub(crate) parts: bool,
     /// A `prefix` assembled from literal and variable parts (`variable-prefixes-v1`).
     pub(crate) prefixes: bool,
+    /// A `requires_any` branch repeated per list item (`variable-list-branches-v1`).
+    pub(crate) list_branches: bool,
 }
 
 impl std::ops::BitOrAssign for Usage {
     fn bitor_assign(&mut self, other: Self) {
         self.parts |= other.parts;
         self.prefixes |= other.prefixes;
+        self.list_branches |= other.list_branches;
     }
 }
+
+/// Message for a projection of a list outside a `requires_any` branch.
+const LIST_PROJECTION: &str = "split and prefix parts take a string or choice variable, or a list variable inside a precondition's requires_any branch";
 
 const MAX_PREFIX_PARTS: usize = 16;
 
@@ -820,8 +852,8 @@ fn substitute_prefix(
     sample: bool,
 ) -> Result<Usage, Error> {
     let mut usage = Usage {
-        parts: false,
         prefixes: true,
+        ..Usage::default()
     };
     let Some(parts) = prefix_parts(value) else {
         return Ok(usage);
@@ -847,9 +879,7 @@ fn substitute_prefix(
             continue;
         }
         if !unset.contains(&name) {
-            return Err(Error::Contract(
-                "prefix parts require string or choice variables",
-            ));
+            return Err(Error::Contract(LIST_PROJECTION));
         }
         pending = true;
     }
@@ -887,9 +917,7 @@ pub(crate) fn substitute(
         match resolve(&name)? {
             Some(selector) => {
                 *value = if let Some((separator, index)) = &part {
-                    let text = selector.as_str().ok_or(Error::Contract(
-                        "variable parts require a string or choice variable",
-                    ))?;
+                    let text = selector.as_str().ok_or(Error::Contract(LIST_PROJECTION))?;
                     let projected = if sample {
                         "sample"
                     } else {
@@ -909,7 +937,7 @@ pub(crate) fn substitute(
         }
         return Ok(Usage {
             parts: part.is_some(),
-            prefixes: false,
+            ..Usage::default()
         });
     }
     let mut usage = Usage::default();
@@ -943,8 +971,39 @@ pub(crate) fn substitute(
 
 /// Names referenced through `{var}` selectors, without changing the tree.
 pub(crate) fn references(value: &Value, domain: &str, names: &mut BTreeSet<String>) {
-    if let Some(name) = reference(value).or_else(|| optional_reference(value)) {
-        names.insert(name.to_owned());
+    walk(value, domain, &mut |node| {
+        let name = reference(node).or_else(|| optional_reference(node));
+        names.extend(name.map(str::to_owned));
+        name.is_some()
+    });
+}
+
+/// Names a tree projects through a `split` or as a joined `prefix` part: the
+/// references that need one text value, so a list must bind per item.
+pub(crate) fn projections(value: &Value, domain: &str, names: &mut BTreeSet<String>) {
+    walk(value, domain, &mut |node| {
+        if let Some(name) = reference(node) {
+            if node.get("split").is_some() {
+                names.insert(name.to_owned());
+            }
+            return true;
+        }
+        let parts = node
+            .as_object()
+            .filter(|fields| fields.len() == 1)
+            .and_then(|fields| fields.get("prefix"))
+            .and_then(Value::as_array);
+        if let Some(parts) = parts {
+            names.extend(parts.iter().filter_map(reference).map(str::to_owned));
+        }
+        parts.is_some()
+    });
+}
+
+/// Visit every selector position of a predicate tree that may hold a variable
+/// reference; `visit` returns true when it consumed the node.
+fn walk(value: &Value, domain: &str, visit: &mut dyn FnMut(&Value) -> bool) {
+    if visit(value) {
         return;
     }
     match value {
@@ -952,22 +1011,22 @@ pub(crate) fn references(value: &Value, domain: &str, names: &mut BTreeSet<Strin
             for (key, child) in fields {
                 if key == "graphql" {
                     for selector in crate::graphql::selectors(child) {
-                        references(selector, domain, names);
+                        walk(selector, domain, visit);
                     }
                 } else if key == "environment" {
                     for selector in selectors::environment_selectors(child) {
-                        references(selector, domain, names);
+                        walk(selector, domain, visit);
                     }
                 } else if !(["exact", "input", "context"].contains(&key.as_str())
                     || domain == "mcp" && key == "arguments")
                 {
-                    references(child, domain, names);
+                    walk(child, domain, visit);
                 }
             }
         }
         Value::Array(items) => {
             for item in items {
-                references(item, domain, names);
+                walk(item, domain, visit);
             }
         }
         _ => {}

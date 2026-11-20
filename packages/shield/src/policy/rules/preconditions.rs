@@ -8,7 +8,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use std::collections::BTreeSet;
 
-const MAX_ALTERNATIVES: usize = 16;
+/// Most `requires_any` alternatives, counting branches repeated per list item.
+pub(crate) const MAX_ALTERNATIVES: usize = 16;
 
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
