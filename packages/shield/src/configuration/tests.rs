@@ -189,6 +189,49 @@ fn locks_require_complete_valid_artifacts_with_exact_identity_and_version() {
     }
 }
 
+/// One process validates an exact set of sources once; any byte change, and
+/// any invalid source, is validated again rather than served from memory.
+#[test]
+fn identical_sources_are_validated_once_and_changed_or_invalid_ones_again() {
+    use clap::Parser as _;
+    let logs = assert_fs::TempDir::new().unwrap();
+    let cli = crate::cli::Cli::parse_from([
+        "shield",
+        "--debug-log-dir",
+        logs.path().to_str().unwrap(),
+        "status",
+    ]);
+    let log = std::sync::Arc::new(crate::diagnostics::Log::open(&cli));
+    let request = log.request("command", "status", None, None).unwrap();
+    let _scope = request.enter();
+    let counts = || {
+        (
+            request.recorded_count("policy.source_captures"),
+            request.recorded_count("policy.source_capture_reuses"),
+        )
+    };
+    let config = config().to_string();
+    let first = Bundle::capture(&config, &[pack()], Some(RULES)).unwrap();
+    let (validated, reused) = counts();
+    let again = Bundle::capture(&config, &[pack()], Some(RULES)).unwrap();
+    let shown =
+        Bundle::snapshot_from_json(serde_json::to_string(&first).unwrap().as_bytes()).unwrap();
+    assert_eq!(counts(), (validated, reused + 2));
+    assert_eq!(json!(again), json!(first));
+    assert_eq!(json!(shown.lock()), json!(first.snapshot().unwrap().lock()));
+    // Changed bytes are new sources: validated, never reused.
+    let edited = format!("{config}\n");
+    let changed = Bundle::capture(&edited, &[pack()], Some(RULES)).unwrap();
+    assert_eq!(counts().0, validated + 1);
+    assert_ne!(json!(changed)["lock"], json!(first)["lock"]);
+    // A failure is never remembered: the same invalid sources fail every time.
+    let invalid = pack().replace("acme/test", "acme/other");
+    for _ in 0..2 {
+        assert!(Bundle::capture(&config, std::slice::from_ref(&invalid), Some(RULES)).is_err());
+    }
+    assert_eq!(counts().0, validated + 3);
+}
+
 #[test]
 fn fingerprints_bind_all_input_bytes_and_do_not_claim_approval() {
     let config = config().to_string();

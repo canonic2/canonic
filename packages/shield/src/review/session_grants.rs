@@ -22,7 +22,8 @@ pub(crate) use reconsider::reconsider;
 pub(super) use registration::preserve_integration;
 pub(crate) use view::{confirmation, show};
 
-const PENDING: u64 = 600_000;
+/// How long a closed record and an idle conversation context stay readable.
+/// A pending offer waits for its answer without a deadline.
 const RETAIN: u64 = 86_400_000;
 use super::hook_approval::MAX_FORM;
 
@@ -245,8 +246,6 @@ impl Record {
             }
         } else if !self.current_with(authority) {
             "stale"
-        } else if now >= self.created.saturating_add(PENDING) {
-            "expired"
         } else {
             "pending"
         }
@@ -257,12 +256,11 @@ impl Registry {
     fn compact(&mut self, now: u64) {
         self.contexts
             .retain(|_, c| now < c.created.saturating_add(RETAIN));
+        // An open offer has no end yet; it stays until it is answered or closed.
         self.records.retain(|_, r| {
-            let end = r
-                .terminal
+            r.terminal
                 .or_else(|| r.grant.as_ref().map(|g| g.revoked.unwrap_or(g.expires)))
-                .unwrap_or(r.created.saturating_add(PENDING));
-            now < end.saturating_add(RETAIN)
+                .is_none_or(|end| now < end.saturating_add(RETAIN))
         });
         self.sessions.clear();
         for row in self.records.values().filter(|r| {
@@ -517,7 +515,7 @@ fn propose_input(context: &Context, input: &ProposalInput) -> Result<Value, Erro
         if reuse {
             return Err(Error::StaleSnapshot);
         }
-        check_capacity(state, &authority, now)?;
+        make_room(state, &authority, &session, now)?;
         session.registration = registration(state, &session.agent)?;
         let mut row = Record {
             id: state.id("session-proposal"),
@@ -554,19 +552,47 @@ fn propose_input(context: &Context, input: &ProposalInput) -> Result<Value, Erro
     })
 }
 
-fn check_capacity(state: &State, authority: &Authority, now: u64) -> Result<(), Error> {
-    if state.session_grants.records.len() >= 1024
-        || state
-            .session_grants
-            .records
-            .values()
-            .filter(|r| r.effective_with(authority, now) == "pending")
-            .count()
-            >= 64
-    {
+/// Make room for one more offer. An open offer holds no authority, and
+/// proposing it again is idempotent, so 64 open offers withdraw the oldest:
+/// this session's own first, another session's only when it has none, since a
+/// session that ended without `SessionEnd` leaves its offers open.
+fn make_room(
+    state: &mut State,
+    authority: &Authority,
+    session: &Conversation,
+    now: u64,
+) -> Result<(), Error> {
+    if state.session_grants.records.len() >= 1024 {
         return Err(Error::Invalid(
             "capacity_exceeded: inspect session_grant_show before proposing more",
         ));
+    }
+    let pending: Vec<&Record> = state
+        .session_grants
+        .records
+        .values()
+        .filter(|r| r.effective_with(authority, now) == "pending")
+        .collect();
+    if pending.len() < 64 {
+        return Ok(());
+    }
+    let oldest = |own: bool| {
+        pending
+            .iter()
+            .filter(|r| {
+                !own || (r.session.agent == session.agent
+                    && r.session.session_id == session.session_id)
+            })
+            .min_by_key(|r| (r.created, &r.id))
+            .map(|r| r.id.clone())
+    };
+    if let Some(row) = oldest(true)
+        .or_else(|| oldest(false))
+        .and_then(|id| state.session_grants.records.get_mut(&id))
+    {
+        row.status = "withdrawn".into();
+        row.terminal = Some(now);
+        row.terminal_reason = Some("withdrawn".into());
     }
     Ok(())
 }
@@ -769,6 +795,25 @@ pub(super) fn compact(state: &mut State, now: u64) {
             .push(row.id.clone());
     }
     state.session_grants.sessions = index;
+}
+
+/// Withdraw the unanswered offers of an agent session that ended. Issued
+/// grants keep their lifetime; a resumed conversation can still use them.
+pub(super) fn end_session(state: &mut State, agent: &str, session: &str, now: u64) -> bool {
+    let mut changed = false;
+    for row in state.session_grants.records.values_mut() {
+        if row.status == "pending"
+            && row.terminal.is_none()
+            && row.session.agent == agent
+            && row.session.session_id == session
+        {
+            row.status = "withdrawn".into();
+            row.terminal = Some(now);
+            row.terminal_reason = Some("withdrawn".into());
+            changed = true;
+        }
+    }
+    changed
 }
 
 pub(super) fn summary(state: &State) -> Value {

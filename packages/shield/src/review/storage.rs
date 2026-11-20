@@ -921,6 +921,23 @@ impl Store {
         lock.release()?;
         Ok(result)
     }
+    /// [`Self::update_authorization`] for teardown that may find nothing to
+    /// change, such as closing an ended session's questions; writes only then.
+    pub(in crate::review) fn update_authorization_if_changed(
+        &self,
+        context: &Context,
+        operation: impl FnOnce(&mut State) -> Result<bool, Error>,
+    ) -> Result<(), Error> {
+        let (lock, mut state) = self.locked_state(&|| Ok(()), Self::read_checkpoint)?;
+        state.check(context)?;
+        if operation(&mut state)? {
+            state.compact_authorization();
+            super::proposal_lifecycle::refresh_inspection(&mut state);
+            self.write_inner(&mut state, false)?;
+        }
+        lock.release()?;
+        Ok(())
+    }
     /// Optional observational capture may discover under lock that nothing changed.
     pub(in crate::review) fn update_checkpoint_if_changed(
         &self,

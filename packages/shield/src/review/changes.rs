@@ -428,10 +428,12 @@ pub(super) fn propose(
     // The complete base was validated above. Under the writer lock, bind to
     // those exact source bytes and metadata instead of hydrating every retained
     // proposal and preparing the same active policy again.
+    let presentation_before = super::candidate_identity(&base_candidate);
+    let presentation_after = super::candidate_identity(&candidate);
     let presentation_ref = super::model::presentation::capture(
         &before,
-        &base_candidate,
-        &candidate,
+        (&base_candidate, &candidate),
+        (&presentation_before, &presentation_after),
         &meta,
         &comparison,
         reviewed_files.is_some(),
@@ -439,8 +441,6 @@ pub(super) fn propose(
     .ok()
     .flatten()
     .unwrap_or(Value::Null);
-    let presentation_before = super::candidate_identity(&base_candidate);
-    let presentation_after = super::candidate_identity(&candidate);
     store.update_checkpoint(context, checkpoint, |state| {
         state.check_operations()?;
         if state.policy_revision != before.policy_revision

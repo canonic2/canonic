@@ -15,7 +15,9 @@ mod tests;
 
 /// In-session requests a project retains in every status.
 const MAX_REQUESTS: usize = 128;
-/// How long a refused request waits for the person's answer.
+/// Stored with each request and bound into its binding; a pending request
+/// waits for its answer without a deadline. A revocation receipt stays for
+/// twice this after its request was created.
 const PENDING_MS: u64 = 600_000;
 /// How long an accepted request waits for its identical retry.
 const GRANT_MS: u64 = 300_000;
@@ -133,7 +135,7 @@ impl HookRequest {
     }
     pub(super) fn live_id(&self, time: u64) -> Option<&str> {
         let live = match (self.status.as_str(), &self.grant) {
-            ("pending", None) => time < self.pending_expires_at_ms,
+            ("pending", None) => true,
             ("approved", Some(grant)) => time < grant.expires_at_ms,
             ("consumed", Some(grant)) => {
                 !grant.followup_used
@@ -234,7 +236,6 @@ pub(super) fn validate(state: &State) -> Result<(), Error> {
             || grant.binding != row.grant_binding(grant)
             || grant.expires_at_ms.checked_sub(grant.issued_at_ms) != Some(GRANT_MS)
             || grant.issued_at_ms < row.created_at_ms
-            || grant.issued_at_ms >= row.pending_expires_at_ms
             || (row.status == "consumed") != grant.consumed_at_ms.is_some()
             || (row.status == "consumed") != consumed
             || (grant.followup_used && row.status != "consumed")
@@ -245,11 +246,21 @@ pub(super) fn validate(state: &State) -> Result<(), Error> {
     Ok(())
 }
 
-pub(super) fn pending_count(state: &State, time: u64) -> usize {
+/// Drop the unanswered requests of an agent session that ended. Issued grants
+/// keep their own lifetime. Returns whether anything changed.
+pub(super) fn end_session(state: &mut State, agent: &str, session: &str) -> bool {
+    let before = state.hook_requests.len();
+    state
+        .hook_requests
+        .retain(|row| row.status != "pending" || row.agent != agent || row.session_id != session);
+    before != state.hook_requests.len()
+}
+
+pub(super) fn pending_count(state: &State) -> usize {
     state
         .hook_requests
         .iter()
-        .filter(|row| row.status == "pending" && time < row.pending_expires_at_ms)
+        .filter(|row| row.status == "pending")
         .count()
 }
 
@@ -282,7 +293,6 @@ pub(super) fn inspect_from(
             "provenance":{"agent":row.agent,"session_id":row.session_id},
             "policy":{"reason":row.summary.reason,"overrides_deny":row.summary.overrides_deny,"rules":row.summary.deny_rules},
             "settings_change":row.summary.settings_change,"policy_change":row.summary.policy_change,"created_at_ms":row.created_at_ms,
-            "pending_expires_at_ms":row.pending_expires_at_ms,
             "grant_expires_at_ms":row.grant.as_ref().map(|g|g.expires_at_ms),
             "approval_id":row.grant.as_ref().map(|g|&g.approval_id)});
         let redacted = super::model::redact(&mut value);
@@ -385,9 +395,7 @@ fn lookup(state: &State, key: &Key<'_>, time: u64) -> Result<Option<Found>, Erro
     Ok(state
         .hook_requests
         .iter()
-        .find(|row| {
-            row.status == "pending" && time < row.pending_expires_at_ms && row.matches(key, &access)
-        })
+        .find(|row| row.status == "pending" && row.matches(key, &access))
         .map(|row| Found::Pending(row.request_id.clone())))
 }
 
@@ -419,7 +427,7 @@ pub(crate) fn refused_observed(
         let time = now()?;
         Ok(match lookup(state, key, time)? {
             Some(Found::Pending(id)) => {
-                let others = others_pending(state, key, &id, time);
+                let others = others_pending(state, key, &id);
                 Some(Outcome::Pending(id, others))
             }
             _ => None,
@@ -445,7 +453,7 @@ pub(crate) fn refused_observed(
                 state.hook_requests.remove(index);
             }
             Some(Found::Pending(id)) => {
-                let others = others_pending(state, key, &id, time);
+                let others = others_pending(state, key, &id);
                 return Ok(json!({"request_id":id,"others":others}));
             }
             None => {}
@@ -453,17 +461,18 @@ pub(crate) fn refused_observed(
         let access = access(state);
         if state.hook_requests.len() >= MAX_REQUESTS {
             // Terminal receipts and pending requests hold no authority. Prefer
-            // reclaiming a receipt so revocations cannot exhaust the store.
-            let Some(oldest) = state
-                .hook_requests
+            // reclaiming a receipt so revocations cannot exhaust the store, then
+            // this session's own oldest question, then another session's.
+            let rows = &state.hook_requests;
+            let Some(oldest) = rows
                 .iter()
                 .position(|r| r.status == "revoked")
                 .or_else(|| {
-                    state
-                        .hook_requests
-                        .iter()
-                        .position(|r| r.status == "pending")
+                    rows.iter().position(|r| {
+                        r.status == "pending" && r.agent == key.agent && r.session_id == key.session
+                    })
                 })
+                .or_else(|| rows.iter().position(|r| r.status == "pending"))
             else {
                 return Err(Error::Invalid(
                     "in-session approvals are at capacity; wait for live grants to expire",
@@ -492,7 +501,7 @@ pub(crate) fn refused_observed(
         row.binding = row.binding();
         let id = row.request_id.clone();
         state.hook_requests.push(row);
-        let others = others_pending(state, key, &id, time);
+        let others = others_pending(state, key, &id);
         Ok(json!({"request_id":id,"others":others}))
     })?;
     Ok(match value["request_id"].as_str() {
@@ -504,12 +513,11 @@ pub(crate) fn refused_observed(
 /// Whether the session holds another pending request that could still be
 /// approved with `id`. Shield cannot tell which ones serve the same task, so
 /// the hint names none.
-fn others_pending(state: &State, key: &Key<'_>, id: &str, time: u64) -> bool {
+fn others_pending(state: &State, key: &Key<'_>, id: &str) -> bool {
     let access = access(state);
     state.hook_requests.iter().any(|row| {
         row.request_id != id
             && row.status == "pending"
-            && time < row.pending_expires_at_ms
             && row.agent == key.agent
             && row.session_id == key.session
             && row.current_with(&access)
@@ -701,18 +709,12 @@ const WITHOUT_IT: &str = "Call request_approve again without it";
 const RENEW_IT: &str =
     "Repeat its call to get a new request_id, then call request_approve with that ID";
 
-fn unapprovable(row: &HookRequest, state: &State, time: u64) -> Option<Unapprovable> {
+fn unapprovable(row: &HookRequest, state: &State) -> Option<Unapprovable> {
     if row.status != "pending" {
         Some(Unapprovable {
             single: "this request was already answered; repeat the identical call once if it was approved, otherwise continue without it",
             reason: "it was already answered",
             recovery: "If it was approved, repeat its call once; either way, call request_approve again without it",
-        })
-    } else if time >= row.pending_expires_at_ms {
-        Some(Unapprovable {
-            single: "this request expired; repeat the call to get a new request_id",
-            reason: "it has expired",
-            recovery: RENEW_IT,
         })
     } else if !row.current(state) {
         Some(Unapprovable {
@@ -740,7 +742,6 @@ fn selected<'a>(
     }
     let (ids, list) = requested(args)?;
     let group = ids.len() > 1;
-    let time = now()?;
     let refuse = |request: String, reason, recovery| Error::Grouped {
         request,
         reason,
@@ -768,7 +769,7 @@ fn selected<'a>(
                 Error::Missing
             });
         };
-        if let Some(found) = unapprovable(row, state, time) {
+        if let Some(found) = unapprovable(row, state) {
             return Err(if group {
                 refuse(row.request_id.clone(), found.reason, found.recovery)
             } else {

@@ -304,10 +304,13 @@ pub(crate) fn settle(
         Ok(row.summary())
     })
 }
-/// A task ending never closes another session's review or a committed receipt.
+/// Close every question an ended agent session left unanswered: its reviews,
+/// native requests and session-grant offers. Another session's questions,
+/// issued grants and committed receipts are untouched. It reads no policy
+/// files, so a session can end while they are invalid.
 pub(crate) fn end_session(root: &Path, agent: &str, session: &str) -> Result<(), Error> {
     let context = super::open(root)?;
-    Store::open(root)?.update_checkpoint_if_changed(&context, &|| Ok(()), |state| {
+    Store::open(root)?.update_authorization_if_changed(&context, |state| {
         state.check_operations()?;
         let mut changed = false;
         for row in &mut state.proposals {
@@ -319,6 +322,11 @@ pub(crate) fn end_session(root: &Path, agent: &str, session: &str) -> Result<(),
                 changed = true;
             }
         }
+        changed |= super::read_approval::end_session(state, agent, session);
+        changed |= super::run_approval::end_session(state, agent, session);
+        changed |= super::hook_approval::end_session(state, agent, session);
+        changed |=
+            super::session_grants::end_session(state, agent, session, clock::best_effort_ms());
         Ok(changed)
     })
 }

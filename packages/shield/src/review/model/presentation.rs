@@ -26,10 +26,12 @@ struct Presentation {
 
 /// The inline presentation to store with a proposal, or `None` when it is too
 /// large to keep. Its digest goes in the proposal's creation event.
+/// `identities` are the [`crate::review::candidate_identity`] of `before`
+/// and `candidate`, which the caller already holds.
 pub(in crate::review) fn capture(
     base: &State,
-    before: &Value,
-    candidate: &Value,
+    (before, candidate): (&Value, &Value),
+    identities: (&str, &str),
     metadata: &Value,
     comparison: &Value,
     reviewed_files: bool,
@@ -43,8 +45,8 @@ pub(in crate::review) fn capture(
     let presentation = Presentation {
         schema_version: 1,
         engine: env!("CARGO_PKG_VERSION").into(),
-        before: crate::review::candidate_identity(before),
-        after: crate::review::candidate_identity(candidate),
+        before: identities.0.to_owned(),
+        after: identities.1.to_owned(),
         before_metadata: crate::json::fingerprint(&base.operator)
             .map_err(|_| Error::Invalid("presentation metadata digest"))?,
         after_metadata: crate::json::fingerprint(metadata)

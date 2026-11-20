@@ -694,9 +694,10 @@ propose, but advertising form support does not grant authority to change policy 
 install native hooks. A prepared review stays pending while the connection
 that prepared it is live, however long the user takes. Preparing again in the
 same interaction replaces it, and a change to the policy files makes it stale.
-Disconnect or process death closes its candidates; Stop hooks close
-unapplied reviews associated with that task's session; SessionEnd also closes
-them, as does Codex's Interrupt event. Updated hook registration
+Disconnect or process death closes its candidates, and the agent session ending
+(its SessionEnd hook) closes unapplied reviews associated with that session.
+The end of a turn leaves them open, so the user can answer in the next turn.
+Updated hook registration
 requires `mcp_setup` through its in-session review. When the host supplies no
 session association, the connection still bounds its lifetime.
 `policy_apply` on a closed review says why it closed and what to do next:

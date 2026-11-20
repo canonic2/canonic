@@ -7,10 +7,93 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::{collections::VecDeque, sync::Mutex};
 
 /// Maximum encoded retained artifact size, including JSON escaping.
 pub const MAX_BUNDLE_BYTES: usize = 512 * 1024 * 1024;
 const MAX_CONTENT_BYTES: usize = crate::policy::MAX_DOCUMENT_BYTES;
+
+/// Snapshots validated in this process, newest last, keyed by the digest of
+/// their exact sources. One request follows the files, compares them and
+/// rebuilds a proposal's two sides from the same bytes; validation depends on
+/// those bytes alone, so each set is validated once instead of every time.
+static VALIDATED: Mutex<VecDeque<(String, Snapshot)>> = Mutex::new(VecDeque::new());
+/// A base, a candidate and the sides of the proposal being shown.
+const VALIDATED_SETS: usize = 4;
+/// Source sets larger than this are validated each time rather than retained,
+/// so the memo holds at most a few project-sized snapshots, never full bundles.
+const VALIDATED_SOURCE_BYTES: usize = 16 * 1024 * 1024;
+
+/// Validate sources into a snapshot, reusing one already validated from the
+/// same bytes. `previous` only lets unchanged packs reuse compiled patterns.
+fn validate(
+    merged: &str,
+    packs: &[String],
+    rules: Option<&str>,
+    local_rules: Option<&str>,
+    disabled: &[String],
+    previous: Option<&Snapshot>,
+) -> Result<Snapshot, Error> {
+    let key = sources_key(merged, packs, rules, local_rules, disabled);
+    let memo = || {
+        VALIDATED
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    };
+    if let Some((_, snapshot)) = memo().iter().find(|(known, _)| *known == key) {
+        crate::diagnostics::trace::count("policy.source_capture_reuses", 1);
+        return Ok(snapshot.clone());
+    }
+    let snapshot = Candidate::from_yaml(merged)?.capture_reusing(
+        packs,
+        rules,
+        local_rules,
+        disabled,
+        previous,
+    )?;
+    let size = merged.len()
+        + packs.iter().map(String::len).sum::<usize>()
+        + rules.map_or(0, str::len)
+        + local_rules.map_or(0, str::len);
+    if size > VALIDATED_SOURCE_BYTES {
+        return Ok(snapshot);
+    }
+    let mut memo = memo();
+    if memo.len() == VALIDATED_SETS {
+        memo.pop_front();
+    }
+    memo.push_back((key, snapshot.clone()));
+    Ok(snapshot)
+}
+
+/// The digest of one exact set of sources, each part in its own position.
+fn sources_key(
+    merged: &str,
+    packs: &[String],
+    rules: Option<&str>,
+    local_rules: Option<&str>,
+    disabled: &[String],
+) -> String {
+    let part = |text: Option<&str>| {
+        text.map_or_else(
+            || "-".to_owned(),
+            |text| policy::fingerprint(text.as_bytes()),
+        )
+    };
+    let mut key = String::new();
+    for text in [Some(merged), rules, local_rules] {
+        key.push_str(&part(text));
+        key.push(';');
+    }
+    for list in [packs, disabled] {
+        for text in list {
+            key.push_str(&part(Some(text)));
+            key.push(',');
+        }
+        key.push(';');
+    }
+    policy::fingerprint(key.as_bytes())
+}
 
 /// Retained project source bytes and their artifact lock. All fields remain untrusted.
 ///
@@ -105,13 +188,7 @@ impl Bundle {
         previous: Option<&Snapshot>,
     ) -> Result<(Self, Snapshot), Error> {
         let merged = layers::merge(config, local_config)?;
-        let snapshot = Candidate::from_yaml(&merged)?.capture_reusing(
-            packs,
-            rules,
-            local_rules,
-            disabled,
-            previous,
-        )?;
+        let snapshot = validate(&merged, packs, rules, local_rules, disabled, previous)?;
         let bundle = Self {
             schema_version: 1,
             kind: "candidate-bundle".into(),
@@ -213,11 +290,13 @@ impl Bundle {
         }
         self.content_limit()?;
         let merged = layers::merge(&self.config, self.local_config.as_deref())?;
-        let snapshot = Candidate::from_yaml(&merged)?.capture_layers(
+        let snapshot = validate(
+            &merged,
             &self.packs,
             self.rules.as_deref(),
             self.local_rules.as_deref(),
             &self.disabled,
+            None,
         )?;
         if snapshot.lock.document != self.lock {
             return Err(Error::Contract(

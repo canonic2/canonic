@@ -258,19 +258,18 @@ pub(super) fn approvals(value: &Value) -> String {
     }
     let mut output = String::new();
     for row in &rows {
-        let expires = if row["status"] == "approved" {
-            &row["grant_expires_at_ms"]
-        } else {
-            &row["pending_expires_at_ms"]
-        };
-        let _ = writeln!(
+        // Only an approval has a lifetime; a pending request waits for an answer.
+        let _ = write!(
             output,
-            "{}  {} · {} until {}",
+            "{}  {} · {}",
             label(&row["request_id"]),
             action(row),
-            label(&row["status"]),
-            time_ms(expires)
+            label(&row["status"])
         );
+        if row["status"] == "approved" {
+            let _ = write!(output, " until {}", time_ms(&row["grant_expires_at_ms"]));
+        }
+        output.push('\n');
     }
     output.push_str("Inspect one with shield request show <request>; decide with shield request approve or shield request deny.\n");
     output
@@ -295,20 +294,18 @@ pub(super) fn request(value: &Value) -> String {
             label(&value["status"])
         );
     }
+    // Only an approval has a lifetime; a pending request waits for an answer.
     let (status, until) = if value["status"] == "approved" {
-        ("approved and unused", &value["grant"]["expires_at_ms"])
+        let until = format!(" · until {}", time_ms(&value["grant"]["expires_at_ms"]));
+        ("approved and unused", until)
     } else {
-        (
-            value["status"].as_str().unwrap_or("unknown"),
-            &value["pending_expires_at_ms"],
-        )
+        (value["status"].as_str().unwrap_or("unknown"), String::new())
     };
     let mut output = format!(
-        "Request {id} to {}\n{} · from {} · until {}\n",
+        "Request {id} to {}\n{} · from {}{until}\n",
         action(value),
         status,
         requester(&value["provenance"]),
-        time_ms(until)
     );
     let provenance = &value["provenance"];
     let _ = write!(
@@ -535,10 +532,12 @@ pub(super) fn entry(value: &Value) -> String {
             "Outcome: not observed\n"
         });
     } else if outcome.is_object() {
-        // A host that reports a shell call as finished without its exit
-        // status leaves it unknown.
-        let status = if outcome["status"] == "unknown" && outcome["exit_code"].is_null() {
-            "finished; the agent did not report an exit code".into()
+        // Only a process Shield launched has a result beyond a reported
+        // failure; earlier host records say `completed` or `unknown` for that.
+        let status = if outcome["evidence"] != "owned-child"
+            && !matches!(outcome["status"].as_str(), Some("failed" | "cancelled"))
+        {
+            "ran; the agent did not report its result".into()
         } else {
             label(&outcome["status"])
         };
@@ -610,14 +609,14 @@ mod tests {
 
     #[test]
     fn requests_and_history_describe_the_command_and_decision() {
-        let request = json!({"request_id":"run-1","status":"pending","created_at_ms":0,"pending_expires_at_ms":600_000,
+        let request = json!({"request_id":"run-1","status":"pending","created_at_ms":0,
             "provenance":{"agent":"codex","surface":"hook","cwd":"/srv/acme","session_id":"acme-session"},
             "policy":{"decision":"ask","reason":"matched-rule","rules":[
                 {"source":"project","rule_id":"acme-echo","reason":"Review Acme echoes."}]},
             "request":{"executable":"/bin/echo","arguments":["Acme"],"cwd":"/srv/acme"}});
         assert_eq!(
             self::request(&request),
-            "Request run-1 to run /bin/echo Acme in /srv/acme\npending · from Codex via hook · until 1970-01-01T00:10:00Z\n\
+            "Request run-1 to run /bin/echo Acme in /srv/acme\npending · from Codex via hook\n\
              Requested 1970-01-01T00:00:00Z in /srv/acme, session acme-session\nPolicy: ask (matched-rule)\n\
              Rule acme-echo: Review Acme echoes.\nApprove it with shield request approve run-1, or deny it with shield request deny run-1.\n"
         );
@@ -645,7 +644,17 @@ mod tests {
         assert!(
             shown.contains("Command:\n  mkdir -p src\n  cat > src/app.js <<'EOF'\n  acme\n  EOF\n")
         );
-        assert!(shown.ends_with("Outcome: finished; the agent did not report an exit code\n"));
+        assert!(shown.ends_with("Outcome: ran; the agent did not report its result\n"));
+        // Current host records carry a status only for a reported failure.
+        for outcome in [
+            json!({"evidence":"host-reported"}),
+            json!({"status":"completed","exit_code":null,"evidence":"host-reported"}),
+        ] {
+            row["outcome"] = outcome;
+            assert!(entry(&row).ends_with("Outcome: ran; the agent did not report its result\n"));
+        }
+        row["outcome"] = json!({"status":"cancelled","evidence":"host-reported"});
+        assert!(entry(&row).ends_with("Outcome: cancelled\n"));
         row["command"]["source"] = json!("git status --short");
         row["outcome"] = json!({"status":"failed","exit_code":1});
         let shown = entry(&row);

@@ -2137,13 +2137,35 @@ fn literal_braces_and_scalar_trimming_retain_denials_and_expansion_bounds() {
     // Bash leaves an empty pair literal, including before a later expansion.
     // Expansions remain shell source, so the pair is quoted.
     for (word, expected) in [
-        ("{}", vec!["'{}'"]),
-        ("a{}b", vec!["a'{}'b"]),
-        ("{}{x,y}", vec!["'{}'x", "'{}'y"]),
+        ("{}", vec!["'{''}'"]),
+        ("a{}b", vec!["a'{''}'b"]),
+        ("{}{x,y}", vec!["'{''}'x", "'{''}'y"]),
+        // So is a pair that is neither a list nor a sequence, such as Git's
+        // reflog and upstream suffixes; lists inside or after it still expand.
+        ("stash@{0}", vec!["stash@'{'0'}'"]),
+        ("@{u}", vec!["@'{'u'}'"]),
+        ("{a{b,c}}", vec!["'{'ab'}'", "'{'ac'}'"]),
+        ("HEAD@{1}{x,y}", vec!["HEAD@'{'1'}'x", "HEAD@'{'1'}'y"]),
     ] {
         assert_eq!(
             brace::expand(word, &|| Ok(())).unwrap(),
             Some(expected.into_iter().map(str::to_owned).collect())
+        );
+    }
+    for (source, argument) in [
+        ("acme stash@{0}", "stash@{0}"),
+        ("acme @{upstream}", "@{upstream}"),
+    ] {
+        let bash =
+            |source: &str| analyze(source, Dialect::Bash, "/acme", "/acme", &evaluator()).unwrap();
+        let result = bash(source);
+        let quoted = bash(&format!("acme '{argument}'"));
+        assert_eq!(result["coverage"], quoted["coverage"], "{source}");
+        assert_eq!(result["decision"], quoted["decision"], "{source}");
+        assert_eq!(
+            result["request"]["arguments"],
+            json!([argument]),
+            "{source}"
         );
     }
     for source in [
@@ -3336,14 +3358,14 @@ fn fixed_native_bash_braces_confirm_order_and_literal_sequence_boundaries() {
             "--noprofile",
             "--norc",
             "-c",
-            "printf '<%s>' {read,{other,write}} acme{a,b}{1,2} {3..1} {a..c}",
+            "printf '<%s>' {read,{other,write}} acme{a,b}{1,2} {3..1} {a..c} stash@{0} {a{b,c}} HEAD@{1}{x,y}",
         ])
         .output()
         .unwrap();
     assert!(output.status.success());
     assert_eq!(
         String::from_utf8(output.stdout).unwrap(),
-        "<read><other><write><acmea1><acmea2><acmeb1><acmeb2><3><2><1><a><b><c>"
+        "<read><other><write><acmea1><acmea2><acmeb1><acmeb2><3><2><1><a><b><c><stash@{0}><{ab}><{ac}><HEAD@{1}x><HEAD@{1}y>"
     );
     let output = std::process::Command::new("/bin/bash")
         .args([

@@ -92,6 +92,13 @@ not extend its expiry. Equivalent pending, active or declined offers return the
 existing record. Do not repeatedly offer declined permission or broaden the
 scope to work around a refusal.
 
+An offer waits for the person's answer however long they take. It is withdrawn
+when its agent session ends (the host's `SessionEnd` hook; the end of a turn
+leaves it open) or when the project already holds 64 open offers and a new one
+needs room: the requesting conversation's oldest open offer goes first, then the
+oldest of any conversation. A withdrawn offer cannot be approved; propose again
+to get a fresh review.
+
 ## Reconsider a declined offer
 
 If the person explicitly asks to reconsider, inspect the declined record with

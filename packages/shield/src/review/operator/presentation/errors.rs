@@ -520,7 +520,7 @@ fn missing(command: &PublicCommand) -> Report {
                 | RequestCommand::Show { request },
         }) => (
             "Request is not available",
-            "The request may have expired, been consumed or belong to another project.",
+            "The request may have been used, closed when its agent session ended, or belong to another project.",
             "Run shield request list and select a current request; request a fresh attempt when needed.",
             Some(request),
         ),

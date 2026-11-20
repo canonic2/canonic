@@ -245,18 +245,27 @@ pub(crate) fn close(project: &Path) -> Result<(), Error> {
     close_secret(project, &proof)
 }
 
+/// The closed context's unanswered reads go with it: no retry can reach them.
 fn close_secret(project: &Path, proof: &Secret) -> Result<(), Error> {
-    let directory = files::directory("sdk-read-contexts", false)?;
-    let _lease = objects::Directory::enter(&directory)?;
-    let mut contexts = files::contexts(&directory)?;
-    let key = proof.hash();
-    if let Some(record) = contexts.contexts.get(&key)
-        && Path::new(&record.project_root) != project.canonicalize()?
-    {
-        return Err(Error::Missing);
-    }
-    if contexts.contexts.remove(&key).is_some() {
+    let binding = {
+        let directory = files::directory("sdk-read-contexts", false)?;
+        let _lease = objects::Directory::enter(&directory)?;
+        let mut contexts = files::contexts(&directory)?;
+        let key = proof.hash();
+        if let Some(record) = contexts.contexts.get(&key)
+            && Path::new(&record.project_root) != project.canonicalize()?
+        {
+            return Err(Error::Missing);
+        }
+        let Some(record) = contexts.contexts.remove(&key) else {
+            return Ok(());
+        };
         files::write(&directory, &contexts)?;
-    }
-    Ok(())
+        record.binding()?
+    };
+    // Outside the context lease, which admission holds while it takes the store lock.
+    let context = super::open(project)?;
+    Store::open(project)?.update_authorization_if_changed(&context, |state| {
+        Ok(super::read_approval::end_context(state, &binding))
+    })
 }

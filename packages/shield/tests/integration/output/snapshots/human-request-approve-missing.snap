@@ -5,6 +5,6 @@ expression: text
 $ shield request approve missing
 --- stderr
 Error: Request is not available: missing
-The request may have expired, been consumed or belong to another project.
+The request may have been used, closed when its agent session ended, or belong to another project.
 Run shield request list and select a current request; request a fresh attempt when needed.
 --- exit 1

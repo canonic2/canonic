@@ -333,12 +333,13 @@ fn shown_requests_carry_their_creation_time_and_policy_basis_without_operands() 
         .unwrap()
         .read_checkpoint()
         .unwrap();
-    let expiry = state.run_requests[0].pending_expires_at_ms;
-    assert!(inspect_from(&state, Some(&id), expiry - 1).is_ok());
-    assert!(matches!(
-        inspect_from(&state, Some(&id), expiry),
-        Err(Error::Missing)
-    ));
+    // A pending request has no deadline to show or reach.
+    let later = state.run_requests[0].created_at_ms + 7 * 24 * 60 * 60 * 1000;
+    let inspected = inspect_from(&state, Some(&id), later).unwrap();
+    assert!(
+        inspected.get("pending_expires_at_ms").is_none(),
+        "{inspected}"
+    );
     assert!(shown["created_at_ms"].as_u64().is_some(), "{shown}");
     let policy = &shown["policy"];
     assert_eq!(policy["decision"], "ask", "{shown}");
@@ -360,7 +361,7 @@ fn shown_requests_carry_their_creation_time_and_policy_basis_without_operands() 
 }
 
 #[test]
-fn approval_replay_uses_grant_expiry_after_pending_window_closes() {
+fn approval_replay_uses_only_the_grant_lifetime() {
     let (_root, context, evidence, resource) = fixture();
     let id = pending(&context, &evidence, &resource);
     let operator = operator(&context);
@@ -368,7 +369,7 @@ fn approval_replay_uses_grant_expiry_after_pending_window_closes() {
     let store = Store::open(Path::new(&context.project_root)).unwrap();
     let state = store.read().unwrap();
     let row = &state.run_requests[0];
-    let time = row.pending_expires_at_ms;
+    let time = row.created_at_ms + 600_000;
     let grant = row.grant.as_ref().unwrap();
     let (start, end) = (grant.issued_at_ms, grant.expires_at_ms);
     let events = state.authorization_events.len();
@@ -613,36 +614,31 @@ fn revocation_expiry_missing_and_pending_limits_fail_closed() {
         capture(&mut state, &context, &origin, &evidence, &altered, time)
             .expect("native approval fixture");
     }
-    let mut altered = resource.clone();
-    altered["timeout_ms"] = json!(1000);
-    let refused = capture(&mut state, &context, &origin, &evidence, &altered, time);
-    let pending = state
+    // A full store replaces its oldest unanswered request.
+    let oldest = state
         .run_requests
         .iter()
-        .filter(|r| r.status == "pending")
-        .count();
-    assert!(
-        matches!(
-            refused,
-            Err(Error::Capacity {
-                kind: review::CapacityKind::RunRequests,
-                pending: counted,
-                retained: 128,
-                limit: 128,
-            }) if counted == pending
-        ),
-        "{refused:?}"
-    );
+        .find(|r| r.status == "pending")
+        .expect("native approval fixture")
+        .request_id
+        .clone();
+    let mut altered = resource.clone();
+    altered["timeout_ms"] = json!(1000);
+    capture(&mut state, &context, &origin, &evidence, &altered, time)
+        .expect("native approval fixture");
+    assert_eq!(state.run_requests.len(), 128);
+    assert!(state.run_requests.iter().all(|r| r.request_id != oldest));
+    // An unanswered request stays pending past the former ten minutes.
     let row = &state.run_requests[2];
-    let expired = row.pending_expires_at_ms;
+    let later = row.created_at_ms + 600_000;
     let reference = row.request_id.clone();
     let resource = row.resource.clone();
     assert_eq!(
         consume(
-            &mut state, &context, &origin, &evidence, &resource, &reference, expired
+            &mut state, &context, &origin, &evidence, &resource, &reference, later
         )
         .expect("native approval fixture")["code"],
-        "approval-expired"
+        "approval-required"
     );
 }
 

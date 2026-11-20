@@ -184,7 +184,6 @@ fn inspect(row: &ReadRequest, time: u64) -> Value {
         .grant
         .as_ref()
         .is_some_and(|grant| time < grant.issued_at_ms || time >= grant.expires_at_ms)
-        || row.grant.is_none() && (time < row.created_at_ms || time >= row.pending_expires_at_ms)
     {
         ("approval-expired", "expired")
     } else {

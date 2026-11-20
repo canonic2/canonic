@@ -122,18 +122,18 @@ pub(crate) fn completion(
         &serde_json::to_vec(&json!([input, operation]))
             .map_err(|_| Error::Invalid("completion encoding"))?,
     );
+    // The event records that the host ran the tool. Hosts report no exit
+    // status, and their event says only whether the call failed, so only
+    // that outcome is kept; a missing status never means success.
+    let mut details = json!({"delivery_id":input.delivery_id,"input_digest":signature,
+        "operation":operation,"evidence":"host-reported","reported_request_id":input.request_id});
+    if matches!(input.status.as_str(), "failed" | "cancelled") {
+        details["status"] = json!(input.status);
+    }
     // Raw publication only: history readers derive links, duplicates and
     // conflicts, so the receipt claims no correlation.
     Store::open(Path::new(&context.project_root))?.observe(context, |state| {
-        let mut event = state.event(
-            "completion",
-            context,
-            json!({}),
-            json!({}),
-            json!({"delivery_id":input.delivery_id,"input_digest":signature,"status":input.status,
-                "operation":operation,"exit_code":null,"command":null,"evidence":"host-reported",
-                "reported_request_id":input.request_id}),
-        );
+        let mut event = state.event("completion", context, json!({}), json!({}), details);
         event["event_id"] = json!(history::identifier("event", &state.project_id)?);
         let result = receipt(&event, &Value::Null);
         state.record(event);

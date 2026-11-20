@@ -578,7 +578,11 @@ measure transport overhead separately. Modern form retries have separate traces.
 Proposal spans distinguish base capture, edits, next capture, comparison, plan
 preparation, handle reservation and presentation. `policy.source_captures` counts
 source validation independently of compiled-plan preparation, so re-parsing packs
-cannot hide behind a zero preparation count.
+cannot hide behind a zero preparation count. A process validates each exact set
+of policy sources once: following the files, comparing them and rebuilding a
+proposal's two sides reuse the snapshot of the same bytes, counted by
+`policy.source_capture_reuses`. Changed bytes, and sources that failed, are
+validated again.
 Pack spans distinguish decoding, source validation, resolution and matcher
 preparation. `pattern.compiled` and `pattern.reused` count newly built and exact
 reused matcher programs. Rule/access-path proposal edits borrow matchers from the

@@ -433,12 +433,22 @@ fn ordinary_request_sweep_tracks_fresh_and_aged_work() {
             "selected" => 2,
             _ => 0,
         } + 3 * captures;
+        let count = |name: &str| end["fields"]["counts"][name].as_u64().unwrap_or(0);
         assert_eq!(
-            end["fields"]["counts"]["policy.source_captures"]
-                .as_u64()
-                .unwrap_or(0),
+            count("policy.source_captures") + count("policy.source_capture_reuses"),
             sources,
             "{age} {tool}: {end}"
+        );
+        // Each exact set of sources is validated once per process: a proposal
+        // or a shown proposal has a base and a candidate, and following the
+        // files adds at most their one set.
+        let distinct = match tool {
+            "policy_propose" | "selected" => 2,
+            _ => 0,
+        } + captures;
+        assert!(
+            count("policy.source_captures") <= distinct,
+            "{age} {tool} validates the same sources again: {end}"
         );
         eprintln!(
             "sweep {age} {tool} round_trip_us={elapsed} history_loads={history} counts={}",

@@ -737,6 +737,38 @@ fn new_native_denials_are_compact_and_replay_without_policy_preparation() {
 }
 
 #[test]
+fn a_refused_request_waits_for_its_answer_until_its_session_ends() {
+    let fixture = fixture();
+    let id = pending(fixture.refuse("acme-delayed-answer"));
+    let mut state = review::project::checkpoint(&fixture.context).unwrap();
+    let row = state
+        .hook_requests
+        .iter()
+        .find(|r| r.request_id == id)
+        .unwrap();
+    let (agent, session) = (row.agent.clone(), row.session_id.clone());
+    let week = row.created_at_ms + 7 * 24 * 60 * 60 * 1000;
+    state.compact_authorization_at(week);
+    assert_eq!(pending_count(&state), 1);
+    let shown = inspect_from(&state, &fixture.context, Some(&id), week).unwrap();
+    assert_eq!(shown["status"], "pending", "{shown}");
+    assert!(shown.get("pending_expires_at_ms").is_none(), "{shown}");
+    // Repeating the refused call finds the same request instead of a new one.
+    assert_eq!(pending(fixture.refuse("acme-delayed-answer")), id);
+    // Another session ending leaves it; its own session ending closes it.
+    review::proposal_lifecycle::end_session(fixture.root(), &agent, "another-session").unwrap();
+    assert_eq!(
+        pending_count(&review::project::checkpoint(&fixture.context).unwrap()),
+        1
+    );
+    review::proposal_lifecycle::end_session(fixture.root(), &agent, &session).unwrap();
+    assert_eq!(
+        pending_count(&review::project::checkpoint(&fixture.context).unwrap()),
+        0
+    );
+}
+
+#[test]
 fn legacy_native_revoked_rows_keep_their_existing_retention_deadline() {
     let fixture = fixture();
     let id = pending(fixture.refuse("acme-legacy-revoked"));

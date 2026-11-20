@@ -233,8 +233,13 @@ shield request approve REQUEST_ID --project /path/to/acme
 shield request deny REQUEST_ID --project /path/to/acme
 ```
 
-Pending requests expire after ten minutes; approval lasts five minutes.
-Repeating an approval returns the same grant without renewing it. Revocation
+A pending request waits for your answer however long you take. The SDK reports
+no session end, so it closes only when you approve or deny it, when the runtime
+read-only client that made it is closed, or when the project's 128 requests are
+full and a new one needs room: the requesting session's oldest unanswered
+request goes first, then the oldest of any session. A replaced request can no
+longer be inspected or approved; repeating the read asks again. Approval lasts five
+minutes. Repeating an approval returns the same grant without renewing it. Revocation
 is final. Inspection redacts sensitive metadata and stores no file contents.
 
 The grant binds the project, canonical
@@ -284,10 +289,12 @@ keeps its original decision and links the consumed grant. Unsupported tools have
 no policy decision. An allowed handoff alone does not establish execution.
 
 `PostToolUse` and `PostToolUseFailure` link a Read completion only when project,
-session, tool-call ID, cwd, and path/window match the retained decision. Success
-records `completed`; failure records `failed`, or `cancelled` for
-`is_interrupt: true`. History omits tool responses, file contents, transcripts,
-error strings, and environment. Unavailable version, time, and exit code stay null.
+session, tool-call ID, cwd, and path/window match the retained decision. A
+completion records that the host ran the tool. Failure adds status `failed`, or
+`cancelled` for `is_interrupt: true`; success adds no status, and no exit code
+is recorded because the host reports none. History omits tool responses, file
+contents, transcripts, error strings, and environment. Unavailable version and
+time stay null.
 
 Each factory keeps at most 512 correlation entries without evicting them.
 Additional calls remain untracked. Missing entries, reused IDs, mismatched input,

@@ -150,8 +150,9 @@ test('real Claude SDK discovers the callback and enforces read decisions and ope
   assert.deepEqual(decisions.map(e => e.details.decision), ['allow', 'ask', 'deny', null, null, null]);
   const completion = events.filter(e => e.kind === 'completion');
   assert.equal(completion.length, 1);
-  assert.equal(completion[0].details.status, 'completed');
-  assert.equal(completion[0].details.exit_code, null);
+  // A completed host call carries no status or exit code; only failures do.
+  assert.equal('status' in completion[0].details, false);
+  assert.equal('exit_code' in completion[0].details, false);
   assert.equal(completion[0].links.decision_event_id, decisions[0].event_id);
   assert.equal(completion[0].provenance.host_event_name, 'PostToolUse');
   assert.equal(completion[0].provenance.sources.session_id, 'host');
@@ -176,7 +177,7 @@ test('real Claude SDK records failure after an allowed read without storing erro
   assert.equal(completion[0].details.status, 'failed');
   assert.equal(completion[0].provenance.host_event_name, 'PostToolUseFailure');
   assert.equal(completion[0].links.decision_event_id, events.find(e => e.kind === 'decision').event_id);
-  assert.equal(completion[0].details.exit_code, null);
+  assert.equal('exit_code' in completion[0].details, false);
   assert.doesNotMatch(JSON.stringify(events), /File does not exist|ENOENT|ACME_ALLOWED_TEXT/);
 });
 

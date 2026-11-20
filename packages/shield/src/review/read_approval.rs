@@ -31,6 +31,7 @@ struct Origin {
 pub(crate) struct ReadRequest {
     request_id: String,
     created_at_ms: u64,
+    /// Bound into stored bindings; a pending request has no deadline.
     pending_expires_at_ms: u64,
     project_id: String,
     activation_id: String,
@@ -68,7 +69,7 @@ fn hash(value: &Value) -> String {
 }
 impl ReadRequest {
     pub(super) fn list_view(&self) -> Value {
-        json!({"request_id":self.request_id,"status":self.status,"request":self.request,"created_at_ms":self.created_at_ms,"pending_expires_at_ms":self.pending_expires_at_ms,"provenance":self.provenance,"policy":self.policy,"grant_expires_at_ms":self.grant.as_ref().map(|grant|grant.expires_at_ms)})
+        json!({"request_id":self.request_id,"status":self.status,"request":self.request,"created_at_ms":self.created_at_ms,"provenance":self.provenance,"policy":self.policy,"grant_expires_at_ms":self.grant.as_ref().map(|grant|grant.expires_at_ms)})
     }
     pub(super) fn id(&self) -> &str {
         &self.request_id
@@ -77,12 +78,14 @@ impl ReadRequest {
         self.origin.session_id.as_deref()
     }
     /// Whether the request still waits for an operator decision.
-    pub(super) fn awaits_decision(&self, time: u64) -> bool {
-        self.status == "pending" && time < self.pending_expires_at_ms
+    pub(super) fn awaits_decision(&self) -> bool {
+        self.status == "pending"
     }
+    /// Pending requests wait for their answer however long it takes; only
+    /// an issued grant carries a lifetime.
     pub(super) fn live_id(&self, time: u64) -> Option<&str> {
         let live = match self.status.as_str() {
-            "pending" => time < self.pending_expires_at_ms,
+            "pending" => true,
             "approved" => self.grant.as_ref().is_some_and(|g| time < g.expires_at_ms),
             _ => false,
         };
@@ -150,6 +153,28 @@ pub(super) fn retain_local(state: &mut State) {
         .retain(|row| row.request.project == root);
 }
 
+/// Drop the unanswered requests of an agent session that ended. Issued grants
+/// keep their own lifetime. Returns whether anything changed.
+pub(super) fn end_session(state: &mut State, agent: &str, session: &str) -> bool {
+    let before = state.read_requests.len();
+    state.read_requests.retain(|row| {
+        row.status != "pending"
+            || super::approvals::read_operator_agent(row.origin.agent.as_deref()) != Some(agent)
+            || row.origin.session_id.as_deref() != Some(session)
+    });
+    before != state.read_requests.len()
+}
+
+/// Drop the unanswered requests bound to a closed SDK read context, which can
+/// never retry them. Issued grants keep their own lifetime.
+pub(super) fn end_context(state: &mut State, binding: &str) -> bool {
+    let before = state.read_requests.len();
+    state
+        .read_requests
+        .retain(|row| row.status != "pending" || row.runtime_context.as_deref() != Some(binding));
+    before != state.read_requests.len()
+}
+
 /// Close requests from the historical codec that lack the resource binding a
 /// current consumer requires; their grants are never honored after upgrade.
 pub(super) fn drop_unbound(state: &mut State) {
@@ -205,7 +230,6 @@ pub(super) fn validate(state: &State) -> Result<(), Error> {
                     .checked_sub(grant.issued_at_ms)
                     .is_none_or(|ttl| !(1000..=3_600_000).contains(&ttl))
                 || grant.issued_at_ms < row.created_at_ms
-                || grant.issued_at_ms >= row.pending_expires_at_ms
                 || !state.authorization_events.iter().any(|event| {
                     event["kind"] == "read_grant_issued"
                         && event["links"]["approval_id"] == grant.approval_id
@@ -252,13 +276,18 @@ pub(super) fn validate(state: &State) -> Result<(), Error> {
 /// Project an already checked authority snapshot at one inspection timestamp.
 pub(super) fn inspect_from(state: &State, id: Option<&str>, time: u64) -> Result<Value, Error> {
     let mut value = match id {
-        Some(id) => json!(
-            state
-                .read_requests
-                .iter()
-                .find(|r| r.request_id == id && r.live_id(time).is_some())
-                .ok_or(Error::Missing)?
-        ),
+        Some(id) => {
+            let mut row = json!(
+                state
+                    .read_requests
+                    .iter()
+                    .find(|r| r.request_id == id && r.live_id(time).is_some())
+                    .ok_or(Error::Missing)?
+            );
+            row.as_object_mut()
+                .map(|row| row.remove("pending_expires_at_ms"));
+            row
+        }
         None => {
             json!({"schema_version":1,"requests":state.read_requests.iter().filter(|r|r.live_id(time).is_some()).map(ReadRequest::list_view).collect::<Vec<_>>()})
         }
@@ -451,15 +480,6 @@ fn consume(
             Some(&approval),
         ));
     }
-    if time < row.created_at_ms || time >= row.pending_expires_at_ms {
-        return Ok(result(
-            "approval-expired",
-            false,
-            Some(reference),
-            "expired",
-            None,
-        ));
-    }
     Ok(result(
         "approval-required",
         false,
@@ -493,8 +513,6 @@ fn capture_context(
     if let Some(row) = state.read_requests.iter().find(|r| {
         r.status == "pending"
             && r.runtime_context.as_deref() == runtime_context
-            && time >= r.created_at_ms
-            && time < r.pending_expires_at_ms
             && r.matches(evidence, resource, origin)
     }) {
         return Ok(result(
@@ -506,16 +524,28 @@ fn capture_context(
         ));
     }
     if state.read_requests.len() >= MAX_REQUESTS {
-        return Err(Error::Capacity {
-            kind: super::CapacityKind::ReadRequests,
-            pending: state
-                .read_requests
-                .iter()
-                .filter(|r| r.status == "pending")
-                .count(),
-            retained: state.read_requests.len(),
-            limit: MAX_REQUESTS,
-        });
+        // A pending request holds no authority, and repeating its call stores
+        // it again, so a full store replaces the oldest unanswered one: this
+        // session's own first. Another session's goes only when this one has
+        // none, since a session that ended without notice leaves its open.
+        let rows = &state.read_requests;
+        let Some(oldest) = rows
+            .iter()
+            .position(|r| {
+                r.status == "pending"
+                    && r.origin.agent == origin.agent
+                    && r.origin.session_id == origin.session_id
+            })
+            .or_else(|| rows.iter().position(|r| r.status == "pending"))
+        else {
+            return Err(Error::Capacity {
+                kind: super::CapacityKind::ReadRequests,
+                pending: 0,
+                retained: state.read_requests.len(),
+                limit: MAX_REQUESTS,
+            });
+        };
+        state.read_requests.remove(oldest);
     }
     let mut row = ReadRequest {
         request_id: state.id("read-request"),
@@ -679,8 +709,8 @@ fn check(
     if row.status == "consumed" || row.status == "revoked" {
         return Err(Error::Invalid("request is terminal"));
     }
-    if time < row.created_at_ms || (row.grant.is_none() && time >= row.pending_expires_at_ms) {
-        return Err(Error::Invalid("pending request expired"));
+    if time < row.created_at_ms {
+        return Err(Error::Invalid("the clock is earlier than this request"));
     }
     let resource = row
         .resource

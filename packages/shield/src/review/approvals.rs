@@ -120,14 +120,14 @@ pub(super) fn inspect(context: &Context, id: Option<&str>) -> Result<Value, Erro
             continue;
         };
         for mut row in rows {
-            let expiry = if row["status"] == "approved" {
-                row["grant_expires_at_ms"].as_u64()
-            } else {
-                row["pending_expires_at_ms"].as_u64()
+            let live = match row["status"].as_str() {
+                Some("pending") => true,
+                Some("approved") => row["grant_expires_at_ms"]
+                    .as_u64()
+                    .is_some_and(|expiry| time < expiry),
+                _ => false,
             };
-            if matches!(row["status"].as_str(), Some("pending" | "approved"))
-                && expiry.is_some_and(|expiry| time < expiry)
-            {
+            if live {
                 row["type"] = json!(kind);
                 requests.push(row);
             }
@@ -195,19 +195,19 @@ pub(super) fn list_page(context: &Context, args: &Value) -> Result<Value, Error>
     )
 }
 
-/// Count unexpired requests that wait for an operator decision.
-pub(super) fn pending_count(state: &super::model::State, time: u64) -> usize {
+/// Count requests that wait for an operator decision.
+pub(super) fn pending_count(state: &super::model::State) -> usize {
     state
         .read_requests
         .iter()
-        .filter(|r| r.awaits_decision(time))
+        .filter(|r| r.awaits_decision())
         .count()
         + state
             .run_requests
             .iter()
-            .filter(|r| r.awaits_decision(time))
+            .filter(|r| r.awaits_decision())
             .count()
-        + super::hook_approval::pending_count(state, time)
+        + super::hook_approval::pending_count(state)
 }
 
 pub(super) enum RequestKind {

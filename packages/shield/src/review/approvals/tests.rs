@@ -445,22 +445,18 @@ fn action_request_kinds_mixed_native_override_read_and_run_are_one_atomic_review
 }
 
 #[test]
-fn action_request_kinds_expiry_cannot_issue_grants() {
+fn action_request_kinds_stay_answerable_however_long_the_person_takes() {
     let f = fixture("codex");
     let shown = request_view(&f.context, &f.ids[0]).unwrap().1;
-    let expired = shown["pending_expires_at_ms"].as_u64().unwrap();
+    assert!(shown.get("pending_expires_at_ms").is_none(), "{shown}");
+    let later = shown["created_at_ms"].as_u64().unwrap() + 7 * 24 * 60 * 60 * 1000;
     let snapshot = Project::open(Path::new(&f.context.project_root))
         .unwrap()
         .snapshot()
         .unwrap();
     let state = review::project::checkpoint(&f.context).unwrap();
-    assert!(read_approval::review_in(&state, &f.context, &f.ids[0], &snapshot, expired).is_err());
-    let run_expired = request_view(&f.context, &f.ids[1]).unwrap().1["pending_expires_at_ms"]
-        .as_u64()
-        .unwrap();
-    assert!(
-        run_approval::review_in(&state, &f.context, &f.ids[1], &snapshot, run_expired).is_err()
-    );
+    read_approval::review_in(&state, &f.context, &f.ids[0], &snapshot, later).unwrap();
+    run_approval::review_in(&state, &f.context, &f.ids[1], &snapshot, later).unwrap();
 }
 
 #[test]

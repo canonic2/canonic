@@ -325,8 +325,9 @@ test('history correlates exact reads, deduplicates completion and respects missi
   assert.equal(completions.length, 1);
   assert.equal(completions[0].links.decision_event_id, decisions[0].event_id);
   assert.equal(completions[0].links.request_id, decisions[0].links.request_id);
-  assert.equal(completions[0].details.status, 'completed');
-  assert.equal(completions[0].details.exit_code, null);
+  // A completed host call carries no status or exit code; only failures do.
+  assert.equal('status' in completions[0].details, false);
+  assert.equal('exit_code' in completions[0].details, false);
   assert.doesNotMatch(JSON.stringify(events), /SECRET_OUTPUT_SENTINEL/);
   assert.deepEqual(await post({ ...completed, tool_input: { file_path: fixture.allowed, offset: 2 } }), {});
   assert.deepEqual(await post({ ...completed, session_id: 'other-session' }), {});
@@ -370,6 +371,6 @@ test('post-tool history retains the original activation after operator reactivat
   assert.equal(before.details.activation_id, fixture.active.activation_id);
   assert.equal(after.links.decision_event_id, before.event_id);
   assert.equal(after.details.status, 'cancelled');
-  assert.equal(after.details.exit_code, null);
+  assert.equal('exit_code' in after.details, false);
   assert.doesNotMatch(JSON.stringify(events), /PRIVATE_ERROR_SENTINEL/);
 });

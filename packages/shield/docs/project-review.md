@@ -308,8 +308,10 @@ them unchanged.
 Agents can propose packs, rules, domain permissions, or folder access. Check
 whether a proposal covers one invocation or a broader set of requests. The agent
 prepares the exact change and immediately requests approval in the conversation.
-Accept applies it; decline rejects it; cancellation, timeout, disconnection or
-task completion closes an unapplied attempt. Changes to its base make it stale.
+Accept applies it; decline rejects it. Cancellation, disconnection, a host that
+gives up on the question, or the end of the agent session closes an unapplied
+attempt. The end of a turn leaves it open, so the person can answer in the next
+turn. Changes to its base make it stale.
 Closed attempts cannot be accepted later.
 
 For a direct operator review of a live change, run:

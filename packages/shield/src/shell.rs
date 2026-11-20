@@ -1615,17 +1615,24 @@ impl Analysis<'_> {
         if words.iter().any(|word| !word.substitutions.is_empty()) {
             state.filesystem_mutation();
         }
-        if self.dialect == Dialect::Bash
-            && state.brace_expansion.is_none()
-            && let Some(word) = words.iter().find(|word| {
-                // An empty `{}` stays literal whether or not braceexpand is on.
-                word.resolved
-                    && word.literal.is_some()
-                    && word.raw.replace("{}", "").contains('{')
+        let mut changing = None;
+        if self.dialect == Dialect::Bash && state.brace_expansion.is_none() {
+            for word in words {
+                // A word such as `{}` or `stash@{0}` reads the same whether or
+                // not braceexpand is on.
+                if word.resolved
                     && word.fragments.len() == 1
                     && word.fragments[0].kind == "unquoted"
-            })
-        {
+                    && word.raw.contains('{')
+                    && word.literal.is_some()
+                    && !brace::unchanged(&word.raw, self.checkpoint)?
+                {
+                    changing = Some(word);
+                    break;
+                }
+            }
+        }
+        if let Some(word) = changing {
             self.complete = false;
             self.record(
                 Operation::new(

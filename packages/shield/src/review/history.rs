@@ -321,8 +321,12 @@ fn bound_entry(row: &mut Value) {
         mark_missing(row, "complete_input");
     }
     if !crate::json::fits(row, 8192) {
-        if row["outcome"].is_object() {
-            row["outcome"] = json!({"status":row["outcome"]["status"],"exit_code":row["outcome"]["exit_code"],"evidence":row["outcome"]["evidence"]});
+        if let Some(outcome) = row["outcome"].as_object() {
+            row["outcome"] = ["status", "exit_code", "evidence"]
+                .into_iter()
+                .filter_map(|key| Some((key.to_owned(), outcome.get(key)?.clone())))
+                .collect::<serde_json::Map<_, _>>()
+                .into();
         }
         row["provenance"] = Value::Null;
         mark_missing(row, "outcome_and_attribution_details");

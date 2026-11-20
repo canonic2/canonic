@@ -390,19 +390,43 @@ fn observed_task_end_closes_only_that_sessions_unapplied_change() {
             .status,
         "pending"
     );
-    let output = crate::agents::translate_event(
-        root.path(),
-        crate::agents::find("codex").unwrap(),
-        &serde_json::to_vec(&json!({"hook_event_name":"Stop","session_id":"acme-session"}))
-            .unwrap(),
-        crate::agents::Event::Ended,
-        &crate::diagnostics::Log::disabled(),
-    );
-    assert_eq!(output, json!({}));
+    // A turn ending leaves the review open; the person may answer next turn.
+    for name in ["Stop", "Interrupt", "SessionEnd"] {
+        let output = crate::agents::translate_event(
+            root.path(),
+            crate::agents::find("codex").unwrap(),
+            &serde_json::to_vec(&json!({"hook_event_name":name,"session_id":"acme-session"}))
+                .unwrap(),
+            crate::agents::Event::Ended,
+            &crate::diagnostics::Log::disabled(),
+        );
+        assert_eq!(output, json!({}));
+        if name != "SessionEnd" {
+            assert_eq!(
+                receipt(&context, &connection, &proposed["proposal_id"])["status"],
+                "pending",
+                "{name}"
+            );
+        }
+    }
     assert_eq!(
         receipt(&context, &connection, &proposed["proposal_id"])["closed_reason"],
         "task_ended"
     );
+}
+
+#[test]
+fn a_session_ends_while_its_policy_files_are_invalid() {
+    let (root, context, connection) = fixture();
+    prepare(&context, &connection, "read");
+    fs::write(
+        root.path().join(".shield/config.yml"),
+        "schema_version: 1\npacks: [\n",
+    )
+    .unwrap();
+    end_session(root.path(), "codex", "acme-session").unwrap();
+    let state = Store::open(root.path()).unwrap().read_checkpoint().unwrap();
+    assert_eq!(state.proposals[0].status, "withdrawn");
 }
 
 #[test]

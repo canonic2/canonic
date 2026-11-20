@@ -1,5 +1,5 @@
 //! Complete bounded human reviews and read-only session-grant inspection.
-use super::{Context, Error, MAX_FORM, PENDING, Record, State, Value, json, store};
+use super::{Context, Error, MAX_FORM, Record, State, Value, json, store};
 
 pub(super) fn apply_fields(args: &Value) -> Result<(&str, &str), Error> {
     if args.as_object().is_none_or(|o| o.len() != 2) {
@@ -31,10 +31,10 @@ pub(super) fn public(row: &Record, state: &State, now: u64) -> Value {
     json!({"proposal_id":row.id,"reconsiders_proposal_id":row.reconsiders,"reconsiders_candidate_digest":row.reconsiders_digest,"grant_id":grant.map(|g|&g.id),"session_ref":row.session.reference,
         "target":{"project":state.project_root,"agent":row.session.agent,"session_id":row.session.session_id},
         "candidate_digest":row.digest,"scope":row.scope,"scope_checks":row.scope_checks,"override_denies":row.overrides,"duration_seconds":row.duration,
-        "provenance":row.provenance,"created_at_ms":row.created,"proposal_expires_at_ms":row.created.saturating_add(PENDING),
+        "provenance":row.provenance,"created_at_ms":row.created,
         "proposal_status":if grant.is_some(){"issued"}else{status},"grant_status":grant.map(|_|status),
         "issued_at_ms":grant.map(|g|g.issued),"expires_at_ms":grant.map(|g|g.expires),
-        "created_at":timestamp(row.created),"proposal_expires_at":timestamp(row.created.saturating_add(PENDING)),
+        "created_at":timestamp(row.created),
         "issued_at":grant.map(|g|timestamp(g.issued)),"expires_at":grant.map(|g|timestamp(g.expires)),
         "proposal_terminal_at":grant.map(|g|g.issued).or(row.terminal).map(timestamp),
         "proposal_terminal_reason":if grant.is_some(){Some("issued")}else{row.terminal_reason.as_deref()},

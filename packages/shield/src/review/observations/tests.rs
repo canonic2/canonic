@@ -116,7 +116,10 @@ fn exact_completion_is_idempotent_and_other_origins_or_windows_remain_uncorrelat
     assert_ne!(repeated["event_id"], first["event_id"]);
     let event = review::tests::history(&ctx, Some(first["event_id"].as_str().unwrap())).unwrap();
     assert_eq!(event["links"]["decision_event_id"], receipt["event_id"]);
-    assert_eq!(event["details"]["exit_code"], Value::Null);
+    // A host reports no exit status, and `completed` adds nothing to the event.
+    for absent in ["status", "exit_code", "command"] {
+        assert!(event["details"].get(absent).is_none(), "{event}");
+    }
     assert!(review::tests::history(&ctx, Some(repeated["event_id"].as_str().unwrap())).is_err());
     input.status = "failed".into();
     let changed = completion(&ctx, &input, &operation()).unwrap();

@@ -4,6 +4,6 @@ expression: text
 ---
 $ shield request list
 --- terminal
-[ENTRY]  run /bin/echo Acme in [PROJECT] · pending until [TIME]
+[ENTRY]  run /bin/echo Acme in [PROJECT] · pending
 Inspect one with shield request show <request>; decide with shield request approve or shield request deny.
 --- exit 0

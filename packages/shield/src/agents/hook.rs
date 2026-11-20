@@ -201,9 +201,13 @@ fn translate_hook(
         };
     }
     if event == Event::Ended {
-        if let Some(session) = host["session_id"]
-            .as_str()
-            .filter(|s| !s.is_empty() && s.len() <= 4096)
+        // A turn ending (`Stop`, `Interrupt`) leaves its questions open: the
+        // person often answers in the next turn. Only the session ending
+        // closes them.
+        if host["hook_event_name"] == "SessionEnd"
+            && let Some(session) = host["session_id"]
+                .as_str()
+                .filter(|s| !s.is_empty() && s.len() <= 4096)
         {
             let _ =
                 crate::review::proposal_lifecycle::end_session(root, adapter.spec().id, session);
@@ -579,7 +583,7 @@ fn decide(
     let decided = operation.clone();
     if request.event.post() {
         operation = json!({"kind":"completion","delivery_id":format!("{id}-{}",request.event_name),"request_id":null,
-            "status":if request.event==Event::Failed {"failed"} else if operation["kind"]=="shell" {"unknown"} else {"completed"},"operation":operation});
+            "status":if request.event==Event::Failed {"failed"} else {"completed"},"operation":operation});
     }
     let normalized = json!({"protocol_version":1,"request_id":id,"expected_project_id":context.project_id,"cwd":request.cwd,"operation":operation,
         "host":{"agent":adapter.spec().id,"session_id":request.session,"tool_use_id":request.tool_id,"event":request.event_name,"consumer_id":null},"approval_request_id":null});

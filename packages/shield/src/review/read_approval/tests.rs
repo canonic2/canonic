@@ -97,6 +97,14 @@ fn identical_runtime_reads_reuse_one_pending_request() {
     )
     .unwrap();
     assert_eq!(state.read_requests.len(), 2);
+    // Closing one context withdraws only its unanswered request.
+    assert!(end_context(&mut state, "acme-runtime"));
+    assert_eq!(state.read_requests.len(), 1);
+    assert_eq!(
+        state.read_requests[0].runtime_context.as_deref(),
+        Some("another-runtime")
+    );
+    assert!(!end_context(&mut state, "acme-runtime"));
 }
 
 #[test]
@@ -278,7 +286,7 @@ fn terminal_read_receipts_replay_after_row_compaction_without_history_or_new_gra
 }
 
 #[test]
-fn status_counts_only_unexpired_requests_awaiting_a_decision() {
+fn a_pending_request_waits_for_its_answer_however_long_it_takes() {
     let (_root, context, evidence, resource) = fixture();
     assert_eq!(
         review::project::status(&context).unwrap()["pending_approvals"],
@@ -289,19 +297,19 @@ fn status_counts_only_unexpired_requests_awaiting_a_decision() {
         review::project::status(&context).unwrap()["pending_approvals"],
         1
     );
-    let state = Store::open(Path::new(&context.project_root))
-        .unwrap()
-        .read()
-        .unwrap();
-    let expiry = state.read_requests[0].pending_expires_at_ms;
-    assert_eq!(review::approvals::pending_count(&state, expiry - 1), 1);
-    assert_eq!(review::approvals::pending_count(&state, expiry), 0);
-    assert!(inspect_from(&state, Some(&id), expiry - 1).is_ok());
-    assert!(matches!(
-        inspect_from(&state, Some(&id), expiry),
-        Err(Error::Missing)
-    ));
-    authorize(&context, &id, 3600, None, false).unwrap();
+    let store = Store::open(Path::new(&context.project_root)).unwrap();
+    let state = store.read().unwrap();
+    let created = state.read_requests[0].created_at_ms;
+    let later = created + 7 * 24 * 60 * 60 * 1000;
+    assert_eq!(review::approvals::pending_count(&state), 1);
+    let shown = inspect_from(&state, Some(&id), later).unwrap();
+    assert!(shown.get("pending_expires_at_ms").is_none(), "{shown}");
+    let mut state = store.read().unwrap();
+    state.compact_authorization_at(later);
+    assert_eq!(state.read_requests.len(), 1);
+    // A week later the person's answer still issues the grant.
+    let issued = authorize_with_clock(&context, &id, 300, None, false, &|| Ok(later)).unwrap();
+    assert_eq!(issued["status"], "approved", "{issued}");
     assert_eq!(
         review::project::status(&context).unwrap()["pending_approvals"],
         0
@@ -341,14 +349,14 @@ fn shown_requests_carry_their_creation_time_and_policy_basis_without_operands() 
 }
 
 #[test]
-fn approval_replay_uses_grant_expiry_after_pending_window_closes() {
+fn approval_replay_uses_only_the_grant_lifetime() {
     let (_root, context, evidence, resource) = fixture();
     let id = pending(&context, &evidence, &resource);
     let issued = authorize(&context, &id, 3600, None, false).unwrap();
     let store = Store::open(Path::new(&context.project_root)).unwrap();
     let state = store.read().unwrap();
     let row = &state.read_requests[0];
-    let time = row.pending_expires_at_ms;
+    let time = row.created_at_ms + 600_000;
     let grant = row.grant.as_ref().unwrap();
     let (start, end) = (grant.issued_at_ms, grant.expires_at_ms);
     let events = state.authorization_events.len();
@@ -751,19 +759,20 @@ fn file_changes_block_operator_approval_and_non_operator_cannot_approve() {
 }
 
 #[test]
-fn expiry_and_clock_rollback_block_without_consumption() {
+fn grant_expiry_and_clock_rollback_block_without_consumption() {
     let (_root, context, evidence, resource) = fixture();
     let id = pending(&context, &evidence, &resource);
     let store = Store::open(Path::new(&context.project_root)).unwrap();
     let mut state = store.read().unwrap();
     let origin = state.read_requests[0].origin.clone();
-    let expiry = state.read_requests[0].pending_expires_at_ms;
+    // An unanswered request stays pending past the former ten minutes.
+    let later = state.read_requests[0].created_at_ms + 600_000;
     assert_eq!(
         consume(
-            &mut state, &context, &origin, &evidence, &resource, &id, expiry, None
+            &mut state, &context, &origin, &evidence, &resource, &id, later, None
         )
         .unwrap()["code"],
-        "approval-expired"
+        "approval-required"
     );
     authorize(&context, &id, 1, None, false).unwrap();
     let mut state = store.read().unwrap();
@@ -782,7 +791,7 @@ fn expiry_and_clock_rollback_block_without_consumption() {
 }
 
 #[test]
-fn full_read_requests_refuse_with_pending_and_retained_counts() {
+fn full_read_requests_replace_the_oldest_unanswered_request_and_keep_grants() {
     let (_root, context, evidence, resource) = fixture();
     let id = pending(&context, &evidence, &resource);
     authorize(&context, &id, 3600, None, false).unwrap();
@@ -792,16 +801,55 @@ fn full_read_requests_refuse_with_pending_and_retained_counts() {
         .unwrap();
     let origin = state.read_requests[0].origin.clone();
     let time = state.read_requests[0].grant.as_ref().unwrap().issued_at_ms;
+    let mut another = origin.clone();
+    another.session_id = Some("another-session".into());
+    capture(
+        &mut state,
+        &context,
+        &another,
+        &evidence,
+        "acme-another",
+        time,
+    )
+    .unwrap();
     while state.read_requests.len() < 128 {
         let other = format!("acme-resource-{}", state.read_requests.len());
         capture(&mut state, &context, &origin, &evidence, &other, time).unwrap();
+    }
+    let others = state.read_requests[1].request_id.clone();
+    let own = state.read_requests[2].request_id.clone();
+    capture(
+        &mut state,
+        &context,
+        &origin,
+        &evidence,
+        "acme-overflow",
+        time,
+    )
+    .unwrap();
+    assert_eq!(state.read_requests.len(), 128);
+    assert_eq!(state.read_requests[0].request_id, id);
+    // The session's own oldest question goes, not another session's.
+    assert_eq!(state.read_requests[1].request_id, others);
+    assert!(state.read_requests.iter().all(|r| r.request_id != own));
+    // A session with no question of its own replaces the oldest one.
+    let mut third = origin.clone();
+    third.session_id = Some("third-session".into());
+    capture(&mut state, &context, &third, &evidence, "acme-third", time).unwrap();
+    assert!(state.read_requests.iter().all(|r| r.request_id != others));
+    // A store holding only live grants still refuses with its counts.
+    state.read_requests.truncate(1);
+    while state.read_requests.len() < 128 {
+        let mut copy: ReadRequest = serde_json::from_value(json!(state.read_requests[0])).unwrap();
+        copy.request_id = format!("read-request-copy-{}", state.read_requests.len());
+        state.read_requests.push(copy);
     }
     let refused = capture(
         &mut state,
         &context,
         &origin,
         &evidence,
-        "acme-overflow",
+        "acme-overflow-2",
         time,
     );
     assert!(
@@ -809,14 +857,13 @@ fn full_read_requests_refuse_with_pending_and_retained_counts() {
             refused,
             Err(Error::Capacity {
                 kind: review::CapacityKind::ReadRequests,
-                pending: 127,
+                pending: 0,
                 retained: 128,
                 limit: 128,
             })
         ),
         "{refused:?}"
     );
-    assert_eq!(state.read_requests.len(), 128);
 }
 
 /// Encode the historical pre-resource issuer's exact binding, independently of

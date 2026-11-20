@@ -91,9 +91,11 @@ fn hook_evaluation_captures_no_policy_into_review_state() {
                 let _scope = request.enter();
                 tool(root.path(), agent, "Bash", &json!({"command":"git status"}));
                 assert_eq!(request.recorded_count("policy.captures"), 0, "{agent}");
-                // Only compiling a plan the cache lacks reads the sources.
+                // Only compiling a plan the cache lacks reads the sources,
+                // validating them or reusing this process's validation.
                 assert_eq!(
-                    request.recorded_count("policy.source_captures"),
+                    request.recorded_count("policy.source_captures")
+                        + request.recorded_count("policy.source_capture_reuses"),
                     request.recorded_count("policy.plan_misses"),
                     "{agent}"
                 );
@@ -1409,7 +1411,7 @@ fn assert_unsupported_shell(value: &Value) {
 #[test]
 fn claude_ask_completions_preserve_the_prompt_without_claiming_operator_approval() {
     for source in ["git push", "cat .mcp.json", "npm install express@5"] {
-        for (event, status) in [(Event::Completed, "unknown"), (Event::Failed, "failed")] {
+        for (event, status) in [(Event::Completed, None), (Event::Failed, Some("failed"))] {
             let (root, context) = fixture();
             fs::write(root.path().join(".mcp.json"), "{}").unwrap();
             let before = call(root.path(), "claude", source);
@@ -1449,9 +1451,11 @@ fn claude_ask_completions_preserve_the_prompt_without_claiming_operator_approval
             assert_eq!(entry["disposition"], "approval_required");
             assert_eq!(entry["observations"][0]["details"]["host_decision"], "ask");
             assert_eq!(entry["approved"], false);
-            assert_eq!(entry["outcome"]["status"], status);
-            assert_eq!(entry["outcome"]["evidence"], "host-reported");
-            assert!(entry["outcome"]["exit_code"].is_null());
+            // The host reports only that the call ran or failed.
+            let outcome = entry["outcome"].as_object().unwrap();
+            assert_eq!(outcome.get("status"), status.map(|s| json!(s)).as_ref());
+            assert_eq!(outcome["evidence"], "host-reported");
+            assert!(!outcome.contains_key("exit_code") && !outcome.contains_key("command"));
         }
     }
 }
@@ -1533,9 +1537,11 @@ fn native_completion_history_joins_without_a_shield_receipt() {
             2,
             "{agent}: {response}"
         );
-        assert_eq!(entries[0]["outcome"]["status"], "unknown");
-        assert_eq!(entries[0]["outcome"]["evidence"], "host-reported");
-        assert!(entries[0]["outcome"]["exit_code"].is_null());
+        let outcome = entries[0]["outcome"].as_object().unwrap();
+        assert_eq!(outcome["evidence"], "host-reported");
+        for absent in ["status", "exit_code", "command"] {
+            assert!(!outcome.contains_key(absent), "{agent}: {response}");
+        }
     }
 }
 

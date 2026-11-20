@@ -6,7 +6,7 @@ expression: text
 $ shield request show [ENTRY]
 --- terminal
 Request [ENTRY] to run /bin/echo Acme in [PROJECT]
-pending · from an unidentified agent via run · until [TIME]
+pending · from an unidentified agent via run
 Requested [TIME] in .
 Policy: ask (matched-policy)
 Rule echo: Acme echo needs approval

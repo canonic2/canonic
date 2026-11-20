@@ -254,8 +254,14 @@ The normalized host transport consumes SDK-read grants only. CLI origin fields a
 remain declared evidence; deployment must protect the operator/state boundary.
 Unrestricted same-user access is outside that boundary.
 
-Pending requests expire after ten minutes; approval lasts five minutes. Repeated
-approval does not renew it. Use `shield request deny REQUEST_ID --project /path/to/acme`
+A pending request waits for your answer however long you take. It closes when
+you approve or deny it, when the agent session it names ends, or when the
+project's 128 requests are full and a new one needs room: the requesting
+session's oldest unanswered request goes first, then the oldest of any session.
+A request without session identity, such as one from the CLI, closes only by an
+answer or that replacement. A replaced request can no longer be inspected or
+approved; repeating the command asks again. Approval lasts five
+minutes, and repeated approval does not renew it. Use `shield request deny REQUEST_ID --project /path/to/acme`
 to reject a pending request or revoke an unused grant.
 
 For up to ten minutes after consumption or denial, a compact terminal receipt

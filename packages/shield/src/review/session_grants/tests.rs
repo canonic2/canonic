@@ -854,6 +854,80 @@ fn failed_requirements_and_protected_state_cannot_use_session_grants() {
 }
 
 #[test]
+fn an_offer_waits_for_its_answer_until_its_session_ends() {
+    let (_root, context, reference) = fixture();
+    let proposed = proposal(&context, &reference);
+    assert!(
+        proposed.get("proposal_expires_at_ms").is_none(),
+        "{proposed}"
+    );
+    let created = proposed["created_at_ms"].as_u64().unwrap();
+    // Two days pass without an answer: the offer stays open and is kept.
+    store(&context)
+        .unwrap()
+        .update_checkpoint(&context, &|| Ok(()), |state| {
+            compact(state, created + 2 * RETAIN);
+            Ok(json!({}))
+        })
+        .unwrap();
+    let shown = show(&context, &json!({"proposal_id":proposed["proposal_id"]})).unwrap();
+    assert_eq!(shown["proposal_status"], "pending", "{shown}");
+    // The session ending withdraws it; an answer then issues nothing.
+    let (agent, session) = (
+        &proposed["target"]["agent"],
+        &proposed["target"]["session_id"],
+    );
+    crate::review::proposal_lifecycle::end_session(
+        Path::new(&context.project_root),
+        agent.as_str().unwrap(),
+        session.as_str().unwrap(),
+    )
+    .unwrap();
+    let shown = show(&context, &json!({"proposal_id":proposed["proposal_id"]})).unwrap();
+    assert_eq!(shown["proposal_status"], "withdrawn", "{shown}");
+    assert!(apply(&context, &proposed["apply_arguments"], true).is_err());
+}
+
+#[test]
+fn a_full_offer_store_withdraws_the_oldest_open_offer_own_session_first() {
+    let (_root, context, reference) = fixture();
+    let proposed = proposal(&context, &reference);
+    let mut state = store(&context).unwrap().read_checkpoint().unwrap();
+    let first = state.session_grants.records[proposed["proposal_id"].as_str().unwrap()].clone();
+    // 64 open offers, most from sessions that ended without `SessionEnd`.
+    for n in 1..64 {
+        let mut row = first.clone();
+        row.id = format!("session-proposal-copy-{n}");
+        row.created = first.created + n;
+        row.session.session_id = format!("ended-session-{n}");
+        state.session_grants.records.insert(row.id.clone(), row);
+    }
+    let status = |state: &State, id: &str| state.session_grants.records[id].status.clone();
+    let authority = Authority::capture(&state);
+    let now = first.created + 64;
+    let mut own = first.session.clone();
+    own.session_id = "ended-session-5".into();
+    make_room(&mut state, &authority, &own, now).unwrap();
+    assert_eq!(status(&state, "session-proposal-copy-5"), "withdrawn");
+    assert_eq!(status(&state, &first.id), "pending");
+    // A session without an open offer of its own withdraws the oldest one.
+    let mut refill = first.clone();
+    refill.id = "session-proposal-refill".into();
+    refill.created = now;
+    state
+        .session_grants
+        .records
+        .insert(refill.id.clone(), refill);
+    let mut stranger = first.session.clone();
+    stranger.session_id = "new-session".into();
+    make_room(&mut state, &authority, &stranger, now).unwrap();
+    assert_eq!(status(&state, &first.id), "withdrawn");
+    // Below the limit nothing is withdrawn.
+    make_room(&mut state, &authority, &stranger, now).unwrap();
+    assert_eq!(status(&state, "session-proposal-copy-1"), "pending");
+}
+
+#[test]
 fn expiry_is_terminal_and_retained_receipts_are_reclaimed() {
     let (_root, context, reference) = fixture();
     let proposed = proposal(&context, &reference);

@@ -54,26 +54,18 @@ fn expand_into(
     let Some(end) = end else {
         return Ok(false);
     };
-    // Bash leaves an empty `{}` literal, as in find -exec arguments. Output
-    // remains shell source, so the pair is quoted to stay literal there.
-    if end == start + 1 {
-        let mut rest = Vec::new();
-        if !expand_into(&source[end + 1..], depth + 1, &mut rest, checkpoint)? {
-            return Ok(false);
-        }
-        for word in rest {
-            if output.len() >= 256 {
-                return Err(Error::Limit);
-            }
-            output.push(format!("{}'{{}}'{word}", &source[..start]));
-        }
-        return Ok(true);
-    }
     let alternatives = if separators.is_empty() {
-        let Some(range) = sequence(&source[start + 1..end])? else {
-            return Ok(false);
-        };
-        range
+        let inner = &source[start + 1..end];
+        match sequence(inner)? {
+            Some(range) => range,
+            // Bash leaves a pair that is neither a list nor a sequence literal,
+            // as in find's `{}` and Git's `stash@{0}` and `@{u}`; braces nested
+            // in it still expand. Unsupported sequence forms stay unresolved.
+            None if !inner.contains("..") => {
+                return literal(source, start, end, depth, output, checkpoint);
+            }
+            None => return Ok(false),
+        }
     } else {
         let mut alternatives = Vec::new();
         let mut cursor = start + 1;
@@ -90,6 +82,50 @@ fn expand_into(
         let word = format!("{}{alternative}{}", &source[..start], &source[end + 1..]);
         if !expand_into(&word, depth + 1, output, checkpoint)? {
             return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+/// Whether brace expansion leaves the unquoted word `raw` as written, as for
+/// `{}` and `stash@{0}`, so braceexpand being off would not change it.
+pub(super) fn unchanged(
+    raw: &str,
+    checkpoint: &dyn Fn() -> Result<(), Error>,
+) -> Result<bool, Error> {
+    let Some(words) = expand(raw, checkpoint)? else {
+        return Ok(false);
+    };
+    let [word] = words.as_slice() else {
+        return Ok(false);
+    };
+    Ok(super::words::literal_words(word, super::Dialect::Bash)? == Some(vec![raw.to_owned()]))
+}
+
+/// Keeps the braces at `start` and `end` literal and expands the words inside
+/// and after them. Output remains shell source, so only the braces are quoted.
+fn literal(
+    source: &str,
+    start: usize,
+    end: usize,
+    depth: usize,
+    output: &mut Vec<String>,
+    checkpoint: &dyn Fn() -> Result<(), Error>,
+) -> Result<bool, Error> {
+    let (mut inner, mut rest) = (Vec::new(), Vec::new());
+    if !expand_into(&source[start + 1..end], depth + 1, &mut inner, checkpoint)?
+        || !expand_into(&source[end + 1..], depth + 1, &mut rest, checkpoint)?
+    {
+        return Ok(false);
+    }
+    let prefix = &source[..start];
+    for word in &inner {
+        for tail in &rest {
+            checkpoint()?;
+            if output.len() >= 256 {
+                return Err(Error::Limit);
+            }
+            output.push(format!("{prefix}'{{'{word}'}}'{tail}"));
         }
     }
     Ok(true)

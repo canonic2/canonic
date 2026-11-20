@@ -134,10 +134,7 @@ pub(super) fn status_from(context: &Context, state: &State) -> Value {
     );
     value["pending_capture_freshness"] = json!("unchecked; apply revalidates exact reviewed files");
     value["history"] = history_metadata(context, state);
-    value["pending_approvals"] = json!(super::approvals::pending_count(
-        state,
-        super::clock::best_effort_ms()
-    ));
+    value["pending_approvals"] = json!(super::approvals::pending_count(state));
     value["session_grants"] = super::session_grants::summary(state);
     value["coverage"] = integrations::status(context, state);
     value["coverage"]["verification"] = json!({"state":"unchecked","basis":"record-only-inspection","history_available":value["history"]["available"],"agents":[],"inspect":"shield history list"});
