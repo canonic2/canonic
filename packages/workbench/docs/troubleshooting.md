@@ -176,6 +176,10 @@ files define.
 - **`link … names unknown Workbench preview` or `… unknown scenario`:** an entry
   in the definition's `links` names a preview ID or scenario no definition
   declares. See [Links and navigation](preview-data.md#links-and-navigation).
+- **`… has no scenario “…”`:** the canvas asked an artboard for a scenario
+  that its copy of the page list doesn't have yet, usually one you just added.
+  Run **Workbench: Refresh Pages**, or reload a canvas opened from the
+  standalone server.
 - **`request … must be "[METHOD] /path [Operation]" or a full URL`:** a
   `requests` key isn't in that form. Paths start with `/`.
 - **`The preview config environment must be a file inside the project`:**
