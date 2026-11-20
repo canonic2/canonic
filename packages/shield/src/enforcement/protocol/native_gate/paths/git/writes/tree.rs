@@ -33,15 +33,30 @@ pub(super) enum Query {
         reference: String,
         paths: Vec<PathBuf>,
     },
+    /// The rebase in progress, read from its state in the Git folder.
+    Rebase {
+        step: RebaseStep,
+        paths: Vec<PathBuf>,
+    },
+}
+
+/// What a rebase in progress does next to the working tree.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum RebaseStep {
+    /// Applies the commits its todo list still names, each against its parent.
+    Remaining,
+    /// Returns to the branch tip the rebase started from.
+    Abort,
 }
 
 impl Query {
     /// The protected path a change is reported under.
     pub(super) fn path(&self) -> Option<&PathBuf> {
         match self {
-            Self::Diff { paths, .. } | Self::Untracked { paths } | Self::Stash { paths, .. } => {
-                paths.first()
-            }
+            Self::Diff { paths, .. }
+            | Self::Untracked { paths }
+            | Self::Stash { paths, .. }
+            | Self::Rebase { paths, .. } => paths.first(),
         }
     }
 }
@@ -220,8 +235,10 @@ fn merge(target: &Target, rest: &[&str]) -> Plan {
 }
 
 /// `git rebase [<upstream>]` replays local commits on what the upstream
-/// changed since the merge base. Interactive, scripted and `--onto` rebases,
-/// and continuing or aborting one, produce trees no query names.
+/// changed since the merge base. Continuing a rebase applies the commits its
+/// todo list still names, skipping first resets the tree to `HEAD`, and
+/// aborting returns it to the original tip. Interactive, scripted and `--onto`
+/// rebases produce trees no query names.
 fn rebase(target: &Target, rest: &[&str]) -> Plan {
     const VALUED: &[&str] = &[
         "-s",
@@ -232,6 +249,21 @@ fn rebase(target: &Target, rest: &[&str]) -> Plan {
         "--exec",
         "--onto",
     ];
+    let state = |step| Query::Rebase {
+        step,
+        paths: target.tracked_paths(),
+    };
+    match rest {
+        ["--continue"] => return Plan::Queries(vec![state(RebaseStep::Remaining)]),
+        ["--skip"] => {
+            return Plan::Queries(vec![
+                target.diff(vec!["HEAD".to_owned()]),
+                state(RebaseStep::Remaining),
+            ]);
+        }
+        ["--abort"] => return Plan::Queries(vec![state(RebaseStep::Abort)]),
+        _ => {}
+    }
     if has(
         rest,
         &["--quit", "--edit-todo", "--show-current-patch"],

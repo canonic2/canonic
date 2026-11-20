@@ -218,6 +218,46 @@ fn modern_confirmation_accept_decline_cancel_and_receipt_replay() {
 }
 
 #[test]
+fn superseded_questions_free_their_slots_and_a_full_queue_keeps_the_new_review() {
+    let (transport, project, mut args) = prepared(Some("claude"), &capabilities(FORM));
+    // Each new proposal supersedes the last; the host drops the old forms.
+    for round in 0..10 {
+        if round > 0 {
+            args = propose(
+                &transport,
+                json!(100 + round),
+                &rule(&format!("acme-read-{round}"), "acme"),
+            );
+        }
+        let interim = transport.request(&modern_apply(200 + round, &args, None, None, true));
+        assert_eq!(
+            interim["result"]["resultType"], "input_required",
+            "{interim}"
+        );
+    }
+    // Questions for the one live review fill the queue; the next is refused
+    // without withdrawing it.
+    for id in 300..307 {
+        let interim = transport.request(&modern_apply(id, &args, None, None, true));
+        assert_eq!(
+            interim["result"]["resultType"], "input_required",
+            "{interim}"
+        );
+    }
+    let refused = transport.request(&modern_apply(307, &args, None, None, true));
+    assert_eq!(refused["error"]["code"], rpc::INVALID_PARAMS, "{refused}");
+    let adapter = crate::agents::review::resolve(project.review.agent.as_deref());
+    let outcomes = crate::review::proposals(&project.review, None).unwrap();
+    let live = outcomes["proposals"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| adapter.identifies(&args, row["proposal_id"].as_str().unwrap()))
+        .unwrap();
+    assert_eq!(live["status"], "pending", "{outcomes}");
+}
+
+#[test]
 fn accepted_confirmation_with_a_locked_store_preserves_a_retryable_proposal() {
     for modern in [false, true] {
         let (transport, project, args) = prepared(Some("claude"), &capabilities(FORM));
@@ -719,7 +759,7 @@ fn inspection_runs_while_a_form_is_open_and_a_second_form_is_unavailable() {
         applied["result"]["structuredContent"]["error"]["message"]
             .as_str()
             .unwrap()
-            .contains("prepare a fresh change"),
+            .contains("call the tool that prepared it again"),
         "{applied}"
     );
     let outcome =

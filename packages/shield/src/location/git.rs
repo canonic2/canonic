@@ -7,11 +7,29 @@ use std::{
     path::{Component, Path},
 };
 
+/// A `-c` editor setting with no effect of its own, the usual way to skip the
+/// commit or todo editor. `:` makes Git skip the editor and `true` runs the
+/// `true` found on `PATH`, the same lookup the configured editor uses; neither
+/// changes what Git reads. It is not a guarantee that no editor runs:
+/// `GIT_EDITOR` takes precedence, and `sequence.editor` covers only the todo
+/// list, so the command remains equivalent to the one without the setting.
+pub(crate) fn noop_editor(config: &str) -> bool {
+    let Some((key, value)) = config.split_once('=') else {
+        return false;
+    };
+    ["core.editor", "sequence.editor"].contains(&key.to_ascii_lowercase().as_str())
+        && ["true", ":"].contains(&value)
+}
+
 /// Git opens each named file during option parsing. Resolve relative output
 /// against the invocation directory after any policy-normalized -C.
 pub(super) fn output(arguments: &[String], cwd: &Path, stable: bool) -> Targets {
     let arguments = match arguments {
         [option, rest @ ..] if matches!(option.as_str(), "--no-pager" | "-P") => rest,
+        _ => arguments,
+    };
+    let arguments = match arguments {
+        [option, setting, rest @ ..] if option == "-c" && noop_editor(setting) => rest,
         _ => arguments,
     };
     let Some((command, words)) = arguments.split_first() else {

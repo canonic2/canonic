@@ -276,7 +276,13 @@ impl Server {
                 );
             return match interim {
                 Ok(result) => Outcome::InputRequired(result),
-                Err(_) => Outcome::Tool(reply(
+                Err(confirmation::Refusal::Full(error)) => {
+                    if let Some(binding) = review_binding {
+                        crate::review::mcp::discard_admin(&self.connection, binding);
+                    }
+                    Outcome::Method(Err(error))
+                }
+                Err(confirmation::Refusal::Unavailable) => Outcome::Tool(reply(
                     &review,
                     &self.connection,
                     &call,

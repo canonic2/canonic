@@ -15,6 +15,7 @@ use std::{
 
 pub(crate) mod directory;
 mod git;
+pub(crate) use git::noop_editor as git_noop_editor;
 mod node;
 mod targets;
 pub(crate) use targets::{grep_parse, rg_auxiliary_reads};
@@ -806,6 +807,38 @@ mod tests {
                 assert_eq!(target.action, "write");
                 assert_eq!(target.path, cwd.join(name));
             }
+        }
+    }
+
+    #[test]
+    fn git_output_reads_past_a_noop_editor_setting_only() {
+        let cwd = crate::test_support::absolute("/acme/worktree");
+        let cwd = Path::new(cwd.as_ref());
+        for leading in [
+            &["-c", "core.editor=true"][..],
+            &["-c", "sequence.editor=:"],
+            &["--no-pager", "-c", "core.editor=:"],
+        ] {
+            let mut args = leading.to_vec();
+            args.extend(["diff", "HEAD", "--output=review.diff"]);
+            let targets = targets::collect(&git_input(&args), cwd, true, true);
+            assert!(targets.complete, "{args:?}");
+            assert_eq!(targets.items.len(), 1, "{args:?}");
+            assert_eq!(targets.items[0].path, cwd.join("review.diff"));
+        }
+        // Settings that run a program or change what Git reads, a second
+        // setting, and other orders stay unverified.
+        for leading in [
+            &["-c", "core.editor=vim"][..],
+            &["-c", "core.editor=TRUE"],
+            &["-c", "core.pager=helper"],
+            &["-c", "core.editor=true", "-c", "core.editor=true"],
+            &["-c", "core.editor=true", "--no-pager"],
+        ] {
+            let mut args = leading.to_vec();
+            args.extend(["diff", "HEAD", "--output=review.diff"]);
+            let targets = targets::collect(&git_input(&args), cwd, true, true);
+            assert!(!targets.complete, "{args:?}");
         }
     }
 

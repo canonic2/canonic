@@ -1,4 +1,5 @@
 //! Bounded, connection-owned input continuations; input never approves effects.
+//! A form stays answerable until answered, refused or its connection ends.
 use super::{Server, response};
 use crate::review::{Context as Review, mcp::Question};
 use canonic_mcp_kit::{
@@ -9,11 +10,7 @@ use canonic_mcp_kit::{
 };
 use ring::rand::{SecureRandom, SystemRandom};
 use serde_json::{Value, json};
-use std::{
-    collections::BTreeMap,
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::{collections::BTreeMap, sync::Arc};
 
 #[derive(Default)]
 pub(super) struct Questions {
@@ -24,7 +21,6 @@ struct Pending {
     arguments: Value,
     plan: Question,
     requests: Requests,
-    expires: Instant,
     rounds: u8,
 }
 
@@ -97,13 +93,10 @@ pub(super) fn call(
             .questions
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        questions
-            .pending
-            .retain(|_, pending| pending.expires > Instant::now());
         if questions.pending.len() >= 8 {
             return Outcome::Method(Err(RpcError::new(
                 rpc::INVALID_PARAMS,
-                "Too many pending input forms",
+                "Too many pending input forms; answer or cancel an open one, then retry",
             )));
         }
         let result = match request.elicitation(requests.clone(), Some(&token)) {
@@ -117,7 +110,6 @@ pub(super) fn call(
                 arguments: call.arguments,
                 plan,
                 requests,
-                expires: Instant::now() + Duration::from_mins(5),
                 rounds: 1,
             },
         );
@@ -159,7 +151,7 @@ fn modern_resume(
     let invalid = || {
         Outcome::Method(Err(RpcError::new(
             rpc::INVALID_PARAMS,
-            "Invalid, expired or consumed input form; start a new review",
+            "Invalid or consumed input form; start a new review",
         )))
     };
     let Some(token) = request.request_state.as_ref() else {
@@ -172,11 +164,7 @@ fn modern_resume(
     let Some(pending) = questions.pending.get_mut(token) else {
         return invalid();
     };
-    if pending.expires <= Instant::now()
-        || pending.tool != call.name
-        || pending.arguments != call.arguments
-        || pending.rounds >= 8
-    {
+    if pending.tool != call.name || pending.arguments != call.arguments || pending.rounds >= 8 {
         questions.pending.remove(token);
         return invalid();
     }

@@ -552,8 +552,9 @@ Final approval still requires the host's confirmation. Never infer missing answe
 A policy change while the form is open makes its answer stale; prepare a fresh
 settings review. Modern clients must support the form mode on each request and
 return the exact tool arguments, issued `requestState` and the `settings` input
-answer on retry. Pending modern forms expire after five minutes, allow at most
-eight rounds and are private to the connection. Replaying a consumed form refuses.
+answer on retry. Pending modern forms stay open until answered, cancelled or
+the connection closes, allow at most eight rounds and are private to the
+connection. At most eight can be open at once; answer or cancel one to ask another. Replaying a consumed form refuses.
 
 ## Proposals and operator review
 
@@ -639,8 +640,8 @@ shortened or omitted constraints are identified.
 Claude's form works in `default`, `auto`, and `bypassPermissions` modes and
 requires its own Accept response, independently of ordinary tool approval.
 The client must advertise form elicitation or apply returns
-`approval_unavailable`. Only one form can be open per connection, with a
-five-minute response deadline on legacy connections. It waits outside the worker
+`approval_unavailable`. Only one form can be open per connection; on legacy
+connections it stays open while the request and connection are live. It waits outside the worker
 so other calls can finish. Codex controls its prompt's heading, buttons, and field rendering.
 
 For modern requests, Claude's apply returns `resultType: "input_required"`
@@ -648,10 +649,13 @@ with a confirmation form and opaque `requestState`. The host obtains the user's
 answer and retries the same tool and arguments with a new RPC ID, echoed state,
 `inputResponses: {"confirmation":{"action":"accept"}}` (or `decline`/`cancel`),
 and current per-request form capabilities. Agents must never manufacture answers.
-State expires after five minutes, belongs to one connection, and is consumed by
-one retry. Changed arguments, expired state or missing capabilities cannot apply
-policy. At most eight modern confirmations can wait per connection. Disconnect
-revokes them. Cancelling a completed interim RPC ID does not revoke a later retry;
+State belongs to one connection, stays usable however long the user takes, and
+is consumed by one retry. Changed arguments, consumed state or missing
+capabilities cannot apply policy. At most eight modern confirmations can wait
+per connection; a confirmation whose proposal has closed, for example because a
+newer proposal superseded it, frees its place. When all eight are open, the call
+returns an error and the proposal stays pending; answer or cancel one, then retry.
+Disconnect revokes them. Cancelling a completed interim RPC ID does not revoke a later retry;
 the host must discard the state or submit a decline/cancel response.
 
 Shield rechecks arguments and current policy before committing. Stale or changed
@@ -687,16 +691,22 @@ attempt is closed, inspect its outcome before preparing fresh.
 Only the original registered proposer can withdraw a proposal. Repeating an
 owned withdrawal makes no further change. Unrecognized hosts can inspect and
 propose, but advertising form support does not grant authority to change policy or
-install native hooks. A prepared review expires after five minutes even before
-apply. Disconnect or process death closes its candidates; Stop hooks close
+install native hooks. A prepared review stays pending while the connection
+that prepared it is live, however long the user takes. Preparing again in the
+same interaction replaces it, and a change to the policy files makes it stale.
+Disconnect or process death closes its candidates; Stop hooks close
 unapplied reviews associated with that task's session; SessionEnd also closes
 them, as does Codex's Interrupt event. Updated hook registration
 requires `mcp_setup` through its in-session review. When the host supplies no
-session association, the connection lease and expiry still bound its lifetime.
+session association, the connection still bounds its lifetime.
+`policy_apply` on a closed review says why it closed and what to do next:
+after a decline, do not prepare again unless the user asks; after a
+replacement, apply the newer review's `apply_arguments`; otherwise call the
+tool that prepared it, such as `pack_update`, again with a new `idempotency_key`.
 
 `policy_show` with `proposal_id` returns applied, rejected, withdrawn, stale and
 failed outcomes. It never reopens them. Recovery evidence is retained through
-24 hours after the review deadline. Capacity is 128 live reviews and 1,024 retained outcomes. Older eligible
+24 hours after the review closes. Capacity is 128 live reviews and 1,024 retained outcomes. Older eligible
 outcomes are reclaimed when admitting new work; capacity never asks a person to
 clear an approval queue.
 
@@ -1108,8 +1118,8 @@ status and cancellation remain reachable while preparation runs.
 `--request-timeout-ms` bounds queued work, evaluation and encoding
 (default 5,000 ms, range 1–60,000); a call that exceeds it receives `-32001`
 "Request deadline exceeded". Cancellation suppresses pending responses.
-Policy apply uses that budget for preparation, a separate five-minute form wait,
-then a fresh ordinary budget for queued revalidation, commit and encoding.
+Policy apply uses that budget for preparation, then waits for the form answer
+without a time limit, then uses a fresh ordinary budget for queued revalidation, commit and encoding.
 Checkpoints do not interrupt native blocking I/O; clients also own process/I/O
 limits. Lost `policy_propose` replies can be recovered by resubmitting the same
 arguments. For any lost `pack_add` or `pack_configure` reply, inspect `policy_show`

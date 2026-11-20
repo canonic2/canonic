@@ -88,14 +88,14 @@ fn registry_enrollment_requires_its_own_connection_bound_confirmation_and_consum
 }
 
 #[test]
-fn registry_enrollment_changed_expired_and_discarded_reviews_do_not_enroll() {
+fn registry_enrollment_changed_and_discarded_reviews_do_not_enroll() {
     if !crate::test_support::isolated_home(concat!(
         module_path!(),
-        "::registry_enrollment_changed_expired_and_discarded_reviews_do_not_enroll"
+        "::registry_enrollment_changed_and_discarded_reviews_do_not_enroll"
     )) {
         return;
     }
-    for mutation in ["name", "location", "scope", "expired", "discarded"] {
+    for mutation in ["name", "location", "scope", "discarded"] {
         let (_root, context, connection, args) = local();
         let (_, binding) =
             admin_confirmation(&context, &connection, "registry_add", &args, &|| Ok(()))
@@ -106,17 +106,6 @@ fn registry_enrollment_changed_expired_and_discarded_reviews_do_not_enroll() {
             "name" => changed["name"] = json!("other"),
             "location" => changed["location"] = json!("other"),
             "scope" => changed["scope"] = json!("user"),
-            "expired" => {
-                connection
-                    .admin
-                    .lock()
-                    .unwrap()
-                    .get_mut(&binding)
-                    .unwrap()
-                    .0 = std::time::Instant::now()
-                    .checked_sub(std::time::Duration::from_mins(6))
-                    .expect("fixture clock supports an expired review");
-            }
             "discarded" => discard_admin(&connection, binding),
             _ => unreachable!(),
         }
@@ -140,10 +129,11 @@ fn registry_enrollment_changed_expired_and_discarded_reviews_do_not_enroll() {
 }
 
 #[test]
-fn registry_enrollment_full_review_capacity_refuses_before_source_discovery_and_reclaims_expiry() {
+fn registry_enrollment_full_review_capacity_refuses_before_source_discovery_until_one_is_discarded()
+{
     if !crate::test_support::isolated_home(concat!(
         module_path!(),
-        "::registry_enrollment_full_review_capacity_refuses_before_source_discovery_and_reclaims_expiry"
+        "::registry_enrollment_full_review_capacity_refuses_before_source_discovery_until_one_is_discarded"
     )) {
         return;
     }
@@ -159,15 +149,7 @@ fn registry_enrollment_full_review_capacity_refuses_before_source_discovery_and_
         Err(Error::Overloaded)
     ));
     let binding = *connection.admin.lock().unwrap().keys().next().unwrap();
-    connection
-        .admin
-        .lock()
-        .unwrap()
-        .get_mut(&binding)
-        .unwrap()
-        .0 = std::time::Instant::now()
-        .checked_sub(std::time::Duration::from_mins(6))
-        .expect("fixture clock supports an expired review");
+    discard_admin(&connection, binding);
     assert!(!matches!(
         admin_confirmation(&context, &connection, "registry_add", &missing, &|| Ok(())),
         Ok(_) | Err(Error::Overloaded)

@@ -11,16 +11,21 @@ use std::{
     path::{Path, PathBuf},
 };
 
-const LIFETIME_MS: u64 = 5 * 60 * 1000;
+/// How long a closed review stays readable for outcome reconciliation.
+const RECOVERY_MS: u64 = 24 * 60 * 60 * 1000;
 pub(super) mod drafts;
 #[cfg(test)]
 mod tests;
 
+/// A pending review lives as long as the connection that prepared it; age never
+/// closes it. `settled_at_ms` starts the recovery window once it closes.
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct Interaction {
     connection: Option<String>,
-    expires_at_ms: u64,
+    /// Stored under its first name so existing checkpoints read unchanged.
+    #[serde(rename = "expires_at_ms")]
+    settled_at_ms: u64,
 }
 impl Interaction {
     fn legacy(row: &Proposal, now: u64) -> Self {
@@ -30,15 +35,13 @@ impl Interaction {
             .and_then(|seconds| seconds.checked_mul(1000));
         Self {
             connection: None,
-            expires_at_ms: created.map_or(now, |at| at.saturating_add(LIFETIME_MS)),
+            settled_at_ms: created.unwrap_or(now),
         }
     }
     pub(super) fn new(context: &Context) -> Result<Self, Error> {
         Ok(Self {
             connection: context.connection_id.clone(),
-            expires_at_ms: clock::now_ms()?
-                .checked_add(LIFETIME_MS)
-                .ok_or(Error::Invalid("review expiry overflow"))?,
+            settled_at_ms: clock::now_ms()?,
         })
     }
     pub(super) fn owns(&self, context: &Context) -> bool {
@@ -139,9 +142,6 @@ impl Drop for Lease {
         let _ = fs::remove_file(&self.path);
     }
 }
-fn alive(root: &str, connection: &str) -> bool {
-    alive_with(root, connection, true)
-}
 fn alive_with(root: &str, connection: &str, cleanup: bool) -> bool {
     let path = lease_path(root, connection);
     if !path.parent().is_some_and(|dir| {
@@ -217,25 +217,15 @@ fn refresh_inner(state: &mut State, exact: bool) {
         let revision_changed =
             !state.policy_revision.is_empty() && row.policy_revision != state.policy_revision;
         let base_changed = revision_changed || row.files.is_empty() || files_changed;
-        let reason = if base_changed {
-            Some(("stale", "base_changed"))
-        } else if let Some(interaction) = &row.interaction {
-            if now >= interaction.expires_at_ms {
-                Some(("withdrawn", "expired"))
-            } else if interaction.connection.as_ref().is_some_and(|id| {
-                let live = if exact {
-                    alive(&state.project_root, id)
-                } else {
-                    alive_with(&state.project_root, id, false)
-                };
-                !live
-            }) {
-                Some(("withdrawn", "connection_closed"))
-            } else {
-                None
-            }
-        } else {
-            Some(("withdrawn", "legacy_interaction"))
+        // Only an exact refresh may unlink a dead connection's lease file.
+        let reason = match &row.interaction {
+            _ if base_changed => Some(("stale", "base_changed")),
+            None => Some(("withdrawn", "legacy_interaction")),
+            Some(interaction) => interaction
+                .connection
+                .as_ref()
+                .is_some_and(|id| !alive_with(&state.project_root, id, exact))
+                .then_some(("withdrawn", "connection_closed")),
         };
         if let Some((status, reason)) = reason {
             close(row, status, reason);
@@ -246,7 +236,7 @@ fn refresh_inner(state: &mut State, exact: bool) {
     }
 }
 
-/// Keep a full day after the review deadline for outcome reconciliation. The
+/// Keep a full day after a review closes for outcome reconciliation. The
 /// receipt of the write that produced the current policy survives
 /// independently of this recovery window.
 pub(super) fn reclaim(state: &mut State) {
@@ -258,14 +248,39 @@ pub(super) fn reclaim(state: &mut State) {
             || row
                 .interaction
                 .as_ref()
-                .is_none_or(|i| now <= i.expires_at_ms.saturating_add(24 * 60 * 60 * 1000))
+                .is_none_or(|i| now <= i.settled_at_ms.saturating_add(RECOVERY_MS))
     });
 }
 pub(super) fn close(row: &mut Proposal, status: &str, reason: &str) {
     if row.status == "pending" {
         row.status = status.into();
         row.closed_reason = Some(reason.into());
+        if let Some(interaction) = &mut row.interaction {
+            interaction.settled_at_ms = clock::best_effort_ms();
+        }
     }
+}
+/// Start the recovery window when a review is applied.
+pub(super) fn applied(row: &mut Proposal) {
+    row.status = "applied".into();
+    if let Some(interaction) = &mut row.interaction {
+        interaction.settled_at_ms = clock::best_effort_ms();
+    }
+}
+/// Whether the review a `policy_apply` call names is still pending. State that
+/// cannot be read counts as pending, so its question is kept.
+pub(crate) fn still_pending(context: &Context, args: &Value) -> bool {
+    let adapter = crate::agents::review::for_context(context);
+    let Ok(state) =
+        Store::open(Path::new(&context.project_root)).and_then(|store| store.read_checkpoint())
+    else {
+        return true;
+    };
+    state
+        .proposals
+        .iter()
+        .find(|row| adapter.identifies(args, &row.id))
+        .is_some_and(|row| row.status == "pending")
 }
 pub(super) fn owns(row: &Proposal, context: &Context) -> bool {
     row.retry_owner == context.retry_owner()

@@ -131,7 +131,8 @@ Accepting an intermediate page applies nothing. The agent repeats the same call
 using the returned `retry_arguments` to show the next page. Only acceptance of
 the final page applies the complete change, after checking that the reviewed
 files are still current. Declining or cancelling any page discards that review.
-An abandoned review expires after five minutes without progress.
+An unanswered review stays open until you answer it or the agent session's
+connection ends.
 
 New Codex setups let valid Ask requests proceed by default, including unmatched
 requests and Strict-profile Asks. Existing Block or Allow choices are preserved;

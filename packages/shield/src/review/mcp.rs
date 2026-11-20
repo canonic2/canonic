@@ -275,12 +275,9 @@ impl From<crate::policy::Error> for Failure {
     }
 }
 
-type AdminReview = (
-    std::time::Instant,
-    String,
-    super::admin::Prepared,
-    Option<admin_pages::Pages>,
-);
+/// A retained administrative plan, kept until it is answered, discarded or its
+/// connection ends; age never discards it.
+type AdminReview = (String, super::admin::Prepared, Option<admin_pages::Pages>);
 
 pub(crate) struct Connection {
     owner: Mutex<Option<super::proposal_lifecycle::Lease>>,
@@ -432,14 +429,11 @@ pub(crate) fn admin_confirmation(
     checkpoint()?;
     {
         let mut pending = connection.admin.lock().map_err(|_| Error::Locked)?;
-        pending
-            .retain(|_, (created, _, _, _)| created.elapsed() < std::time::Duration::from_mins(5));
         let key = admin_key(name, args);
-        if let Some((id, entry)) = pending.iter_mut().find(|(_, (_, candidate, _, pages))| {
+        if let Some((id, entry)) = pending.iter_mut().find(|(_, (candidate, _, pages))| {
             *candidate == key && pages.as_ref().is_some_and(|pages| !pages.awaiting)
         }) {
-            let message = entry.3.as_mut().expect("paged review").present()?;
-            entry.0 = std::time::Instant::now();
+            let message = entry.2.as_mut().expect("paged review").present()?;
             return Ok(Some((message, *id)));
         }
         if pending.len() >= 8 {
@@ -454,7 +448,6 @@ pub(crate) fn admin_confirmation(
         .admin
         .lock()
         .map_err(|_| Error::Invalid("administrative review state invalid"))?;
-    pending.retain(|_, (created, _, _, _)| created.elapsed() < std::time::Duration::from_mins(5));
     if pending.len() >= 8 {
         return Err(Error::Overloaded);
     }
@@ -483,7 +476,7 @@ pub(crate) fn admin_confirmation(
     let id = connection
         .admin_sequence
         .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    pending.insert(id, (std::time::Instant::now(), key, prepared, pages));
+    pending.insert(id, (key, prepared, pages));
     Ok((!reconciled).then_some((message, id)))
 }
 
@@ -505,21 +498,16 @@ fn admin_call(
     } else {
         let mut pending = connection.admin.lock().map_err(|_| Error::Locked)?;
         let key = admin_key(name, args);
-        let completed = pending
-            .iter()
-            .find_map(|(id, (_, candidate, prepared, _))| {
-                (candidate == &key && prepared.committed_result().is_some()).then_some(*id)
-            });
+        let completed = pending.iter().find_map(|(id, (candidate, prepared, _))| {
+            (candidate == &key && prepared.committed_result().is_some()).then_some(*id)
+        });
         completed.and_then(|id| pending.remove(&id))
     };
-    if let Some((created, key, prepared, mut pages)) = retained {
+    if let Some((key, prepared, mut pages)) = retained {
         if !confirmed && prepared.committed_result().is_none() {
             return Err(Error::ApprovalRequired);
         }
         if key != admin_key(name, args) {
-            return Err(Error::StaleSnapshot);
-        }
-        if created.elapsed() >= std::time::Duration::from_mins(5) {
             return Err(Error::StaleSnapshot);
         }
         if let Some(page_state) = &mut pages {
@@ -541,7 +529,7 @@ fn admin_call(
                 if pending.len() >= 8 {
                     return Err(Error::Overloaded);
                 }
-                pending.insert(id, (std::time::Instant::now(), key, prepared, pages.take()));
+                pending.insert(id, (key, prepared, pages.take()));
                 return Ok(result);
             }
         }

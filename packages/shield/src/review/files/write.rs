@@ -401,7 +401,7 @@ fn applied(state: &mut State, context: &Context, id: &str, mechanism: &str) -> R
     if row.status != "pending" {
         return Err(Error::StaleSnapshot);
     }
-    row.status = "applied".into();
+    crate::review::proposal_lifecycle::applied(row);
     row.operator = Some(json!({"operator_id":null,"display_name":null,"mechanism":mechanism}));
     Ok(())
 }

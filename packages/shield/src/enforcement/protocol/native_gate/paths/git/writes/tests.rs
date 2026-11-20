@@ -49,6 +49,10 @@ fn asked(root: &Path, arguments: &[&str]) -> Result<Vec<Vec<String>>, Protection
             }
             Query::Untracked { .. } => vec!["untracked".to_owned()],
             Query::Stash { reference, .. } => vec!["stash".to_owned(), reference],
+            Query::Rebase { step, paths } => {
+                assert!(paths.contains(&root.join(".shield")), "{arguments:?}");
+                vec!["rebase".to_owned(), format!("{step:?}")]
+            }
         })
         .collect())
 }
@@ -148,6 +152,31 @@ fn tree_changing_commands_ask_git_whether_the_policy_files_change() {
 }
 
 #[test]
+fn rebase_steps_ask_git_about_the_rebase_in_progress() {
+    let (_folder, root) = project();
+    let remaining = vec![vec!["rebase".to_owned(), "Remaining".to_owned()]];
+    for arguments in [
+        &["rebase", "--continue"][..],
+        &["-c", "core.editor=true", "rebase", "--continue"],
+        &["-c", "sequence.editor=:", "rebase", "--continue"],
+    ] {
+        assert_eq!(
+            asked(&root, arguments),
+            Ok(remaining.clone()),
+            "{arguments:?}"
+        );
+    }
+    assert_eq!(
+        asked(&root, &["rebase", "--skip"]),
+        Ok(vec![vec!["HEAD".to_owned()], remaining[0].clone()])
+    );
+    assert_eq!(
+        asked(&root, &["rebase", "--abort"]),
+        Ok(vec![vec!["rebase".to_owned(), "Abort".to_owned()]])
+    );
+}
+
+#[test]
 fn commands_that_keep_the_tree_ask_nothing_and_unpredictable_ones_ask() {
     let (_folder, root) = project();
     // Writes that leave the working tree, or write only the paths the path
@@ -184,8 +213,7 @@ fn commands_that_keep_the_tree_ask_nothing_and_unpredictable_ones_ask() {
         &["switch", "--orphan", "acme-empty"],
         &["rebase", "-i", "HEAD~3"],
         &["rebase", "--onto", "main", "acme-a"],
-        &["rebase", "--continue"],
-        &["rebase", "--abort"],
+        &["rebase", "--continue", "--no-verify"],
         &["rebase", "main", "acme-topic"],
         &["cherry-pick", "main~3..main"],
         &["cherry-pick", "--continue"],
@@ -195,8 +223,12 @@ fn commands_that_keep_the_tree_ask_nothing_and_unpredictable_ones_ask() {
         &["sparse-checkout", "set", "src"],
         &["filter-branch", "--tree-filter", "true"],
         &["update-index", "--index-info"],
-        // Settings and other repositories change what Git reads.
+        // Settings and other repositories change what Git reads; an editor
+        // other than a no-op runs a program that can write files.
         &["-c", "core.useReplaceRefs=false", "reset", "--hard"],
+        &["-c", "core.editor=vim", "rebase", "--continue"],
+        &["-c", "core.editor=true ; vim", "rebase", "--continue"],
+        &["--config-env", "core.editor=EDITOR", "rebase", "--continue"],
         &["--no-replace-objects", "switch", "acme-branch"],
         &["--git-dir", "elsewhere.git", "switch", "acme-branch"],
         &["--exec-path=elsewhere", "switch", "acme-branch"],
@@ -741,6 +773,194 @@ fn real_git_answers_whether_committed_content_changes_the_policy_files() {
     // Switching to a branch whose policy files match the working tree is
     // ordinary.
     assert!(level(&["switch", "acme-same"], &root) == Protection::None);
+}
+
+/// Starts `git rebase <options> <upstream>` on `branch`, which stops on its
+/// first commit's conflict.
+#[cfg(not(windows))]
+fn stopped_rebase(root: &Path, branch: &str, upstream: &str, options: &[&str]) {
+    git(root, &["switch", "-q", branch]);
+    let output = crate::test_support::git()
+        .args(["-c", "user.name=Acme", "-c", "user.email=acme@example.com"])
+        .current_dir(root)
+        .arg("rebase")
+        .args(options)
+        .arg(upstream)
+        .output()
+        .unwrap();
+    assert!(!output.status.success(), "the rebase stops on a conflict");
+    let todo = git(
+        root,
+        &["rev-parse", "--git-path", "rebase-merge/git-rebase-todo"],
+    );
+    assert!(
+        root.join(todo).is_file(),
+        "the merge backend keeps a todo list"
+    );
+}
+
+#[test]
+#[cfg(not(windows))]
+fn real_git_continues_skips_and_aborts_rebases_by_their_remaining_commits() {
+    let (_folder, root) = project();
+    std::fs::write(root.join("src/app.txt"), "acme\n").unwrap();
+    git(&root, &["init", "-q"]);
+    git(&root, &["add", "--", ".shield", "src"]);
+    git(&root, &["commit", "-q", "-m", "Acme base"]);
+    // Each topic's first commit conflicts with main; its later commits are
+    // what continuing applies.
+    for (branch, file, content) in [
+        ("acme-clean", "src/other.txt", "acme other\n"),
+        (
+            "acme-policy",
+            ".shield/config.yml",
+            "schema_version: 1\n# acme open\n",
+        ),
+    ] {
+        git(&root, &["switch", "-q", "-c", branch, "main"]);
+        std::fs::write(root.join("src/app.txt"), format!("acme {branch}\n")).unwrap();
+        git(&root, &["commit", "-q", "-am", "Acme topic"]);
+        std::fs::write(root.join(file), content).unwrap();
+        git(&root, &["add", "--", file]);
+        git(&root, &["commit", "-q", "-m", "Acme follow-up"]);
+    }
+    git(&root, &["switch", "-q", "main"]);
+    std::fs::write(root.join("src/app.txt"), "acme main\n").unwrap();
+    git(&root, &["commit", "-q", "-am", "Acme main"]);
+    let level = |arguments: &[&str]| policy_files(arguments, &root, &root, true, guard()).0;
+
+    stopped_rebase(&root, "acme-clean", "main", &[]);
+    for arguments in [
+        &["rebase", "--continue"][..],
+        &["-c", "core.editor=true", "rebase", "--continue"],
+        &["rebase", "--skip"],
+        &["rebase", "--abort"],
+    ] {
+        assert_eq!(level(arguments), Protection::None, "{arguments:?}");
+    }
+    assert_eq!(
+        level(&["-c", "core.editor=vim", "rebase", "--continue"]),
+        Protection::Undetermined
+    );
+    // A todo step that runs a command applies changes no query names.
+    let todo = root.join(git(
+        &root,
+        &["rev-parse", "--git-path", "rebase-merge/git-rebase-todo"],
+    ));
+    let listed = std::fs::read_to_string(&todo).unwrap();
+    std::fs::write(&todo, format!("{listed}exec make\n")).unwrap();
+    assert_eq!(level(&["rebase", "--continue"]), Protection::Undetermined);
+    // State that is not a regular file is unknown, without waiting on a pipe.
+    std::fs::remove_file(&todo).unwrap();
+    nix::unistd::mkfifo(
+        &todo,
+        nix::sys::stat::Mode::S_IRUSR | nix::sys::stat::Mode::S_IWUSR,
+    )
+    .unwrap();
+    assert_eq!(level(&["rebase", "--continue"]), Protection::Undetermined);
+    std::fs::remove_file(&todo).unwrap();
+    std::fs::write(&todo, listed).unwrap();
+    // Skipping resets the working tree, discarding a policy edit there.
+    std::fs::write(
+        root.join(".shield/config.yml"),
+        "schema_version: 1\n# acme edit\n",
+    )
+    .unwrap();
+    assert_eq!(level(&["rebase", "--skip"]), Protection::Undetermined);
+    git(&root, &["checkout", "--", ".shield/config.yml"]);
+    git(&root, &["rebase", "--abort"]);
+
+    // An autostash is applied when the rebase finishes or aborts: one holding
+    // only other edits is ordinary, one holding a policy edit is not.
+    for (file, content, expected) in [
+        ("src/app.txt", "acme stashed\n", Protection::None),
+        (
+            ".shield/config.yml",
+            "schema_version: 1\n# acme stashed\n",
+            Protection::Undetermined,
+        ),
+    ] {
+        git(&root, &["switch", "-q", "acme-clean"]);
+        std::fs::write(root.join(file), content).unwrap();
+        stopped_rebase(&root, "acme-clean", "main", &["--autostash"]);
+        for arguments in [&["rebase", "--continue"][..], &["rebase", "--abort"]] {
+            assert_eq!(level(arguments), expected, "{file}: {arguments:?}");
+        }
+        git(&root, &["rebase", "--abort"]);
+        git(&root, &["checkout", "--", file]);
+    }
+
+    stopped_rebase(&root, "acme-policy", "main", &[]);
+    for arguments in [
+        &["rebase", "--continue"][..],
+        &["rebase", "--skip"],
+        // The original tip has the changed policy file.
+        &["rebase", "--abort"],
+    ] {
+        assert_eq!(level(arguments), Protection::Undetermined, "{arguments:?}");
+    }
+    git(&root, &["rebase", "--abort"]);
+    // With no rebase in progress Git refuses, and the query cannot tell.
+    assert_eq!(level(&["rebase", "--continue"]), Protection::Undetermined);
+}
+
+#[test]
+#[cfg(not(windows))]
+fn real_git_rebase_continue_asks_when_upstream_renamed_a_file_into_the_policy_folder() {
+    let (_folder, root) = project();
+    std::fs::write(root.join("src/app.txt"), "acme\n").unwrap();
+    std::fs::write(root.join("src/seed.yml"), "acme: 1\n").unwrap();
+    git(&root, &["init", "-q"]);
+    git(&root, &["add", "--", ".shield", "src"]);
+    git(&root, &["commit", "-q", "-m", "Acme base"]);
+    // The topic conflicts first, then edits a file upstream moved into .shield.
+    git(&root, &["switch", "-q", "-c", "acme-topic"]);
+    std::fs::write(root.join("src/app.txt"), "acme topic\n").unwrap();
+    git(&root, &["commit", "-q", "-am", "Acme topic"]);
+    std::fs::write(root.join("src/seed.yml"), "acme: 2\n").unwrap();
+    git(&root, &["commit", "-q", "-am", "Acme seed"]);
+    git(&root, &["switch", "-q", "main"]);
+    std::fs::write(root.join("src/app.txt"), "acme main\n").unwrap();
+    git(&root, &["commit", "-q", "-am", "Acme main"]);
+    git(&root, &["mv", "src/seed.yml", ".shield/seed.yml"]);
+    git(&root, &["commit", "-q", "-m", "Acme move"]);
+    stopped_rebase(&root, "acme-topic", "main", &[]);
+    // The pending commit changes only src/seed.yml against its parent, but
+    // replaying it edits .shield/seed.yml.
+    assert_eq!(
+        policy_files(&["rebase", "--continue"], &root, &root, true, guard()).0,
+        Protection::Undetermined
+    );
+    std::fs::write(root.join("src/app.txt"), "acme resolved\n").unwrap();
+    git(&root, &["add", "--", "src/app.txt"]);
+    git(&root, &["-c", "core.editor=true", "rebase", "--continue"]);
+    assert_eq!(
+        std::fs::read_to_string(root.join(".shield/seed.yml")).unwrap(),
+        "acme: 2\n"
+    );
+}
+
+#[test]
+#[cfg(not(windows))]
+fn real_git_stash_apply_asks_when_a_rename_carries_a_stashed_edit_into_the_policy_folder() {
+    let (_folder, root) = project();
+    std::fs::write(root.join("src/seed.yml"), "acme: 1\n").unwrap();
+    git(&root, &["init", "-q"]);
+    git(&root, &["add", "--", ".shield", "src"]);
+    git(&root, &["commit", "-q", "-m", "Acme base"]);
+    std::fs::write(root.join("src/seed.yml"), "acme: 2\n").unwrap();
+    git(&root, &["stash", "-q"]);
+    let level = || policy_files(&["stash", "apply"], &root, &root, true, guard()).0;
+    // The stash changes only src/seed.yml against its base.
+    assert_eq!(level(), Protection::None);
+    git(&root, &["mv", "src/seed.yml", ".shield/seed.yml"]);
+    git(&root, &["commit", "-q", "-m", "Acme move"]);
+    assert_eq!(level(), Protection::Undetermined);
+    git(&root, &["stash", "apply", "-q"]);
+    assert_eq!(
+        std::fs::read_to_string(root.join(".shield/seed.yml")).unwrap(),
+        "acme: 2\n"
+    );
 }
 
 #[test]

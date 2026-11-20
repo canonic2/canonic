@@ -623,9 +623,10 @@ impl<'a> Invocation<'a> {
                 directories.push(*arguments.get(index + 1)?);
                 index += 2;
             } else if word == "-c" || word == "--config-env" {
-                execution_override |= overrides_execution(arguments.get(index + 1)?);
-                elsewhere |= overrides_repository(arguments.get(index + 1)?);
-                ordinary = false;
+                let config = arguments.get(index + 1)?;
+                execution_override |= overrides_execution(config);
+                elsewhere |= overrides_repository(config);
+                ordinary &= word == "-c" && crate::location::git_noop_editor(config);
                 index += 2;
             } else if let Some(config) = word.strip_prefix("--config-env=") {
                 execution_override |= overrides_execution(config);

@@ -124,7 +124,7 @@ impl Reject {
             store.hydrate_proposal(&mut state.proposals[index])?;
             if state.proposals[index].public() != self.before { return Err(Error::StaleSnapshot); }
             let operator = json!({"operator_id":null,"display_name":null,"mechanism":if context.surface == "cli" {"operator-cli"} else {"host-elicitation"}});
-            state.proposals[index].status = "rejected".into();
+            crate::review::proposal_lifecycle::close(&mut state.proposals[index], "rejected", "rejected");
             state.proposals[index].operator = Some(operator.clone());
             let mut event = state.event("proposal_rejected",context,json!({"proposal_id":self.id}),json!({"operator_reason":self.reason}),json!({"policy_revision":state.policy_revision}));
             event["operator"] = operator;

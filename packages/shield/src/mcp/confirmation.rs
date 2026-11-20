@@ -1,11 +1,10 @@
-//! Connection-owned, bounded, expiring modern confirmation state. Echoed state
-//! selects retained arguments; it never supplies authorization by itself.
+//! Connection-owned, bounded modern confirmation state. A question stays
+//! answerable until it is answered, cancelled or its connection ends; age never
+//! revokes it. Echoed state selects retained arguments; it never supplies
+//! authorization by itself.
 use canonic_mcp_kit::{Decision, RequestContext, RpcError, ToolCall, rpc};
 use ring::rand::{SecureRandom, SystemRandom};
-use std::{
-    collections::BTreeMap,
-    time::{Duration, Instant},
-};
+use std::collections::BTreeMap;
 
 /// Tools whose call waits for the person's answer to Shield's form.
 pub(super) const CONFIRMED_TOOLS: &[&str] = &[
@@ -24,6 +23,15 @@ pub(super) const CONFIRMED_TOOLS: &[&str] = &[
     "mcp_setup",
 ];
 
+/// Why a confirmation could not start.
+#[derive(Debug)]
+pub(super) enum Refusal {
+    /// Eight questions are open; the review stays pending for a later attempt.
+    Full(RpcError),
+    /// The host cannot present this confirmation.
+    Unavailable,
+}
+
 #[derive(Default)]
 pub(super) struct Confirmations {
     pending: BTreeMap<String, Pending>,
@@ -33,7 +41,6 @@ struct Pending {
     guard: Option<super::PolicyWait>,
     tool: String,
     arguments: serde_json::Value,
-    expires: Instant,
     review_binding: Option<u64>,
 }
 
@@ -56,33 +63,57 @@ impl Confirmations {
         call: &ToolCall,
         message: &str,
         review_binding: Option<u64>,
-        guard: Option<super::PolicyWait>,
-    ) -> Result<canonic_mcp_kit::modern::InputRequiredResult, RpcError> {
-        self.pending
-            .retain(|_, pending| pending.expires > Instant::now());
+        mut guard: Option<super::PolicyWait>,
+    ) -> Result<canonic_mcp_kit::modern::InputRequiredResult, Refusal> {
         if self.pending.len() >= 8 {
-            return Err(RpcError::new(
+            self.release_closed_reviews();
+        }
+        if self.pending.len() >= 8 {
+            // A full queue leaves the new review pending for a later attempt.
+            if let Some(guard) = &mut guard {
+                guard.disarm();
+            }
+            return Err(Refusal::Full(RpcError::new(
                 rpc::INVALID_PARAMS,
-                "Too many pending confirmations",
-            ));
+                "Too many pending confirmations; answer or cancel an open one, then retry",
+            )));
         }
         let mut bytes = [0_u8; 32];
         SystemRandom::new()
             .fill(&mut bytes)
-            .map_err(|_| RpcError::new(rpc::INTERNAL_ERROR, "Confirmation entropy unavailable"))?;
+            .map_err(|_| Refusal::Unavailable)?;
         let token = crate::policy::fingerprint(&bytes);
-        let result = request.confirmation(message, &token)?;
+        let result = request
+            .confirmation(message, &token)
+            .map_err(|_| Refusal::Unavailable)?;
         self.pending.insert(
             token,
             Pending {
                 guard,
                 tool: call.name.clone(),
                 arguments: call.arguments.clone(),
-                expires: Instant::now() + Duration::from_mins(5),
                 review_binding,
             },
         );
         Ok(result)
+    }
+
+    /// Free the slots of `policy_apply` questions whose review has closed, as
+    /// when a newer proposal superseded it and the host dropped the old form.
+    fn release_closed_reviews(&mut self) {
+        self.pending.retain(|_, pending| match &mut pending.guard {
+            Some(guard)
+                if guard.armed
+                    && !crate::review::proposal_lifecycle::still_pending(
+                        &guard.context,
+                        &guard.arguments,
+                    ) =>
+            {
+                guard.disarm();
+                false
+            }
+            _ => true,
+        });
     }
 
     pub(super) fn resume(
@@ -93,15 +124,14 @@ impl Confirmations {
         let invalid = || {
             RpcError::new(
                 rpc::INVALID_PARAMS,
-                "Invalid, expired or consumed confirmation; inspect the proposal and receipt before retrying",
+                "Invalid or consumed confirmation; inspect the proposal and receipt before retrying",
             )
         };
         let token = request.request_state.as_ref().ok_or_else(invalid)?;
         // Consume on any retry, including decline, changed arguments or missing
         // capability. Connection destruction revokes every remaining token.
         let mut pending = self.pending.remove(token).ok_or_else(invalid)?;
-        if pending.expires <= Instant::now()
-            || !CONFIRMED_TOOLS.contains(&call.name.as_str())
+        if !CONFIRMED_TOOLS.contains(&call.name.as_str())
             || pending.tool != call.name
             || pending.arguments != call.arguments
         {
@@ -151,7 +181,7 @@ mod tests {
     }
 
     #[test]
-    fn expired_and_exhausted_continuations_refuse_without_reusing_state() {
+    fn continuations_are_single_use_bounded_and_freed_by_answer_or_cancel() {
         let call = ToolCall {
             name: "policy_apply".into(),
             arguments: json!({}),
@@ -169,11 +199,10 @@ mod tests {
                 .begin(&request, &call, "Review", None, None)
                 .is_err()
         );
+        // An answer is accepted however long the question was open, once.
         let token = confirmations.pending.keys().next().unwrap().clone();
-        confirmations.pending.get_mut(&token).unwrap().expires = Instant::now()
-            .checked_sub(Duration::from_secs(1))
-            .expect("fixture clock can represent an expired continuation");
-        assert!(confirmations.resume(&context(Some(&token)), &call).is_err());
+        let (decision, _) = confirmations.resume(&context(Some(&token)), &call).unwrap();
+        assert_eq!(decision, Decision::Accepted);
         assert!(confirmations.resume(&context(Some(&token)), &call).is_err());
         confirmations
             .begin(&request, &call, "Review", None, None)

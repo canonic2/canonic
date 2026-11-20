@@ -8,12 +8,21 @@ can receive the answer. This roadmap records planned corrections and does not
 claim implemented support or new verification.
 
 [Server options](src/mcp.rs) inherit MCP Kit's live-owner legacy waits and
-suspended execution budgets. Shield still assigns five-minute expiry to
-[modern confirmations](src/mcp/confirmation.rs) and
-[modern guided forms](src/mcp/elicitation.rs). The latter stores at most eight
-forms and also bounds rounds. A driver-only fix leaves modern retries affected.
-These paths serve policy/administrative decisions and guided configuration;
-waiting itself must neither grant authority nor invalidate an unchanged answer.
+suspended execution budgets. [Policy proposals](src/review/proposal_lifecycle.rs),
+[modern confirmations](src/mcp/confirmation.rs),
+[modern guided forms](src/mcp/elicitation.rs) and retained administrative
+reviews ([review/mcp.rs](src/review/mcp.rs)) carry no age expiry: they close on
+answer, cancellation, supersession, base change or connection loss, within
+count bounds. These paths serve policy/administrative decisions and guided
+configuration; waiting itself must neither grant authority nor invalidate an
+unchanged answer.
+
+Native one-time approval requests ([read](src/review/read_approval.rs),
+[run](src/review/run_approval.rs), [hook](src/review/hook_approval.rs)) still
+close pending requests ten minutes after creation, and
+[session grant](src/review/session_grants.rs) offers keep their pending window.
+Separate those patience windows from issued-grant lifetimes, which are genuine
+authority validity.
 
 [Preparation Tasks](src/mcp/tasks.rs) produce preparation results without a
 demonstrated human-input wait. Adopt shared snapshot retention helpers if task
@@ -37,8 +46,10 @@ green baseline.
 ## Roadmap
 
 - [ ] **1. Keep confirmation and guided-input state live with their owners.**
-  Adopt the shared driver model and remove generic five-minute eviction/checks
-  from both modern stores. Define explicit cancellation and connection teardown
+  Done: age expiry removed from policy proposals, both modern stores and
+  administrative reviews, with delayed-answer tests. Remaining: remove the
+  pending-request window from native read/run/hook approvals and session-grant
+  offers, keeping grant lifetimes. Define explicit cancellation and connection teardown
   for retained workflows without treating cancellation of a settled interim RPC
   as revocation. Preserve opaque tokens, scope/call binding, single use, bounded
   rounds and count/byte limits. Audit task-policy declarations and reachable

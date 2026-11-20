@@ -32,7 +32,7 @@ fn record_only_lifecycle_leaves_reviewed_paths_and_orphan_leases_untouched() {
     fs::write(&orphan, "preserved orphan").unwrap();
     assert!(!alive_with(&context.project_root, "metadata-orphan", false));
     assert_eq!(fs::read_to_string(&orphan).unwrap(), "preserved orphan");
-    assert!(!alive(&context.project_root, "metadata-orphan"));
+    assert!(!alive_with(&context.project_root, "metadata-orphan", true));
     assert!(!orphan.exists());
 }
 fn prepare(context: &Context, connection: &Connection, id: &str) -> Value {
@@ -248,51 +248,119 @@ fn host_outcomes_close_attempts_and_never_replace_a_committed_receipt() {
 }
 
 #[test]
-fn expiry_and_legacy_migration_close_candidates_without_approval() {
-    for legacy in [false, true] {
-        let (root, context, connection) = fixture();
-        let proposed = prepare(&context, &connection, "read");
-        Store::open(root.path())
-            .unwrap()
-            .update_checkpoint(&context, &|| Ok(()), |state| {
-                if legacy {
-                    state.proposals[0].interaction = None;
-                } else {
-                    state.proposals[0]
-                        .interaction
-                        .as_mut()
-                        .unwrap()
-                        .expires_at_ms = 0;
-                }
-                Ok(Value::Null)
-            })
-            .unwrap();
-        let outcome = receipt(&context, &connection, &proposed["proposal_id"]);
-        assert_eq!(outcome["status"], "withdrawn");
-        assert_eq!(
-            outcome["closed_reason"],
-            if legacy {
-                "legacy_interaction"
-            } else {
-                "expired"
-            }
-        );
-        let refused = mcp::call_with_confirmation(
-            &context,
-            &connection,
-            "policy_apply",
-            &proposed["apply_arguments"],
-            &|| Ok(()),
-            true,
-        );
-        assert!(
-            refused["error"]["message"]
-                .as_str()
+fn a_live_connections_review_applies_however_long_the_person_takes() {
+    let (root, context, connection) = fixture();
+    let proposed = prepare(&context, &connection, "read");
+    // A review prepared long ago, as a person stepping away leaves it.
+    Store::open(root.path())
+        .unwrap()
+        .update_checkpoint(&context, &|| Ok(()), |state| {
+            state.proposals[0]
+                .interaction
+                .as_mut()
                 .unwrap()
-                .contains("prepare a fresh change"),
-            "{refused}"
-        );
-    }
+                .settled_at_ms = 0;
+            Ok(Value::Null)
+        })
+        .unwrap();
+    assert_eq!(
+        receipt(&context, &connection, &proposed["proposal_id"])["status"],
+        "pending"
+    );
+    let applied = mcp::call_with_confirmation(
+        &context,
+        &connection,
+        "policy_apply",
+        &proposed["apply_arguments"],
+        &|| Ok(()),
+        true,
+    );
+    assert!(applied["error"].is_null(), "{applied}");
+    assert_eq!(applied["data"]["status"], "applied", "{applied}");
+    // Its recovery window starts at application: after another policy write
+    // and a later reclamation, the receipt is still readable.
+    let next = prepare(&context, &connection, "next");
+    let written = mcp::call_with_confirmation(
+        &context,
+        &connection,
+        "policy_apply",
+        &next["apply_arguments"],
+        &|| Ok(()),
+        true,
+    );
+    assert!(written["error"].is_null(), "{written}");
+    prepare(&context, &connection, "later");
+    assert_eq!(
+        receipt(&context, &connection, &proposed["proposal_id"])["status"],
+        "applied"
+    );
+}
+
+#[test]
+fn an_operator_rejection_tells_the_agent_not_to_prepare_it_again() {
+    let (root, context, connection) = fixture();
+    let proposed = prepare(&context, &connection, "read");
+    let mut operator = context.clone();
+    operator.surface = "cli".into();
+    crate::review::transition(
+        &operator,
+        proposed["proposal_id"].as_str().unwrap(),
+        "reject",
+        &|| Ok(()),
+    )
+    .unwrap();
+    let row = &Store::open(root.path())
+        .unwrap()
+        .read_checkpoint()
+        .unwrap()
+        .proposals[0];
+    assert_eq!(row.closed_reason.as_deref(), Some("rejected"));
+    let refused = mcp::call_with_confirmation(
+        &context,
+        &connection,
+        "policy_apply",
+        &proposed["apply_arguments"],
+        &|| Ok(()),
+        true,
+    );
+    assert!(
+        refused["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("the person declined this review"),
+        "{refused}"
+    );
+}
+
+#[test]
+fn legacy_reviews_close_without_approval_and_name_the_retry() {
+    let (root, context, connection) = fixture();
+    let proposed = prepare(&context, &connection, "read");
+    Store::open(root.path())
+        .unwrap()
+        .update_checkpoint(&context, &|| Ok(()), |state| {
+            state.proposals[0].interaction = None;
+            Ok(Value::Null)
+        })
+        .unwrap();
+    let outcome = receipt(&context, &connection, &proposed["proposal_id"]);
+    assert_eq!(outcome["status"], "withdrawn");
+    assert_eq!(outcome["closed_reason"], "legacy_interaction");
+    let refused = mcp::call_with_confirmation(
+        &context,
+        &connection,
+        "policy_apply",
+        &proposed["apply_arguments"],
+        &|| Ok(()),
+        true,
+    );
+    assert!(
+        refused["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("call the tool that prepared it again"),
+        "{refused}"
+    );
 }
 
 #[test]
@@ -388,7 +456,7 @@ fn reclamation_preserves_live_work_current_receipts_and_the_recovery_window() {
         .update_checkpoint(&context, &|| Ok(()), |state| {
             for row in &mut state.proposals {
                 if row.id == committed["proposal_id"] || row.id == old["proposal_id"] {
-                    row.interaction.as_mut().unwrap().expires_at_ms = 0;
+                    row.interaction.as_mut().unwrap().settled_at_ms = 0;
                 }
             }
             reclaim(state);
@@ -521,8 +589,8 @@ fn lease_startup_reclaims_unlocked_orphans_and_preserves_live_connections() {
     let second = Lease::new(&another).unwrap();
     assert!(!orphan.exists());
     assert!(unrelated.exists());
-    assert!(alive(&context.project_root, "acme-connection"));
-    assert!(alive(&context.project_root, "another"));
+    assert!(alive_with(&context.project_root, "acme-connection", true));
+    assert!(alive_with(&context.project_root, "another", true));
     drop((live, second));
     assert!(!lease_path(root.path().to_str().unwrap(), "another").exists());
 }

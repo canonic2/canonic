@@ -180,9 +180,9 @@ fn validate_live(proposal: &Proposal, context: &Context, revision: &str) -> Resu
         return Err(Error::StaleSnapshot);
     }
     if proposal.status != "pending" {
-        return Err(Error::Invalid(
-            "this review is closed; inspect it with policy_show and prepare a fresh change with a new idempotency_key if still authorized",
-        ));
+        return Err(Error::Invalid(closed_message(
+            proposal.closed_reason.as_deref(),
+        )));
     }
     if proposal.policy_revision != revision {
         return Err(Error::StaleSnapshot);
@@ -193,6 +193,22 @@ fn validate_live(proposal: &Proposal, context: &Context, revision: &str) -> Resu
         ));
     }
     Ok(())
+}
+
+/// Why a review cannot be applied and the one call that continues, so an agent
+/// retries the tool that prepared it instead of searching for a workflow.
+fn closed_message(reason: Option<&str>) -> &'static str {
+    match reason {
+        Some("approval_declined" | "rejected") => {
+            "the person declined this review; do not prepare it again unless they ask"
+        }
+        Some("superseded") => {
+            "a newer review from this connection replaced this one; apply that review's apply_arguments instead"
+        }
+        _ => {
+            "this review closed before approval; if the user still wants the change, call the tool that prepared it again (for example pack_update) with a new idempotency_key"
+        }
+    }
 }
 
 /// Every input to adapter presentation, except mutable status/receipt fields.

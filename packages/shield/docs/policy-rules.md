@@ -429,8 +429,9 @@ For example, `git diff HEAD --output=review.diff` can satisfy
 `targets: {action: write, all: {within: {root: write}}}` when the output
 resolves inside a writable root. Relative destinations use Git's working
 directory, including changes from `-C` that the policy normalizes. The model
-accepts one leading `--no-pager` or `-P` and leaves other global options
-unverified.
+accepts one leading `--no-pager` or `-P`, then one no-op editor setting
+(`-c core.editor=true`, `-c core.editor=:`, `-c sequence.editor=true` or
+`-c sequence.editor=:`), and leaves other global options unverified.
 
 Shield checks every `--output=FILE` and `--output FILE` before `--`.
 Recognized options such as `--line-prefix` consume their values first.

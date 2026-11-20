@@ -571,12 +571,12 @@ pub(crate) fn transition(
         }
         if proposal.status != "pending" { return Err(Error::Invalid("proposal is terminal or stale")); }
         if proposal.policy_revision != state.policy_revision {
-            state.proposals[index].status = "stale".into();
+            proposal_lifecycle::close(&mut state.proposals[index], "stale", "base_changed");
             let event = state.event("proposal_stale", context, json!({"proposal_id":id}), json!({}), json!({"policy_revision":state.policy_revision}));
             state.record(event);
             return Ok(json!({"schema_version":1,"error":{"code":"stale-proposal"},"proposal":state.proposals[index].public()}));
         }
-        state.proposals[index].status = "withdrawn".into();
+        proposal_lifecycle::close(&mut state.proposals[index], "withdrawn", "withdrawn");
         state.proposals[index].operator = None;
         let mut event = state.event("proposal_withdrawn", context, json!({"proposal_id":id}), json!({"operator_reason":null}),
             json!({"policy_revision":state.policy_revision}));
