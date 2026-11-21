@@ -5,24 +5,24 @@ from `packages/mcp-kit`.
 
 This is one unpublished Cargo library package with a test-only worker fixture
 executable and no product CLI. It uses
-Rust nightly-2026-04-16 (rustc 1.97), Rust 2024, a committed `Cargo.lock`, rustfmt, strict Clippy,
+Rust nightly-2026-11-09 (rustc 1.102), Rust 2024, a committed `Cargo.lock`, rustfmt, strict Clippy,
 nextest, doctests, rustdoc and cargo-deny.
 
 | Task | Command (from this directory) |
 | --- | --- |
 | Formatting | `cargo fmt --check` |
-| Lint | `cargo clippy --locked --all-targets --all-features -- -D warnings` |
+| Lint | `cargo clippy --locked --all-targets --all-features` |
 | Tests | `cargo nextest run --locked --all-features` |
 | Doctests | `cargo test --doc --locked --all-features` |
 | API docs | `cargo doc --locked --all-features --no-deps --document-private-items` |
 | Dependencies | `cargo deny check` |
-| Coverage report | `make coverage` (writes `target/llvm-cov/`) |
-| Apps example's inline script and host bridge | `make test-app-ui` (Node built-in tests; no browser or network) |
-| Release build | `make build` |
+| Coverage report | `cargo llvm-cov nextest --locked --all-features --html` (writes `target/llvm-cov/`) |
+| Apps example's inline script and host bridge | `node --test examples/apps/status.test.mjs` (Node built-in tests; no browser or network) |
+| Release build | `cargo build --release --locked --all-features` |
+| Free disk space | `cargo sweep --time 3` (from cargo-sweep), while no build or test uses `target/` |
 
-`CARGO_FLAGS=--offline` uses cached dependencies. Make prefers
-`~/.cargo/bin/cargo` so rustup selects the pinned toolchain, falling back to
-Cargo on PATH. `CARGO` overrides that selection. Install the tools with:
+Add `--offline` to use cached dependencies. Run Cargo from this directory so
+rustup selects the pinned toolchain. Install the tools with:
 
 ```sh
 cargo install --locked cargo-nextest@0.9.146 cargo-deny@0.20.2 cargo-llvm-cov@0.9.1
@@ -31,32 +31,32 @@ cargo install --locked cargo-nextest@0.9.146 cargo-deny@0.20.2 cargo-llvm-cov@0.
 ## Fast iteration
 
 ```sh
-make dev
+cargo build --locked --all-features
 # Ordinary build without optional driver/dependency features:
-make dev CARGO_FEATURES=
-make test-focus FILTER='session::'
+cargo build --locked
+cargo nextest run --locked --all-features --lib 'session::'
 # Build the runnable Tasks example with the existing development profile:
-make dev CARGO_FLAGS='--example tasks'
+cargo build --locked --all-features --example tasks
 # Integration tests:
-make test-focus FILTER='scheduling::' TEST_TARGET='--test integration'
+cargo nextest run --locked --all-features --test integration 'scheduling::'
 # Process/HTTP replacement fixtures require host access in a sandbox:
-make test-focus FILTER='worker_replacement' TEST_TARGET='--test integration'
+cargo nextest run --locked --all-features --test integration worker_replacement
 # Repeat the integration tests to expose races:
-make test-focus FILTER='::' TEST_TARGET='--test integration' CARGO_FLAGS='--stress-count 30 --no-fail-fast'
+cargo nextest run --locked --all-features --test integration --stress-count 30 --no-fail-fast '::'
 ```
 
-`test-focus` requires a substring filter and defaults to `--lib`. Keep this
-package's `target/` directory between runs. To free space, run `make prune` on
-its own while no build or test uses `target/`; it deletes incremental caches and
-test binaries untouched for more than `PRUNE_DAYS` days (default 3).
+Pass `--lib` or `--test integration` with a substring filter to run focused
+tests. Keep this package's `target/` directory between runs. To free space, run
+`cargo sweep --time 3` on its own while no build or test uses `target/`; it
+deletes build output unused for more than three days.
 
-After intentionally changing dependencies, `make lock` resolves the lockfile.
+After intentionally changing dependencies, `cargo generate-lockfile` resolves the lockfile.
 Inspect its diff and preserve unrelated locked versions.
 
 ## Configuration
 
 - `Cargo.toml` owns lint policy: `unsafe_code` is forbidden, `unreachable_pub`
-  warns, Clippy pedantic and `unwrap_used` warn (errors under `-D warnings`),
+  warns, Clippy pedantic and `unwrap_used` warn (`.cargo/config.toml` denies warnings),
   `mod_module_files` enforces self-named modules, and rustdoc denies broken
   and private links.
 - `clippy.toml` allows `unwrap` in tests only.
@@ -87,21 +87,21 @@ an API, keep its rustdoc and the corresponding guide consistent.
 ## Individual Rust verification
 
 Run Rust verification categories individually and select only those needed for
-the task. A request for tests does not also request formatting, lint, type
-checking, doctests, API docs, dependency auditing or coverage. Name the selected
-commands before running them; there is no aggregate Rust check target.
-`docs` generates browsable HTML API reference in `target/doc/`; `doctest`
-executes Rust documentation examples. Run either as its own explicit category.
+the task. A request for tests does not also request formatting, lint,
+doctests, API docs, dependency auditing or coverage. Clippy also type-checks
+every target. Name the selected commands before running them; there is no
+aggregate Rust check command. `cargo doc` generates browsable HTML API
+reference in `target/doc/`; `cargo test --doc` executes Rust documentation
+examples. Run either as its own explicit category.
 Rustdoc can recheck dependencies even with `--no-deps`, which only suppresses
 their generated reference pages. Keep Cargo caches between runs.
 
 | Category | Command from this package |
 | --- | --- |
-| Apply formatting | `make format` |
-| Verify formatting | `make format-check` |
-| Strict Clippy | `make lint` |
-| Type checking | `make types` |
-| Tests | `make test` |
-| Documentation examples | `make doctest` |
-| API reference HTML | `make docs` |
-| Dependency audit | `make deps` |
+| Apply formatting | `cargo fmt` |
+| Verify formatting | `cargo fmt --check` |
+| Strict Clippy and type checking | `cargo clippy --locked --all-targets --all-features` |
+| Tests | `cargo nextest run --locked --all-features` |
+| Documentation examples | `cargo test --doc --locked --all-features` |
+| API reference HTML | `cargo doc --locked --all-features --no-deps --document-private-items` |
+| Dependency audit | `cargo deny check` |

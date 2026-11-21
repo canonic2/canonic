@@ -36,6 +36,7 @@ fn scheduler_with_progress(frames: Vec<(u64, Value)>) -> (Scheduler, Session) {
                 lane: 0,
                 key: None,
                 timeout: Duration::from_mins(1),
+                deadline: Arc::default(),
                 read_only: true,
                 progress_token: None,
             },

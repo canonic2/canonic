@@ -76,10 +76,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Empty discovery is valid: generated artifacts need not appear in resources/list.
     options.session.resources = Some(Arc::new(ResourceCatalog::new(vec![], vec![])?));
     options.session.modern = Some(ModernOptions::new(ServerInfo::new("acme", "1")));
+    #[expect(
+        clippy::bufreader_stdin,
+        reason = "stdio::serve moves the reader to another thread and StdinLock is not Send"
+    )]
+    let input = io::BufReader::new(io::stdin());
     stdio::serve(
         Arc::new(Acme),
         Arc::new(catalog),
-        io::BufReader::new(io::stdin()),
+        input,
         io::stdout(),
         &options,
     )?;

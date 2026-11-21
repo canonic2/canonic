@@ -86,6 +86,14 @@ pub trait Handler: Send + Sync + 'static {
         self.admit(request)
     }
 
+    /// What a deadline error for this request tells the client, such as
+    /// whether the work may have taken effect and how to continue. Called on
+    /// the dispatching thread at admission, after [`Handler::admit`].
+    fn deadline_messages(&self, request: &Request) -> DeadlineMessages {
+        let _ = request;
+        DeadlineMessages::default()
+    }
+
     /// Runs one request.
     fn call(&self, request: Request, context: &Context) -> Outcome;
 
@@ -234,6 +242,27 @@ pub struct Admission {
     pub timeout: Option<Duration>,
 }
 
+/// The `-32001` messages for one request; the library's own wording when `None`.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct DeadlineMessages {
+    /// The request's budget ran out before it started, so it never ran.
+    pub queued: Option<String>,
+    /// The request was stopped while running; its effects are unknown.
+    pub running: Option<String>,
+}
+
+/// When a request's active budget starts.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum BudgetStart {
+    /// At admission: time waiting in its lane's queue counts.
+    #[default]
+    Admission,
+    /// When a worker starts it: queued requests wait in admission order and
+    /// never expire before running, so slow work cannot time out the requests
+    /// behind it. The lane capacity still bounds what waits.
+    Dispatch,
+}
+
 /// One group of worker threads with its own queue.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Lane {
@@ -281,8 +310,11 @@ pub struct Options {
     pub session: SessionOptions,
     /// Worker lanes; [`Admission::lane`] indexes this list.
     pub lanes: Vec<Lane>,
-    /// The default active request budget, including queueing but excluding human waits.
+    /// The default active request budget, excluding human waits; queueing
+    /// counts unless [`Options::budget_start`] is [`BudgetStart::Dispatch`].
     pub timeout: Duration,
+    /// When each request's active budget starts.
+    pub budget_start: BudgetStart,
     /// How long running mutations continue after the input closes before
     /// they are cancelled.
     pub disconnect_grace: Duration,
@@ -305,6 +337,7 @@ impl Default for Options {
             session: SessionOptions::default(),
             lanes: vec![Lane::new("tools", 1, 8)],
             timeout: DEFAULT_TIMEOUT,
+            budget_start: BudgetStart::Admission,
             disconnect_grace: DEFAULT_DISCONNECT_GRACE,
             max_output_bytes: DEFAULT_MAX_OUTPUT_BYTES,
             observer: None,
@@ -852,9 +885,12 @@ impl<H: Handler, W: Write> Connection<H, W> {
             progress_token,
         } = work;
         let context = id.as_ref().and_then(|id| self.session.request_context(id));
-        let admission = {
+        let (admission, deadline) = {
             let _callback = self.output.trace.span(Stage::Callback);
-            self.handler.admit_context(&request, context.as_deref())
+            (
+                self.handler.admit_context(&request, context.as_deref()),
+                self.handler.deadline_messages(&request),
+            )
         };
         let outgoing = self.scheduler.admit(
             &mut self.session,
@@ -864,6 +900,7 @@ impl<H: Handler, W: Write> Connection<H, W> {
                 grant: None,
                 request,
                 admission,
+                deadline,
                 read_only,
                 progress_token,
             },

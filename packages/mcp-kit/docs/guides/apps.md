@@ -161,7 +161,7 @@ Use the producing `ResultSchema` for tool output checks. See
 
 The example implements the `2026-01-26` frame handshake, receives tool results
 and makes a refresh call through the host. Its script has an in-process host
-fixture (`make test-app-ui`); this verifies messages and document packaging,
+fixture (`node --test examples/apps/status.test.mjs`); this verifies messages and document packaging,
 without certifying rendering in a specific chat host. Hosts own the sandbox,
 bridge, consent, resizing and model context. Consumer frontend builds and
 compatible-host acceptance belong to each consumer.

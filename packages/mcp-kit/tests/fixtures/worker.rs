@@ -124,7 +124,7 @@ impl Implementation for Native {
     fn call(&self, request: Request, context: &Context) -> Result<Outcome, worker::Failure> {
         let sequence = self
             .sequence
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |value| {
+            .try_update(Ordering::AcqRel, Ordering::Acquire, |value| {
                 value.checked_add(1)
             })
             .map_err(|_| RpcError::new(-32603, "sequence exhausted"))?
@@ -170,7 +170,7 @@ impl Handler for Resident {
 }
 
 fn run_worker(build: &str) {
-    let mut input = BufReader::new(io::stdin());
+    let mut input = io::stdin().lock();
     let mut output = io::stdout();
     let decoder = wire::Decoder::new(catalog(), options().session).expect("worker declarations");
     while let Ok(intent) = frame::read(&mut input, 16) {
@@ -281,12 +281,10 @@ fn main() {
         .expect("controller readiness");
     let mut options = options();
     options.worker = Some(frontend.clone());
-    stdio::serve(
-        Arc::new(Resident),
-        catalog(),
-        BufReader::new(io::stdin()),
-        io::stdout(),
-        &options,
-    )
-    .expect("serve");
+    #[expect(
+        clippy::bufreader_stdin,
+        reason = "stdio::serve moves the reader to another thread and StdinLock is not Send"
+    )]
+    let input = BufReader::new(io::stdin());
+    stdio::serve(Arc::new(Resident), catalog(), input, io::stdout(), &options).expect("serve");
 }

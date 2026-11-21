@@ -62,8 +62,7 @@ pub(super) fn argument(
                 .schema_path()
                 .to_string()
                 .rsplit_once('/')
-                .map(|(parent, _)| parent.to_owned())
-                .unwrap_or_default();
+                .map_or_default(|(parent, _)| parent.to_owned());
             let schema = schema.pointer(&parent).unwrap_or(schema);
             if let (Some(min), Some(max)) = (schema.get("minimum"), schema.get("maximum")) {
                 format!("{path} must be between {min} and {max}; received {cursor}")

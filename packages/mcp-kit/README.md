@@ -11,7 +11,7 @@ from your own runtime.
 ## Installation
 
 The library is built from source and has not been published to crates.io.
-You need Rust 1.97 or later; the checkout pins the toolchain version.
+You need Rust 1.102 or later; the checkout pins the toolchain version.
 
 From a sibling Rust package, add a local path dependency:
 
@@ -113,11 +113,11 @@ authority by itself.
 
 ## Development
 
-From the checkout root:
+From `packages/mcp-kit`:
 
 ```sh
-make -C packages/mcp-kit dev
-make -C packages/mcp-kit test-focus FILTER='session::'
+cargo build --locked --all-features
+cargo nextest run --locked --all-features --lib 'session::'
 ```
 
 [Developing MCP](docs/contributing/development.md) covers individual checks

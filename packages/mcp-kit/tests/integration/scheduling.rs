@@ -1,7 +1,7 @@
 //! Lanes, keys, capacity, deadlines, cancellation and progress.
 
 use crate::fixture::{Events, Host, Latch, Script, arguments, result_text, text, tool_name};
-use canonic_mcp_kit::stdio::{Lane, Options};
+use canonic_mcp_kit::stdio::{BudgetStart, Lane, Options};
 use serde_json::json;
 use std::time::Duration;
 
@@ -88,6 +88,103 @@ fn a_queued_request_expires_without_running() {
     assert_eq!(events.next(), "end slow");
     assert_eq!(host.recv()["id"], 1);
     assert_eq!(events.none_within(Duration::from_millis(50)), None);
+}
+
+#[test]
+fn dispatch_started_budgets_let_queued_requests_wait_in_order_and_still_bound_running_work() {
+    let events = Events::new();
+    let latch = Latch::default();
+    let options = Options {
+        budget_start: BudgetStart::Dispatch,
+        ..lanes(1, 8)
+    };
+    let host = Host::ready(recording(&events, &latch), options, json!({}));
+    host.call(1, "acme_change", json!({"message":"slow"}));
+    assert_eq!(events.next(), "start slow");
+    host.call(2, "acme_echo", json!({"message":"second","timeoutMs":30}));
+    host.call(3, "acme_echo", json!({"message":"third","timeoutMs":30}));
+    // Far past both queued budgets, neither has been refused or started.
+    host.assert_quiet();
+    assert_eq!(events.none_within(Duration::from_millis(100)), None);
+    latch.release();
+    for (id, message) in [(1, "slow"), (2, "second"), (3, "third")] {
+        let reply = host.recv();
+        assert_eq!(reply["id"], id, "{reply}");
+        assert_eq!(result_text(&reply), message);
+    }
+    // A running request's own budget is still enforced.
+    let stuck = Latch::default();
+    let host = Host::ready(
+        recording(&Events::new(), &stuck),
+        Options {
+            budget_start: BudgetStart::Dispatch,
+            ..lanes(1, 8)
+        },
+        json!({}),
+    );
+    host.call(4, "acme_change", json!({"message":"stuck","timeoutMs":30}));
+    assert_eq!(host.recv()["error"]["code"], -32001);
+}
+
+#[test]
+fn dispatch_budget_waits_for_a_timed_out_worker_to_return() {
+    let events = Events::new();
+    let started = events.clone();
+    let (release, blocked) = std::sync::mpsc::sync_channel(1);
+    let blocked = std::sync::Mutex::new(blocked);
+    let script = Script::new(move |request, _| {
+        let name = tool_name(&request);
+        started.record(name.to_owned());
+        if name == "acme_change" {
+            // Simulate native blocking I/O by waiting without a checkpoint.
+            let _ = blocked.lock().unwrap().recv_timeout(crate::fixture::WAIT);
+        }
+        text(name)
+    });
+    let host = Host::ready(
+        script,
+        Options {
+            budget_start: BudgetStart::Dispatch,
+            ..lanes(1, 8)
+        },
+        json!({}),
+    );
+    host.call(1, "acme_change", json!({"timeoutMs":40}));
+    assert_eq!(events.next(), "acme_change");
+    host.call(2, "acme_echo", json!({"timeoutMs":40}));
+    let expired = host.recv();
+    assert_eq!(expired["id"], 1);
+    assert_eq!(expired["error"]["code"], -32001);
+    assert_eq!(events.none_within(Duration::from_millis(100)), None);
+    host.assert_quiet();
+    release.send(()).unwrap();
+    assert_eq!(events.next(), "acme_echo");
+    let finished = host.recv();
+    assert_eq!(finished["id"], 2);
+    assert_eq!(result_text(&finished), "acme_echo");
+}
+
+#[test]
+fn the_handler_words_deadline_errors_for_queued_and_running_requests() {
+    let events = Events::new();
+    let latch = Latch::default();
+    let host = Host::ready(recording(&events, &latch), lanes(1, 8), json!({}));
+    host.call(
+        1,
+        "acme_change",
+        json!({"message":"stuck","timeoutMs":60,"deadlineMessage":"check acme_status"}),
+    );
+    assert_eq!(events.next(), "start stuck");
+    host.call(
+        2,
+        "acme_change",
+        json!({"message":"late","timeoutMs":30,"deadlineMessage":"nothing ran"}),
+    );
+    let mut replies = [host.recv(), host.recv()];
+    replies.sort_by_key(|reply| reply["id"].as_u64());
+    assert_eq!(replies[0]["error"]["code"], -32001);
+    assert_eq!(replies[0]["error"]["message"], "running: check acme_status");
+    assert_eq!(replies[1]["error"]["message"], "queued: nothing ran");
 }
 
 #[test]

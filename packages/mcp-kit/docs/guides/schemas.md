@@ -40,7 +40,7 @@ Without an output schema, structured data is optional.
 
 The [complete server](../../examples/schemas.rs) exposes `acme_greet` and a
 modern array-returning `acme_names`. Build it from the package directory with
-`make dev CARGO_FLAGS='--example schemas'` and run `target/debug/examples/schemas`
+`cargo build --locked --all-features --example schemas` and run `target/debug/examples/schemas`
 as an MCP server. Calling `acme_greet` with `{"name":"Acme"}` returns
 `{"greeting":"Hello Acme"}` as structured data; a name without the `Acme`
 prefix fails validation before the handler runs.

@@ -121,7 +121,7 @@ success. The resource blocks serialize as:
 
 The [complete Acme server](../../examples/artifacts.rs) returns these blocks
 and serves the full report through `resources/read`. Build it from the package
-directory with `make dev CARGO_FLAGS='--example artifacts'`; the executable is
+directory with `cargo build --locked --all-features --example artifacts`; the executable is
 `target/debug/examples/artifacts`. A call to `acme_report` with `{}` returns a
 text block, the report link and embedded summary and evidence; reading
 `acme://reports/latest` returns the full report.

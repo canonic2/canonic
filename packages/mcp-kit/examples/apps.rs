@@ -77,10 +77,15 @@ impl Handler for Acme {
 }
 
 fn main() -> Result<(), stdio::ServeError> {
+    #[expect(
+        clippy::bufreader_stdin,
+        reason = "stdio::serve moves the reader to another thread and StdinLock is not Send"
+    )]
+    let input = io::BufReader::new(io::stdin());
     stdio::serve(
         Arc::new(Acme),
         Arc::new(catalog()),
-        io::BufReader::new(io::stdin()),
+        input,
         io::stdout(),
         &options(),
     )

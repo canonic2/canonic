@@ -75,7 +75,11 @@ Admission {
 ## Deadlines
 
 Every request has an active budget from admission: `Admission::timeout`, or
-`Options::timeout`. Queue time counts. Human confirmation and rich-input waits
+`Options::timeout`. Queue time counts by default. Set `Options::budget_start`
+to `BudgetStart::Dispatch` to start each budget when a worker begins the
+request instead: requests then wait their turn in order without expiring, so a
+slow request cannot time out the ones queued behind it, and the lane's capacity
+still bounds the queue. Human confirmation and rich-input waits
 pause it without scheduling a response timer. An answered continuation gets the
 remaining budget; a new round does not reset it. Cancellation or connection
 loss withdraws the question and prevents a late answer from resuming work.
@@ -100,7 +104,20 @@ fn call(&self, request: Request, context: &Context) -> Outcome {
 The library cannot interrupt code that does not check. Once a request's
 deadline reply is sent, its later outcome is discarded, so a mutation that
 finishes late may have taken effect; make retries safe or tell callers to
-check state first.
+check state first. `Handler::deadline_messages` words that reply for each
+request, so it can say what happened and which call continues:
+
+```rust,ignore
+fn deadline_messages(&self, request: &Request) -> DeadlineMessages {
+    match request {
+        Request::Tool(call) if call.name == "acme_deploy" => DeadlineMessages {
+            running: Some("Acme stopped this deploy at its time limit; whether it started is unknown. Call acme_status before deploying again.".into()),
+            ..DeadlineMessages::default()
+        },
+        _ => DeadlineMessages::default(),
+    }
+}
+```
 
 ## Progress
 

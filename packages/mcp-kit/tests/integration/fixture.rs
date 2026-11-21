@@ -2,7 +2,9 @@
 
 use canonic_mcp_kit::{
     Catalog, Client, Content, RpcError, ServerInfo, Tool, ToolResult,
-    stdio::{self, Admission, Context, Handler, Options, Outcome, Request, ServeError},
+    stdio::{
+        self, Admission, Context, DeadlineMessages, Handler, Options, Outcome, Request, ServeError,
+    },
     tool::Annotations,
 };
 use serde_json::{Value, json};
@@ -22,7 +24,8 @@ pub(crate) const WAIT: Duration = Duration::from_secs(10);
 type Call = dyn Fn(Request, &Context) -> Outcome + Send + Sync;
 
 /// A handler whose behavior each test supplies. Arguments may name a
-/// serialization `key` and a `timeoutMs` deadline.
+/// serialization `key`, a `timeoutMs` deadline and a `deadlineMessage`
+/// worded for both deadline errors.
 pub(crate) struct Script {
     call: Box<Call>,
 }
@@ -50,6 +53,14 @@ impl Handler for Script {
                 .as_u64()
                 .map(Duration::from_millis),
             ..Admission::default()
+        }
+    }
+
+    fn deadline_messages(&self, request: &Request) -> DeadlineMessages {
+        let message = arguments(request)["deadlineMessage"].as_str();
+        DeadlineMessages {
+            queued: message.map(|message| format!("queued: {message}")),
+            running: message.map(|message| format!("running: {message}")),
         }
     }
 
@@ -82,7 +93,8 @@ pub(crate) fn tool_name(request: &Request) -> &str {
 /// Echo, a read-only probe and a mutation, each accepting `key`, `timeoutMs` and `message`.
 pub(crate) fn catalog() -> Arc<Catalog> {
     let schema = json!({"type":"object","properties":{
-        "message":{"type":"string"},"key":{"type":"string"},"timeoutMs":{"type":"integer","minimum":1}
+        "message":{"type":"string"},"key":{"type":"string"},"timeoutMs":{"type":"integer","minimum":1},
+        "deadlineMessage":{"type":"string"}
     },"additionalProperties":false});
     let read_only = Annotations {
         read_only_hint: Some(true),

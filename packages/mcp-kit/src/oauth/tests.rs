@@ -40,8 +40,7 @@ impl Interaction for SignIn {
         let form = wire::form(std::str::from_utf8(request.body).unwrap()).unwrap_or_default();
         let scopes = request
             .pending
-            .map(|pending| pending.scopes.clone())
-            .unwrap_or_default();
+            .map_or_default(|pending| pending.scopes.clone());
         match form.get("decision").map(String::as_str) {
             Some("approve") => InteractionOutcome::Approve {
                 subject: "user-1".to_owned(),

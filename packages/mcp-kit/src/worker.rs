@@ -397,7 +397,7 @@ impl Frontend {
 
 fn reserve(counter: &AtomicUsize, count: usize, max: usize) -> Result<(), Error> {
     counter
-        .fetch_update(Ordering::AcqRel, Ordering::Acquire, |used| {
+        .try_update(Ordering::AcqRel, Ordering::Acquire, |used| {
             used.checked_add(count).filter(|next| *next <= max)
         })
         .map(|_| ())

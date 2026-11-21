@@ -36,7 +36,7 @@ report that as an internal error rather than invalid client parameters.
 
 The [complete Acme server](../../examples/audio.rs) generates a one-second silent
 WAV without accessing a microphone or file. From the package directory, build
-it with `make dev CARGO_FLAGS='--example audio'`. Configure an MCP host to run
+it with `cargo build --locked --all-features --example audio`. Configure an MCP host to run
 `target/debug/examples/audio`; a call to `acme_audio` with `{}` returns a text
 block and the WAV with user-audience and priority hints. Both legacy revisions
 and explicitly enabled modern requests use the same audio block. Host playback

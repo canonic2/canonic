@@ -722,6 +722,7 @@ impl<H: Handler> Dispatcher<H> {
         let admission = self
             .handler
             .admit_context(&work.request, context.as_deref());
+        let deadline = self.handler.deadline_messages(&work.request);
         let outgoing = self.scheduler.admit(
             &mut self.session,
             Submission {
@@ -730,6 +731,7 @@ impl<H: Handler> Dispatcher<H> {
                 grant,
                 request: work.request,
                 admission,
+                deadline,
                 read_only: work.read_only,
                 progress_token: work.progress_token,
             },

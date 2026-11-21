@@ -663,7 +663,7 @@ impl SkillCatalog {
                 .map_err(|_| SkillError::Limit("entry bytes"))?;
             if page.len() == 32 || bytes + length + 1 > PAGE_BYTES {
                 self.pages.push(json!({"skills":page}));
-                page = Vec::new();
+                page.clear();
                 bytes = 32768;
             }
             bytes += length + 1;

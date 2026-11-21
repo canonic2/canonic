@@ -173,10 +173,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     let mut options = Options::default();
     options.session.modern = Some(ModernOptions::new(ServerInfo::new("acme", "1")));
+    #[expect(
+        clippy::bufreader_stdin,
+        reason = "stdio::serve moves the reader to another thread and StdinLock is not Send"
+    )]
+    let input = std::io::BufReader::new(std::io::stdin());
     stdio::serve(
         Arc::new(server),
         Arc::new(catalog),
-        std::io::BufReader::new(std::io::stdin()),
+        input,
         std::io::stdout(),
         &options,
     )?;

@@ -66,10 +66,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?));
     options.session.completions = true;
     options.session.modern = Some(ModernOptions::new(ServerInfo::new("acme", "1")));
+    #[expect(
+        clippy::bufreader_stdin,
+        reason = "stdio::serve moves the reader to another thread and StdinLock is not Send"
+    )]
+    let input = io::BufReader::new(io::stdin());
     stdio::serve(
         Arc::new(Acme),
         Arc::new(Catalog::new(vec![])?),
-        io::BufReader::new(io::stdin()),
+        input,
         io::stdout(),
         &options,
     )?;

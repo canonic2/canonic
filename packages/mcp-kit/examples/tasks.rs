@@ -132,10 +132,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         lanes: vec![Lane::new("reads", 2, 8), Lane::new("changes", 1, 8)],
         ..stdio::Options::default()
     };
+    #[expect(
+        clippy::bufreader_stdin,
+        reason = "stdio::serve moves the reader to another thread and StdinLock is not Send"
+    )]
+    let input = io::BufReader::new(io::stdin());
     stdio::serve(
         Arc::new(Acme(store)),
         Arc::new(catalog),
-        io::BufReader::new(io::stdin()),
+        input,
         io::stdout(),
         &options,
     )?;

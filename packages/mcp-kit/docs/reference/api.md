@@ -70,5 +70,7 @@
 | Build JSON-RPC frames | `rpc::success`, `rpc::failure`, `rpc::notification`, `rpc::request`, `rpc::encode_success` |
 | Cancel your own work | `Control` |
 
-Build the API reference with `make docs` from `packages/mcp-kit`; it opens from
+Build the API reference with
+`cargo doc --locked --all-features --no-deps --document-private-items` from
+`packages/mcp-kit`; it opens from
 `target/doc/canonic_mcp_kit/index.html`.

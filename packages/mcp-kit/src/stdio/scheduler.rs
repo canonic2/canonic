@@ -6,8 +6,9 @@
 
 use super::observation::{FrameKind, ObservationKind, Settlement, Span, Stage, Trace};
 use super::{
-    Admission, Confirm, Context, Elicit, ElicitResume, ElicitationPolicy, Handler, Options,
-    Outcome, Outgoing, PROGRESS_BUFFER, Progress, Request, Resume, ServeError,
+    Admission, BudgetStart, Confirm, Context, DeadlineMessages, Elicit, ElicitResume,
+    ElicitationPolicy, Handler, Options, Outcome, Outgoing, PROGRESS_BUFFER, Progress, Request,
+    Resume, ServeError,
 };
 use crate::{
     control::Control,
@@ -46,8 +47,26 @@ struct Meta {
     key: Option<String>,
     /// Active budget left at the last suspension, including queue time.
     timeout: Duration,
+    /// The handler's wording for this request's deadline errors.
+    deadline: Arc<DeadlineMessages>,
     read_only: bool,
     progress_token: Option<Value>,
+}
+
+impl Meta {
+    fn queued_expiry(&self) -> &str {
+        self.deadline
+            .queued
+            .as_deref()
+            .unwrap_or("Request deadline exceeded before dispatch")
+    }
+
+    fn running_expiry(&self) -> &str {
+        self.deadline
+            .running
+            .as_deref()
+            .unwrap_or("Request deadline exceeded")
+    }
 }
 
 enum Work {
@@ -165,6 +184,19 @@ impl LaneState {
             self.keys.remove(key);
         }
     }
+
+    /// Takes the first queued job whose key is free, in admission order.
+    fn next_ready(&mut self) -> Option<Job> {
+        let position = self.queue.iter().position(|job| {
+            job.holds_key
+                || job
+                    .meta
+                    .key
+                    .as_ref()
+                    .is_none_or(|key| !self.keys.contains(key))
+        })?;
+        self.queue.remove(position)
+    }
 }
 
 struct Worker {
@@ -185,6 +217,7 @@ pub(crate) struct Scheduler {
     dispatcher: Thread,
     sequence: u64,
     timeout: Duration,
+    budget_start: BudgetStart,
     disconnect_grace: Duration,
     max_output_bytes: usize,
     disconnected: bool,
@@ -198,6 +231,7 @@ pub(crate) struct Submission {
     pub(crate) grant: Option<Arc<crate::http::Grant>>,
     pub(crate) request: Request,
     pub(crate) admission: Admission,
+    pub(crate) deadline: DeadlineMessages,
     pub(crate) read_only: bool,
     pub(crate) progress_token: Option<Value>,
 }
@@ -242,6 +276,7 @@ impl Scheduler {
             dispatcher,
             sequence: 0,
             timeout: options.timeout,
+            budget_start: options.budget_start,
             disconnect_grace: options.disconnect_grace,
             max_output_bytes: options.max_output_bytes,
             disconnected: false,
@@ -284,6 +319,7 @@ impl Scheduler {
             grant,
             request,
             admission,
+            deadline,
             read_only,
             progress_token,
         } = submission;
@@ -344,6 +380,7 @@ impl Scheduler {
                 lane: admission.lane,
                 key: admission.key,
                 timeout,
+                deadline: Arc::new(deadline),
                 read_only,
                 progress_token,
             },
@@ -473,8 +510,7 @@ impl Scheduler {
             let trace = self
                 .waiting
                 .as_ref()
-                .map(|wait| wait.meta.trace.clone())
-                .unwrap_or_default();
+                .map_or_default(|wait| wait.meta.trace.clone());
             out.push(Outgoing::Value(notice).observed(&trace, FrameKind::Cancellation));
         }
         if let Some(waiting) = self.take_waiting() {
@@ -528,9 +564,11 @@ impl Scheduler {
 
     /// How long the dispatcher may sleep before a deadline needs attention.
     pub(crate) fn next_wake(&self) -> Option<Duration> {
+        let queue_counts = self.budget_start == BudgetStart::Admission;
         let queued = self
             .lanes
             .iter()
+            .filter(|_| queue_counts)
             .flat_map(|lane| lane.queue.iter().map(|job| job.control.remaining()));
         let running = self.running.values().flat_map(|running| {
             let deadline = (!running.answered).then(|| running.control.remaining());
@@ -624,7 +662,7 @@ impl Scheduler {
                 session,
                 running.meta.id.as_ref(),
                 rpc::DEADLINE_EXCEEDED,
-                "Request deadline exceeded",
+                running.meta.running_expiry(),
                 out,
                 &running.meta.trace,
             );
@@ -809,7 +847,9 @@ impl Scheduler {
     }
 
     fn expire(&mut self, session: &mut Session, out: &mut Vec<Outgoing>, now: Instant) {
-        for lane in &mut self.lanes {
+        // A dispatch-started budget has not begun while its request waits.
+        let queue_counts = self.budget_start == BudgetStart::Admission;
+        for lane in self.lanes.iter_mut().filter(|_| queue_counts) {
             let mut kept = VecDeque::new();
             for job in lane.queue.drain(..) {
                 if now < job.control.deadline() {
@@ -825,7 +865,7 @@ impl Scheduler {
                     session,
                     job.meta.id.as_ref(),
                     rpc::DEADLINE_EXCEEDED,
-                    "Request deadline exceeded before dispatch",
+                    job.meta.queued_expiry(),
                     out,
                     &job.meta.trace,
                 );
@@ -840,7 +880,7 @@ impl Scheduler {
                     session,
                     running.meta.id.as_ref(),
                     rpc::DEADLINE_EXCEEDED,
-                    "Request deadline exceeded",
+                    running.meta.running_expiry(),
                     out,
                     &running.meta.trace,
                 );
@@ -854,22 +894,17 @@ impl Scheduler {
 
     fn pump(&mut self, session: &mut Session, out: &mut Vec<Outgoing>) {
         let now = Instant::now();
+        let from_dispatch = self.budget_start == BudgetStart::Dispatch;
         for lane in &mut self.lanes {
             while let Some(&worker) = lane.idle.last() {
-                let Some(position) = lane.queue.iter().position(|job| {
-                    job.holds_key
-                        || job
-                            .meta
-                            .key
-                            .as_ref()
-                            .is_none_or(|key| !lane.keys.contains(key))
-                }) else {
-                    break;
-                };
-                let Some(mut job) = lane.queue.remove(position) else {
+                let Some(mut job) = lane.next_ready() else {
                     break;
                 };
                 drop(job.queued);
+                if from_dispatch {
+                    // The remaining budget starts now, after the queue wait.
+                    job.control = Arc::new(Control::new(job.meta.timeout));
+                }
                 let Some(sequence) = self.sequence.checked_add(1) else {
                     if job.holds_key {
                         lane.release(job.meta.key.as_ref());

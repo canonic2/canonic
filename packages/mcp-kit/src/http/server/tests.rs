@@ -286,8 +286,7 @@ fn post(method: &str, id: &Value, mut params: Value, extra: &str) -> Vec<u8> {
     let body = serde_json::to_vec(&rpc::request(id.clone(), method, params.clone())).unwrap();
     let name = params["name"]
         .as_str()
-        .map(|name| format!("Mcp-Name: {name}\r\n"))
-        .unwrap_or_default();
+        .map_or_default(|name| format!("Mcp-Name: {name}\r\n"));
     let mut request = format!(
         "POST /mcp HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\n\
          Accept: application/json, text/event-stream\r\nMCP-Protocol-Version: 2026-07-28\r\n\
