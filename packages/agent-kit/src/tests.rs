@@ -409,7 +409,10 @@ fn discovery_defaults_follow_catalog_scope_and_explicit_intent() {
             assert!(!detected.iter().any(|agent| agent == id));
         }
         selected.remove = true;
-        assert!(detection::defaults_on_path(&context, &selected, &paths).is_empty());
+        assert_eq!(
+            detection::defaults_on_path(&context, &selected, &paths),
+            Vec::<String>::new()
+        );
         selected.agents = vec!["cursor".into()];
         assert_eq!(
             detection::defaults_on_path(&context, &selected, &paths),
@@ -421,7 +424,10 @@ fn discovery_defaults_follow_catalog_scope_and_explicit_intent() {
             ["cursor"]
         );
     }
-    assert!(detection::defaults_on_path(&context, &Options::default(), &[]).is_empty());
+    assert_eq!(
+        detection::defaults_on_path(&context, &Options::default(), &[]),
+        Vec::<String>::new()
+    );
 }
 
 #[test]
@@ -604,7 +610,10 @@ fn discovery_ignores_bad_candidates_and_follows_executable_symlinks() {
     symlink(bin.join("missing"), bin.join("kimi")).unwrap();
     let paths = vec![bin.clone()];
     let selected = Options::default();
-    assert!(detection::defaults_on_path(&context, &selected, &paths).is_empty());
+    assert_eq!(
+        detection::defaults_on_path(&context, &selected, &paths),
+        Vec::<String>::new()
+    );
 
     fs::set_permissions(&claude, fs::Permissions::from_mode(0o755)).unwrap();
     symlink(&claude, bin.join("qwen")).unwrap();
@@ -632,7 +641,10 @@ fn discovery_ignores_bad_candidates_and_follows_executable_symlinks() {
         scope: Scope::User,
         ..Options::default()
     };
-    assert!(detection::defaults_on_path(&context, &user, &relative_paths).is_empty());
+    assert_eq!(
+        detection::defaults_on_path(&context, &user, &relative_paths),
+        Vec::<String>::new()
+    );
     assert_eq!(
         detection::defaults_on_path(&context, &user, &paths),
         ["claude", "qwen"]

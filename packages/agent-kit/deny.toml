@@ -1,4 +1,4 @@
-# Dependency checks for `make deps`. See docs/development.md.
+# Dependency checks for `cargo deny check`. See docs/development.md.
 [graph]
 all-features = true
 

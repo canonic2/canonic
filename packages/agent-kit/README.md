@@ -11,7 +11,7 @@ same reviewed setup, directly or through a Hub or Box server definition.
 
 ## Add the library
 
-Agent Kit is unpublished and used from source. Consumers require Rust 1.97 or
+Agent Kit is unpublished and used from source. Consumers require Rust 1.102 or
 newer; this checkout pins its own development toolchain. From a sibling Rust
 package, add this to `Cargo.toml`:
 
@@ -57,9 +57,9 @@ permission reset, formatting behavior, ownership and conflict recovery.
 
 ## Development
 
-From the repository root, `make -C packages/agent-kit` lists available targets.
-[Development and checks](docs/development.md) explains focused verification and
-temporary configuration fixtures.
+Development uses Cargo from `packages/agent-kit/`.
+[Development and checks](docs/development.md) lists the commands and explains
+focused verification and temporary configuration fixtures.
 
 ## License
 

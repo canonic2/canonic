@@ -213,7 +213,10 @@ mod tests {
             fs::read_to_string(old.join(".codex/config.toml")).unwrap(),
             original
         );
-        assert!(relocate_project(&context, &old).unwrap().is_empty());
+        assert_eq!(
+            relocate_project(&context, &old).unwrap(),
+            Vec::<PathBuf>::new()
+        );
         let portable = SetupPolicy {
             project_directory: false,
             ..policy
@@ -246,10 +249,9 @@ mod tests {
         assert!(entry.get("cwd").is_none());
         assert_eq!(entry["tools"]["inspect"]["approval_mode"], json!("approve"));
         // Repeating it changes nothing.
-        assert!(
-            relocate_project(&context, &context.root)
-                .unwrap()
-                .is_empty()
+        assert_eq!(
+            relocate_project(&context, &context.root).unwrap(),
+            Vec::<PathBuf>::new()
         );
     }
 
@@ -294,10 +296,9 @@ mod tests {
         interrupt(&context, None, installed);
         let configuration = "model = \"example\"\n";
         fs::write(&path, configuration).unwrap();
-        assert!(
-            relocate_project(&context, &context.root)
-                .unwrap()
-                .is_empty()
+        assert_eq!(
+            relocate_project(&context, &context.root).unwrap(),
+            Vec::<PathBuf>::new()
         );
         assert_eq!(fs::read_to_string(path).unwrap(), configuration);
     }
@@ -327,7 +328,7 @@ mod tests {
                     json!("approve")
                 );
             } else {
-                assert!(changed.is_empty());
+                assert_eq!(changed, Vec::<PathBuf>::new());
                 assert_eq!(after, configuration);
             }
         }
@@ -367,7 +368,10 @@ mod tests {
                 context.state = context.state.join("another-user");
             }
             fs::write(&path, &configuration).unwrap();
-            assert!(relocate_project(&context, &old).unwrap().is_empty());
+            assert_eq!(
+                relocate_project(&context, &old).unwrap(),
+                Vec::<PathBuf>::new()
+            );
             assert_eq!(fs::read_to_string(path).unwrap(), configuration);
             assert_eq!(
                 fs::read_to_string(old.join(".codex/config.toml")).unwrap(),

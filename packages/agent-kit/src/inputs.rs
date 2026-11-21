@@ -126,11 +126,9 @@ mod tests {
             ..Default::default()
         };
         let plan = crate::workflow::prepare_with_inputs(&context, &options, &inputs).unwrap();
-        assert!(
-            !plan.review()["registrations"]
-                .as_array()
-                .unwrap()
-                .is_empty()
+        assert_ne!(
+            plan.review()["registrations"].as_array().unwrap(),
+            &Vec::<serde_json::Value>::new()
         );
         assert_eq!(inputs.reads.borrow()[&path], 1);
         assert_eq!(inputs.parses.borrow()[&path], 1);
