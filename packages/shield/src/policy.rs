@@ -492,6 +492,23 @@ impl Evaluation {
 }
 
 impl Pack {
+    /// Estimated cache charge, including the resolved document, resolution
+    /// evidence, bound values and prepared matcher allocation.
+    pub(crate) fn cache_bytes(
+        &self,
+        binding: &Binding,
+        source: usize,
+        limit: usize,
+    ) -> Option<usize> {
+        let base = source
+            .saturating_add(std::mem::size_of::<Self>() + std::mem::size_of::<Binding>())
+            .saturating_add(self.patterns.prepared_bytes());
+        let data = crate::json::retained_len(
+            &(&self.document, &self.resolution, &self.origins, binding),
+            limit.checked_sub(base)?,
+        )?;
+        Some(base + data)
+    }
     pub(crate) fn has_mcp_integrations(&self) -> bool {
         !self.document.mcp_integrations.is_empty()
     }

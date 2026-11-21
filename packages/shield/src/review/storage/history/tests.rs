@@ -102,7 +102,7 @@ fn diagnostic_history_capture_waits_for_the_history_writer() {
             .unwrap();
         assert!(!pending);
         assert!(loaded.history_available);
-        assert!(loaded.events.is_empty());
+        assert_eq!(loaded.events, [] as [serde_json::Value; 0]);
         reader.join().unwrap();
     });
     trace.finish("success");
@@ -669,13 +669,17 @@ fn byte_cap_evicts_oldest_segments_and_reports_fewer_commands() {
     let mut fill = |state: &mut State| {
         let (mut bytes, mut count) = (Vec::new(), 0);
         loop {
-            let event = state.event(
+            let mut event = state.event(
                 "decision",
                 &context,
                 json!({"request_id":format!("filled-{request}")}),
                 json!({}),
-                json!({"operation":{"padding":padding}}),
+                json!({"operation":{"padding":""}}),
             );
+            // Pad after the event is built: redaction has nothing to find in
+            // the padding, and rescanning 64 MiB of it only slows the fixture.
+            // `line` still serializes and checksums the complete event.
+            event["details"]["operation"]["padding"] = json!(padding);
             let row = line(&event).unwrap();
             if bytes.len() + row.len() + 1024 > SEGMENT_LIMIT {
                 break;

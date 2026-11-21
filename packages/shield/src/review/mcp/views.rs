@@ -105,11 +105,30 @@ impl Views {
         expected: Option<&str>,
         keep: Option<&str>,
     ) -> Result<String, Error> {
+        let key = identity(candidate, metadata);
+        self.retain_keyed(
+            context,
+            (candidate, metadata),
+            key,
+            prepared,
+            expected,
+            keep,
+        )
+    }
+    /// [`Self::retain_prepared`] for a capture whose handle key is known.
+    fn retain_keyed(
+        &mut self,
+        context: &Context,
+        (candidate, metadata): (&Value, &Value),
+        key: String,
+        prepared: Option<configuration::Evaluator>,
+        expected: Option<&str>,
+        keep: Option<&str>,
+    ) -> Result<String, Error> {
         let _trace = crate::diagnostics::trace::span("handle.retain");
         if candidate.is_null() {
             return Err(Error::CandidateUnavailable);
         }
-        let key = identity(candidate, metadata);
         if let Some(id) = self.identities.get(&key).cloned() {
             let captured = self.get(&id)?;
             if expected.is_some_and(|expected| expected != captured.revision)

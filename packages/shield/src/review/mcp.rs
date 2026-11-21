@@ -1301,6 +1301,27 @@ fn dispatch(
     }
 }
 
+/// Whether the tool changes state; others are reads (`readOnlyHint`).
+pub(crate) fn mutates(name: &str) -> bool {
+    schemas::mutates(name)
+}
+
+/// Whether the tool only prepares a review for the user to apply, saved under
+/// its arguments, so repeating an identical call returns that review.
+pub(crate) fn prepares_review(name: &str) -> bool {
+    matches!(
+        name,
+        "policy_propose"
+            | "rule_add"
+            | "rule_edit"
+            | "rule_remove"
+            | "pack_add"
+            | "pack_update"
+            | "pack_remove"
+            | "pack_configure"
+    )
+}
+
 fn review_tool(
     context: &Context,
     views: &mut views::Views,
@@ -1616,8 +1637,8 @@ fn propose_input(
         context,
         input,
         checkpoint,
-        &mut |base, base_meta, after, meta, plans| {
-            handles = Some(views.retain_pair(context, (base, base_meta), (after, meta), plans)?);
+        &mut |before, after, identities, plans| {
+            handles = Some(views.retain_pair(context, before, after, identities, plans)?);
             Ok(())
         },
         &|proposal| {

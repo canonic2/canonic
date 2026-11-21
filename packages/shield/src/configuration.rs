@@ -2,7 +2,88 @@
 
 use crate::policy::{self, Binding, CustomRules, Error, Pack, Profile};
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet, VecDeque},
+    sync::Mutex,
+};
+
+/// Packs parsed in this process, newest last, keyed by the digest of their
+/// exact bytes and the selection binding they were prepared under. Parsing
+/// depends on those alone, so a changed configuration re-parses only the
+/// packs it changed instead of every installed pack.
+static PARSED_PACKS: Mutex<ParsedPacks> = Mutex::new(ParsedPacks::new(PARSED_PACK_BYTES));
+/// Two generations of a project's largest allowed selection.
+const PARSED_PACKS_KEPT: usize = 128;
+/// Budget for estimated retained bytes. Repeated revisions of a large pack
+/// evict the oldest entries, and a pack larger than the budget is omitted.
+const PARSED_PACK_BYTES: usize = 64 * 1024 * 1024;
+
+struct ParsedPacks {
+    /// Digest, binding, retained bytes and the prepared pack, oldest first.
+    entries: VecDeque<(String, Binding, usize, std::sync::Arc<Pack>)>,
+    bytes: usize,
+    byte_limit: usize,
+}
+
+impl ParsedPacks {
+    const fn new(byte_limit: usize) -> Self {
+        Self {
+            entries: VecDeque::new(),
+            bytes: 0,
+            byte_limit,
+        }
+    }
+
+    fn get(&self, digest: &str, binding: &Binding) -> Option<&std::sync::Arc<Pack>> {
+        self.entries
+            .iter()
+            .find(|(known, bound, ..)| known == digest && bound == binding)
+            .map(|(.., pack)| pack)
+    }
+}
+
+/// Prepare a retained pack, reusing one parsed from the same bytes and binding.
+/// Copies are made outside the lock, so parallel captures never wait on one.
+fn parse_pack(
+    cache: &Mutex<ParsedPacks>,
+    bytes: &str,
+    binding: &Binding,
+    previous: Option<&Pack>,
+) -> Result<Pack, Error> {
+    let digest = policy::fingerprint(bytes.as_bytes());
+    let memo = || {
+        cache
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    };
+    let (cached, byte_limit) = {
+        let memo = memo();
+        (memo.get(&digest, binding).cloned(), memo.byte_limit)
+    };
+    if let Some(pack) = cached {
+        crate::diagnostics::trace::count("pack.parse_reuses", 1);
+        return Ok((*pack).clone());
+    }
+    let pack = Pack::from_retained_yaml_reusing(bytes, binding, false, previous)?;
+    let Some(size) = pack.cache_bytes(binding, bytes.len(), byte_limit) else {
+        return Ok(pack);
+    };
+    let retained = std::sync::Arc::new(pack.clone());
+    let binding = binding.clone();
+    let mut memo = memo();
+    if memo.get(&digest, &binding).is_some() {
+        return Ok(pack);
+    }
+    while memo.entries.len() == PARSED_PACKS_KEPT || memo.bytes + size > byte_limit {
+        let Some((.., evicted, _)) = memo.entries.pop_front() else {
+            break;
+        };
+        memo.bytes -= evicted;
+    }
+    memo.bytes += size;
+    memo.entries.push_back((digest, binding, size, retained));
+    Ok(pack)
+}
 
 #[cfg(test)]
 mod tests;
@@ -540,9 +621,8 @@ impl Candidate {
                 .and_then(|snapshot| snapshot.packs.iter().find(|pack| pack.id() == entry.id));
             // Candidate capture is an untrusted source preview. Acquisition
             // establishes pack trust separately using the strict current codec.
-            let mut pack =
-                Pack::from_retained_yaml_reusing(bytes, &selection.binding(), false, previous)
-                    .map_err(|error| error.in_selection(&selection.id))?;
+            let mut pack = parse_pack(&PARSED_PACKS, bytes, &selection.binding(), previous)
+                .map_err(|error| error.in_selection(&selection.id))?;
             if selection.id != pack.id() || selection.version != pack.version() {
                 return Err(Error::ArtifactMismatch);
             }

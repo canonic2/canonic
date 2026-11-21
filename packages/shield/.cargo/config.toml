@@ -7,6 +7,8 @@
 GIT_CONFIG_GLOBAL = { value = "tests/git/config", relative = true, force = true }
 
 [alias]
+# Development tasks beyond single Cargo commands: `cargo xtask --help`.
+xtask = "run --quiet --package xtask --"
 # An explicit target keeps the static CRT flags off host build scripts and
 # procedural macros, even when the build host is Windows AMD64 itself.
 build-windows = ["build", "--release", "--locked", "--target", "x86_64-pc-windows-msvc", "--config", ".cargo/windows-release.toml"]

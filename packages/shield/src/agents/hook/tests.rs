@@ -490,6 +490,113 @@ fn native_tool_cwd_cannot_select_a_policy_but_a_codex_session_folder_does() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn claude_tools_keep_launch_policy_after_entering_a_nested_worktree() {
+    let root = assert_fs::TempDir::new().unwrap();
+    let rules = crate::policy::rules::document(&[
+        json!({"id":"yarn-install","decision":"allow",
+            "conditions":{"domain":"argv","executable":"yarn","arguments":{"kind":"exact","values":["install"]}},
+            "requirements":{"cwd":{"within":{"root":"project","path":".gate/worktrees"}}},
+            "on_unmet":{"decision":"deny"}}),
+        json!({"id":"read","decision":"allow",
+            "conditions":{"domain":"file","action":"read","sources":{"all":{"within":{"root":"project"}}}}}),
+        json!({"id":"write","decision":"allow","conditions":{"domain":"file","action":"write"},
+            "requirements":{"destination":{"within":{"root":"project"}}},"on_unmet":{"decision":"deny"}}),
+        json!({"id":"docs","decision":"allow","conditions":{"domain":"web","action":"fetch"},
+            "requirements":{"url":{"schemes":["https"],"hosts":["docs.example.com"]}},"on_unmet":{"decision":"deny"}}),
+    ])
+    .unwrap()
+    .to_string();
+    let bundle = Bundle::capture(
+        "schema_version: 1\npacks: []\nrules: custom.json\n",
+        &[],
+        Some(&rules),
+    )
+    .unwrap();
+    let context = review::mcp::initialize_fixture(root.path(), &bundle);
+    let root = Path::new(&context.project_root);
+    let first = root.join(".gate/worktrees/first");
+    let second = root.join(".gate/worktrees/second");
+    for worktree in [&first, &second] {
+        fs::create_dir_all(worktree.join(".shield")).unwrap();
+        fs::write(
+            worktree.join(".shield/config.yml"),
+            "schema_version: 1\npacks: []\n",
+        )
+        .unwrap();
+    }
+    let tool = |cwd: &Path, name: &str, input: Value| {
+        let host = native_host(cwd, "claude", "PreToolUse", name, &input);
+        translate_hook(
+            root,
+            find("claude").unwrap(),
+            &serde_json::to_vec(&host).unwrap(),
+            Event::Before,
+            &|name| (name == "CLAUDE_PROJECT_DIR").then(|| root.as_os_str().to_owned()),
+            &crate::diagnostics::Log::disabled(),
+        )
+    };
+    let decide = |cwd: &Path, command: &str| tool(cwd, "Bash", json!({"command":command}));
+    let cd = |path: &Path| format!("cd '{}'", path.to_str().unwrap().replace('\'', "'\\''"));
+    for (cwd, command) in [
+        (root, format!("{} && yarn install", cd(&first))),
+        (first.as_path(), format!("{} && yarn install", cd(&second))),
+        (first.as_path(), cd(root)),
+    ] {
+        let reply = decide(cwd, &command);
+        assert_eq!(
+            reply["hookSpecificOutput"]["permissionDecision"], "allow",
+            "{command}: {reply}"
+        );
+    }
+
+    let wrong_cwd = decide(&first, &format!("{} && yarn install", cd(root)));
+    assert_eq!(
+        wrong_cwd["hookSpecificOutput"]["permissionDecision"],
+        "deny"
+    );
+    let protected = decide(&first, "yarn install > .shield/config.yml");
+    assert_eq!(
+        protected["hookSpecificOutput"]["permissionDecision"],
+        "deny"
+    );
+    assert!(reason(&protected).contains("protected path"), "{protected}");
+
+    fs::write(first.join("notes.txt"), "before").unwrap();
+    for (name, input) in [
+        ("Read", json!({"file_path":"notes.txt"})),
+        (
+            "Edit",
+            json!({"file_path":"notes.txt","old_string":"before","new_string":"after"}),
+        ),
+        ("Glob", json!({"pattern":"*.txt"})),
+        ("Grep", json!({"pattern":"before","glob":"*.txt"})),
+        ("WebFetch", json!({"url":"https://docs.example.com/"})),
+    ] {
+        let reply = tool(&first, name, input);
+        assert_eq!(
+            reply["hookSpecificOutput"]["permissionDecision"], "allow",
+            "{name}: {reply}"
+        );
+    }
+    let protected = tool(
+        &first,
+        "Write",
+        json!({"file_path":".shield/config.yml","content":""}),
+    );
+    assert_eq!(
+        protected["hookSpecificOutput"]["permissionDecision"],
+        "deny"
+    );
+    assert!(reason(&protected).contains("protected path"), "{protected}");
+
+    let outside = assert_fs::TempDir::new().unwrap();
+    let result = decide(outside.path(), "cd .");
+    assert_eq!(result["hookSpecificOutput"]["permissionDecision"], "deny");
+    assert!(reason(&result).contains("working directory"), "{result}");
+}
+
 #[test]
 fn claude_hooks_follow_the_session_folder_after_a_move_or_into_a_worktree() {
     let (root, _) = fixture();

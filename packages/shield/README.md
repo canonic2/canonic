@@ -32,12 +32,12 @@ You need [Rust](https://rustup.rs/); the checkout pins the toolchain version.
 
 ```sh
 git clone https://github.com/canonic2/canonic.git
-cd canonic
-make -C packages/shield install-local
+cd canonic/packages/shield
+cargo xtask install
 ```
 
 This installs `shield` into `~/.local/bin`; add that folder to your `PATH`, or
-set `PREFIX=/path/to/prefix` to install somewhere else.
+pass `--prefix /path/to/prefix` to install somewhere else.
 
 Windows source builds support enrollment,
 setup, Claude Code/Codex hooks, bounded System32 checked execution and protected
@@ -183,9 +183,11 @@ search the guides built into the binary.
 
 ## Development
 
+From `packages/shield`:
+
 ```sh
-make -C packages/shield build
-make -C packages/shield test
+cargo build --release --locked
+cargo nextest run --locked
 ```
 
 [Developing Shield](docs/development.md) covers the source layout, each check

@@ -90,9 +90,15 @@ mod tests {
             vec![directory.join("12345678-acme")]
         );
         host["session_id"] = json!("87654321-other");
-        assert!(super::outputs(&host, &project, &runtime).is_empty());
+        assert_eq!(
+            super::outputs(&host, &project, &runtime),
+            [] as [std::path::PathBuf; 0]
+        );
         host["session_id"] = json!("12345678-acme");
         std::fs::write(directory.join(".project_root"), root.to_str().unwrap()).unwrap();
-        assert!(super::outputs(&host, &project, &runtime).is_empty());
+        assert_eq!(
+            super::outputs(&host, &project, &runtime),
+            [] as [std::path::PathBuf; 0]
+        );
     }
 }

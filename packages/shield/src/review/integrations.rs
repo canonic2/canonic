@@ -283,17 +283,100 @@ pub(in crate::review) fn read_file(root: &Path) -> Result<Option<String>, Error>
     }
 }
 
+/// Digests this process already computed, keyed by the file's identity. A
+/// process opens state many times and each open may compare its executable,
+/// so an unchanged file is hashed once. Any later write, replacement or rename
+/// changes the inode or the change time, so it is hashed again; a file that
+/// changed too recently for that to hold is not remembered (see [`settled`]).
+static DIGESTS: std::sync::Mutex<Vec<(FileIdentity, String)>> = std::sync::Mutex::new(Vec::new());
+
+/// Device, inode, size, and modification and change times in seconds and
+/// nanoseconds.
+type FileIdentity = (u64, u64, u64, i64, i64, i64, i64);
+
+/// The identity of the open file itself, so it names the bytes read from it;
+/// `None` where the platform has none, which leaves the file unmemoized.
+#[cfg(unix)]
+fn file_identity(file: &fs::File) -> std::io::Result<Option<FileIdentity>> {
+    use std::os::unix::fs::MetadataExt;
+    let metadata = file.metadata()?;
+    Ok(Some((
+        metadata.dev(),
+        metadata.ino(),
+        metadata.size(),
+        metadata.mtime(),
+        metadata.mtime_nsec(),
+        metadata.ctime(),
+        metadata.ctime_nsec(),
+    )))
+}
+
+#[cfg(not(unix))]
+fn file_identity(_: &fs::File) -> std::io::Result<Option<FileIdentity>> {
+    Ok(None)
+}
+
+/// Whether the file last changed at least a second before hashing started.
+/// File systems with coarse timestamps, such as Linux before 6.13, give writes
+/// within one clock tick the same change time, so only a file that settled
+/// before the read is sure to get a new identity from any later write. This is
+/// Git's rule for "racily clean" index entries.
+fn settled(identity: &FileIdentity, started: std::time::SystemTime) -> bool {
+    let changed = identity.5;
+    started
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .and_then(|since| i64::try_from(since.as_secs()).ok())
+        .is_some_and(|started| changed < started - 1)
+}
+
 pub(in crate::review) fn binary_digest(binary: &Path) -> Result<String, Error> {
+    binary_digest_started(binary, std::time::SystemTime::now())
+}
+
+fn binary_digest_started(binary: &Path, started: std::time::SystemTime) -> Result<String, Error> {
     let _trace = crate::diagnostics::trace::span("integration.binary_digest");
+    let file = fs::File::open(binary)?;
+    let identity = file_identity(&file)?;
+    let digests = || {
+        DIGESTS
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    };
+    let known = identity.and_then(|identity| {
+        digests()
+            .iter()
+            .find(|(key, _)| *key == identity)
+            .map(|(_, digest)| digest.clone())
+    });
+    if let Some(digest) = known {
+        crate::diagnostics::trace::count("integration.binary_hash_reuses", 1);
+        return Ok(digest);
+    }
     crate::diagnostics::trace::count("integration.binary_hashes", 1);
     let mut bytes = Vec::new();
-    fs::File::open(binary)?
+    (&file)
         .take(128 * 1024 * 1024 + 1)
         .read_to_end(&mut bytes)?;
     if bytes.len() > 128 * 1024 * 1024 {
         return Err(Error::Invalid("Shield binary exceeds setup limit"));
     }
-    Ok(policy::fingerprint(&bytes))
+    let digest = policy::fingerprint(&bytes);
+    // Remember it only if nothing changed the file while it was read.
+    let unchanged = identity.filter(|identity| {
+        settled(identity, started) && file_identity(&file).ok().flatten() == Some(*identity)
+    });
+    if let Some(identity) = unchanged {
+        let mut known = digests();
+        // A process compares a handful of executables; keep the newest few.
+        if !known.iter().any(|(key, _)| *key == identity) {
+            if known.len() == 8 {
+                known.remove(0);
+            }
+            known.push((identity, digest.clone()));
+        }
+    }
+    Ok(digest)
 }
 
 pub(in crate::review) fn mcp_after(
@@ -933,16 +1016,16 @@ pub(in crate::review) fn status(context: &Context, state: &State) -> Value {
             "legacy_interceptor":legacy_interceptor,
             "mcp_connections":connections,
             "registered_integrations":agents.iter().map(|agent|json!({"agent":agent,"surface":"mcp","status":if degraded.contains(agent) {"degraded"} else {"registered"}})).collect::<Vec<_>>(),
-            "installed_integrations":registered.as_ref().map(|r|r.agents.keys().map(|agent| {
+            "installed_integrations":registered.as_ref().map_or_default(|r|r.agents.keys().map(|agent| {
                 let adapter=agents::find(agent);
-                let categories=adapter.map(crate::agents::AgentAdapter::working_file_categories).unwrap_or_default();
+                let categories=adapter.map_or_default(crate::agents::AgentAdapter::working_file_categories);
                 json!({"agent":agent,"surface":"native-hooks","status":if degraded.contains(agent.as_str()) {"degraded"} else {"installed"},
                     "events":r.agents[agent].groups.keys().collect::<Vec<_>>(),
                     "working_files":{"categories":categories,"session_discovery":"request-time","runtime_assets":if categories.contains(&"runtime_assets") {"supported"} else {"unsupported"},"non_temporary_scratch":if categories.contains(&"non_temporary_scratch") {"supported"} else {"unsupported"}},
                     "native_approval":adapter.is_some_and(|a|a.approval(agents::Event::Before)==crate::enforcement::protocol::NativeApproval::Prompt),
                     "permission_request":adapter.is_some_and(|a|a.spec().events.iter().any(|(event,e)|*e==agents::Event::Permission && r.agents[agent].groups.contains_key(*event))),
                     "ask_fallback":if adapter.is_some_and(|a|a.spec().needs_ask_fallback) { json!(fallback(&meta,&state.settings,agent).unwrap_or_default()) } else { Value::Null }})
-            }).collect::<Vec<_>>()).unwrap_or_default(),
+            }).collect::<Vec<_>>()),
             "diagnostics":diagnostics,"repair_needed":!healthy,
             "tool_interception":if registered.as_ref().is_some_and(|r|!r.agents.is_empty()) {"native hooks installed; host loading is unverified"} else if !legacy_interceptor.is_null() {"legacy text-read interceptor installed; host loading is unverified"} else if host_integration.is_null() {"not installed"} else if host_integration["agent"] == host_definition::HUB.id {"native hooks defined for Hub to publish; host loading is unverified"} else {"native hooks defined for Box to publish; host loading is unverified"},
             "live_host_verification":"unverified",
@@ -953,4 +1036,62 @@ pub(in crate::review) fn status(context: &Context, state: &State) -> Value {
         Ok::<_, Error>(report)
     })();
     inspected.unwrap_or_else(|e| json!({"registered_integrations":[],"installed_integrations":[],"diagnostics":[e.to_string()],"repair_needed":true,"tool_interception":"unknown","live_host_verification":"unverified","verification":{"state":"unverified"}}))
+}
+
+#[cfg(all(test, unix))]
+mod digest_tests {
+    use super::*;
+
+    #[test]
+    fn a_settled_binary_is_hashed_once_and_a_recent_change_is_never_remembered() {
+        let root = assert_fs::TempDir::new().unwrap();
+        let logs = assert_fs::TempDir::new().unwrap();
+        let cli = <crate::cli::Cli as clap::Parser>::parse_from([
+            "shield",
+            "--debug-log-dir",
+            logs.path().to_str().unwrap(),
+            "status",
+        ]);
+        let log = std::sync::Arc::new(crate::diagnostics::Log::open(&cli));
+        // Digest, real hashes and cache hits for one call.
+        let digest = |path: &Path, started| {
+            let request = log.request("command", "status", None, None).unwrap();
+            let digest = {
+                let _scope = request.enter();
+                binary_digest_started(path, started).unwrap()
+            };
+            let counts = (
+                request.recorded_count("integration.binary_hashes"),
+                request.recorded_count("integration.binary_hash_reuses"),
+            );
+            request.finish("ok");
+            (digest, counts)
+        };
+        let path = root.path().join("shield");
+        let now = std::time::SystemTime::now;
+        let one = policy::fingerprint(b"acme binary one");
+        let two = policy::fingerprint(b"acme binary two");
+
+        // Just written: a same-size rewrite in the same clock tick could keep
+        // its identity, so the digest is hashed each time and never remembered.
+        fs::write(&path, b"acme binary one").unwrap();
+        assert_eq!(digest(&path, now()), (one.clone(), (1, 0)));
+        assert_eq!(digest(&path, now()), (one, (1, 0)));
+        fs::write(&path, b"acme binary two").unwrap();
+        assert_eq!(digest(&path, now()), (two.clone(), (1, 0)));
+
+        // Hashing well after the last change remembers the digest.
+        let later = now() + std::time::Duration::from_hours(1);
+        assert_eq!(digest(&path, later), (two.clone(), (1, 0)));
+        assert_eq!(digest(&path, later), (two, (0, 1)));
+
+        // A replacement through rename changes the inode.
+        let other = root.path().join("replacement");
+        fs::write(&other, b"acme binary 333").unwrap();
+        fs::rename(&other, &path).unwrap();
+        assert_eq!(
+            digest(&path, later),
+            (policy::fingerprint(b"acme binary 333"), (1, 0))
+        );
+    }
 }

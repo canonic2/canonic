@@ -3,16 +3,33 @@ use super::{Context, Error, HANDLE_BYTES, Path, Store, Value, Views, configurati
 use std::collections::BTreeSet;
 
 impl Views {
+    /// Reserve a proposal's two sides. `identities` are their
+    /// [`crate::review::candidate_identity`] digests, which the caller holds.
     pub(in crate::review::mcp) fn retain_pair(
         &mut self,
         context: &Context,
         before: (&Value, &Value),
         after: (&Value, &Value),
+        identities: (&str, &str),
         plans: Option<(configuration::Evaluator, configuration::Evaluator)>,
     ) -> Result<(String, String), Error> {
         let (base_plan, next_plan) = plans.map_or((None, None), |(a, b)| (Some(a), Some(b)));
-        let base = self.retain_prepared(context, before.0, before.1, base_plan, None, None)?;
-        let next = self.retain_prepared(context, after.0, after.1, next_plan, None, Some(&base))?;
+        let base = self.retain_keyed(
+            context,
+            before,
+            identity_of(identities.0, before.1),
+            base_plan,
+            None,
+            None,
+        )?;
+        let next = self.retain_keyed(
+            context,
+            after,
+            identity_of(identities.1, after.1),
+            next_plan,
+            None,
+            Some(&base),
+        )?;
         Ok((base, next))
     }
 

@@ -1061,10 +1061,123 @@ fn an_expired_request_deadline_answers_without_a_tool_result() {
     .unwrap();
     let expired = reply(&lines(&output), &json!(2));
     assert_eq!(expired["error"]["code"], -32001, "{expired}");
+    // The budget starts when the call runs, and the error names what to do.
+    let message = expired["error"]["message"].as_str().unwrap();
     assert!(
-        expired["error"]["message"]
-            .as_str()
-            .unwrap()
-            .starts_with("Request deadline exceeded")
+        message.contains("nothing changed") && message.contains("doctor"),
+        "{message}"
     );
+}
+
+/// Shield selects the driver's FIFO contract, which MCP Kit's scheduling
+/// tests verify: one tools lane holding 64 calls run in order, whose budgets
+/// start when each runs, so calls queued behind slow work keep their limit.
+#[test]
+fn tool_calls_queue_in_order_with_budgets_starting_when_they_run() {
+    let options = test_options();
+    let tools = &options.lanes[0];
+    assert_eq!((tools.workers, tools.capacity), (1, MAX_QUEUED_CALLS));
+    assert_eq!(options.budget_start, stdio::BudgetStart::Dispatch);
+}
+
+/// A burst of calls waits its turn: none is refused as busy, and each runs.
+#[test]
+fn a_burst_of_calls_is_queued_and_answered_instead_of_refused() {
+    let (server, _project) = fixture(None);
+    let mut messages = initialize(&json!({}), "Acme").to_vec();
+    let ids: Vec<u64> = (2..2 + 3 * 8).collect();
+    for id in &ids {
+        messages.push(tool(json!(id), "status", &json!({})));
+    }
+    let frames = exchange(server, &messages);
+    for id in ids {
+        let answer = reply(&frames, &json!(id));
+        assert!(answer["error"].is_null(), "{id}: {answer}");
+        assert!(answer["result"].is_object(), "{id}: {answer}");
+    }
+}
+
+/// Every review-preparing tool is a published change, so the two hand-kept
+/// lists cannot drift apart.
+#[test]
+fn review_preparing_tools_are_published_changes() {
+    let catalog = crate::review::mcp::tools();
+    for tool in catalog["tools"].as_array().unwrap() {
+        let name = tool["name"].as_str().unwrap();
+        if crate::review::mcp::prepares_review(name) {
+            assert!(crate::review::mcp::mutates(name), "{name}");
+            assert_eq!(tool["annotations"]["readOnlyHint"], false, "{name}");
+        }
+    }
+    for name in [
+        "policy_propose",
+        "rule_add",
+        "rule_edit",
+        "rule_remove",
+        "pack_add",
+        "pack_update",
+        "pack_remove",
+        "pack_configure",
+    ] {
+        assert!(
+            catalog["tools"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|tool| tool["name"] == name),
+            "{name} is not published"
+        );
+    }
+}
+
+/// Each kind of call stopped at its limit says whether anything took effect
+/// and names the call that continues.
+#[test]
+fn deadline_errors_name_the_outcome_and_the_next_call() {
+    use canonic_mcp_kit::stdio::Handler as _;
+    let (server, _project) = fixture(None);
+    let deadline = |name: &str, arguments: Value| {
+        let call = Request::Tool(canonic_mcp_kit::ToolCall {
+            name: name.into(),
+            arguments,
+            progress_token: None,
+        });
+        server.deadline_messages(&call).running.unwrap()
+    };
+    // A direct review repeats safely; a guided one would ask the user again.
+    let direct = deadline("pack_configure", json!({"reference":"acme/read","set":{}}));
+    assert!(direct.contains("nothing was applied") && direct.contains("same arguments"));
+    for (name, arguments) in [
+        ("pack_add", json!({"reference":"acme/read"})),
+        (
+            "pack_configure",
+            json!({"reference":"acme/read","variables":["x"]}),
+        ),
+    ] {
+        let guided = deadline(name, arguments);
+        assert!(
+            guided.contains("policy_show") && !guided.contains("same arguments"),
+            "{name}: {guided}"
+        );
+    }
+    for (name, route) in [
+        ("policy_apply", "policy_show"),
+        ("request_approve", "request_show"),
+        ("request_deny", "request_show"),
+        ("session_grant_approve", "session_grant_show"),
+        ("policy_defer", "policy_draft_list"),
+        ("registry_remove", "registry_list with the original scope"),
+        (
+            "review_defer",
+            "suggestion_list with the original session_id",
+        ),
+        ("protection_set", "status"),
+    ] {
+        let message = deadline(name, json!({}));
+        assert!(
+            message.contains("unknown") && message.contains(route),
+            "{name}: {message}"
+        );
+    }
+    assert!(deadline("pack_list", json!({})).contains("nothing changed"));
 }

@@ -279,9 +279,7 @@ pub(crate) fn examples(
     } else {
         build_all_shapes(&matchers, false)
     };
-    shapes
-        .map(|partition| partition.requests)
-        .unwrap_or_default()
+    shapes.map_or_default(|partition| partition.requests)
 }
 
 pub(crate) fn witness_budget(packs: &[(&Pack, Profile)], customs: &[&CustomRules]) -> usize {

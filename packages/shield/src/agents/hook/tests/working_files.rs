@@ -520,7 +520,7 @@ fn check_agent_skills(
     if agent == "codex" {
         assert_permitted(&write(&shared.join("acme/SKILL.md")), agent);
     } else {
-        assert!(!reason(&write(&shared.join("acme/SKILL.md"))).is_empty());
+        assert_ne!(reason(&write(&shared.join("acme/SKILL.md"))), "");
     }
     assert!(
         !reason(&write(&own.join("credentials.json"))).is_empty(),
@@ -543,13 +543,13 @@ fn check_agent_skills(
     {
         let escape = own.join("skills/acme/escape.md");
         std::os::unix::fs::symlink(own.join("credentials.json"), &escape).unwrap();
-        assert!(
-            !reason(&call(
+        assert_ne!(
+            reason(&call(
                 project,
                 agent,
                 &format!("cat '{}'", escape.display())
-            ))
-            .is_empty()
+            )),
+            ""
         );
         assert!(
             !reason(&write(&escape)).is_empty(),

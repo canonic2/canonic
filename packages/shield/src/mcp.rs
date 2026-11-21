@@ -29,6 +29,11 @@ use std::{
 pub(crate) const MAX_MESSAGE: usize = 524_288;
 pub(crate) const MAX_OUTPUT: usize = 4_194_304;
 pub(crate) const MAX_MESSAGES: u64 = 1024;
+/// Tool calls one connection may have queued or running. Calls run one at a
+/// time in arrival order; a host sending a batch of parallel calls waits for
+/// its turn instead of being refused. Each waiting call holds at most one
+/// [`MAX_MESSAGE`] frame.
+pub(crate) const MAX_QUEUED_CALLS: usize = 64;
 
 /// One enrolled project connection. A pristine diagnostic connection can adopt
 /// its first runtime epoch; retained authority and later epoch changes cannot.
@@ -538,6 +543,16 @@ impl stdio::Handler for Server {
         }
     }
 
+    fn deadline_messages(&self, request: &Request) -> stdio::DeadlineMessages {
+        let Request::Tool(call) = request else {
+            return stdio::DeadlineMessages::default();
+        };
+        stdio::DeadlineMessages {
+            queued: None,
+            running: Some(messages::deadline(&call.name, needs_input_form(call)).to_owned()),
+        }
+    }
+
     fn initialize(&self, client: &Client) -> Result<ServerInfo, RpcError> {
         let mut review = self
             .review
@@ -776,8 +791,9 @@ pub(crate) fn catalog(agent: Option<&str>) -> Result<Catalog, CatalogError> {
     Catalog::new(tools)
 }
 
-/// Shield's limits: one evaluator worker with eight outstanding requests,
-/// bounded frames and output, and a per-connection message count.
+/// Shield's limits: one evaluator worker handles up to 64 outstanding calls in
+/// arrival order, each budget starting when its call runs, bounded frames and
+/// output, and a per-connection message count.
 pub(crate) fn options(
     timeout: Duration,
     log: Option<Arc<crate::diagnostics::Log>>,
@@ -788,7 +804,11 @@ pub(crate) fn options(
             max_messages: Some(MAX_MESSAGES),
             ..SessionOptions::default()
         },
+        // FIFO: a call's budget covers its own work, never the wait behind
+        // earlier calls, so a slow call cannot time out the ones after it.
+        lanes: vec![stdio::Lane::new("tools", 1, MAX_QUEUED_CALLS)],
         timeout,
+        budget_start: stdio::BudgetStart::Dispatch,
         max_output_bytes: MAX_OUTPUT,
         observer: log.and_then(frame_log::observer),
         ..stdio::Options::default()

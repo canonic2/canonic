@@ -381,7 +381,7 @@ fn registry_enrollment_unknown_hosts_and_invalid_aliases_do_not_discover_sources
             assert!(result["result"]["isError"].as_bool().unwrap(), "{result}");
         }
     }
-    assert!(registry.server().requests().is_empty());
+    assert_eq!(registry.server().requests(), [] as [std::string::String; 0]);
 }
 
 #[test]

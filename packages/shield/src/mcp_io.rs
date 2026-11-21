@@ -15,6 +15,14 @@ use std::{
 #[cfg(test)]
 mod tests;
 
+#[expect(
+    clippy::bufreader_stdin,
+    reason = "the transport moves the input reader to a thread, and StdinLock is not Send"
+)]
+fn process_input() -> io::BufReader<io::Stdin> {
+    io::BufReader::new(io::stdin())
+}
+
 pub(crate) fn run(
     project: Option<&Path>,
     input: &McpServe,
@@ -25,11 +33,7 @@ pub(crate) fn run(
         Some(log.clone()),
     );
     if input.skills_only {
-        return match mcp::serve_static(
-            io::BufReader::new(io::stdin()),
-            io::stdout().lock(),
-            &options,
-        ) {
+        return match mcp::serve_static(process_input(), io::stdout().lock(), &options) {
             Ok(()) => ExitCode::SUCCESS,
             Err(error) => {
                 eprintln!("{error}");
@@ -74,12 +78,7 @@ pub(crate) fn run(
         eprintln!("Cannot start Shield project review server");
         return ExitCode::FAILURE;
     };
-    match mcp::serve(
-        server,
-        io::BufReader::new(io::stdin()),
-        io::stdout().lock(),
-        &options,
-    ) {
+    match mcp::serve(server, process_input(), io::stdout().lock(), &options) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("{error}");

@@ -296,7 +296,7 @@ pub(in crate::review) fn keep_bundle_artifacts(bundle: &Value) -> Result<(), Err
         (candidate.pack_paths().collect::<Vec<_>>(), &bundle["packs"]),
         (candidate.disabled_paths().collect(), &bundle["disabled"]),
     ] {
-        let texts = texts.as_array().map(Vec::as_slice).unwrap_or_default();
+        let texts = texts.as_array().map_or_default(Vec::as_slice);
         for (path, text) in paths.into_iter().zip(texts) {
             if let Some(text) = text.as_str() {
                 keep_artifact(path, text);

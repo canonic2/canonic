@@ -178,7 +178,10 @@ fn integration_review_compaction_and_history_purge_preserve_only_current_proof()
     .unwrap();
     let after = store.read_checkpoint().unwrap();
     assert!(!after.settings.history_enabled);
-    assert!(store.read_history().unwrap().events.is_empty());
+    assert_eq!(
+        store.read_history().unwrap().events,
+        [] as [serde_json::Value; 0]
+    );
     assert!(forms_reviewed_at(root.path()));
     assert_eq!(
         json!({"policy":after.policy_revision,"read":after.read_requests,"run":after.run_requests,

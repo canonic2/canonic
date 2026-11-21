@@ -677,7 +677,7 @@ mod tests {
             let local = matched["requirement_checks"]
                 .as_array()
                 .expect("complete projected evidence");
-            assert!(!local.is_empty());
+            assert_ne!(local.as_slice(), [] as [serde_json::Value; 0]);
             for check in local {
                 assert_eq!(check["rule_ref"], expected[source]);
                 checks += 1;

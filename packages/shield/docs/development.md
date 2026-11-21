@@ -1,31 +1,33 @@
 # Developing Shield
 
 Shield is one Cargo package (`canonic-shield`), library `shield`, and executable
-`shield`. Rust nightly-2026-04-16 (rustc 1.97) is pinned with rustfmt, Clippy and llvm-tools. Cargo.lock
-owns dependency versions; there is no root Cargo workspace.
+`shield`. Rust nightly-2026-11-09 (rustc 1.102) is pinned with rustfmt, Clippy and llvm-tools. Cargo.lock
+owns dependency versions; there is no root Cargo workspace. The package's own
+workspace adds only the `xtask` crate, which holds the development tasks that
+are more than one Cargo command; `cargo xtask --help` lists them.
 
 ## Fast iteration
 
-From this package directory:
+From this package directory, where rustup selects the pinned toolchain:
 
 ```sh
-make dev
-make test-focus FILTER='policy::'
+cargo build --locked
+cargo nextest run --locked --lib 'policy::'
 # Select integration tests explicitly when needed:
-make test-focus FILTER='selected_test_name' TEST_TARGET='--test integration'
+cargo nextest run --locked --test integration 'selected_test_name'
 ```
 
-`dev` writes an incremental build to `target/debug/shield`; run it directly to
-try changes. `test-focus` uses nextest with a required substring filter and
-defaults to library tests. Replace the integration example's placeholder with
-a real test name; nextest fails if nothing matches.
+`cargo build` writes an incremental build to `target/debug/shield`; run it
+directly to try changes. Give nextest a substring filter, with `--lib` for
+library tests. Replace the integration example's placeholder with a real test
+name; nextest fails if nothing matches.
 
 For a pack-add timeout, run the five-second MCP regression with an immutable
 public pack artifact. The fixture copies its rules into test-owned releases;
 it never modifies the artifact or an enrolled project:
 
 ```sh
-make test-focus FILTER=development_pack_proposals_complete PACK_PROFILE_ARTIFACT=/path/to/pack.yml
+SHIELD_PACK_PROFILE_ARTIFACT=/path/to/pack.yml cargo nextest run --locked --lib development_pack_proposals_complete
 ```
 
 Keep `target/` between iterations to reuse Cargo's cache. Use release builds
@@ -35,7 +37,7 @@ To check the in-place upgrade of a pre-continuity checkpoint written by a
 separately retained executable:
 
 ```sh
-make test-focus FILTER=previous_binary_unreceipted_checkpoint TEST_TARGET=--test=integration PREVIOUS_BINARY=/path/to/previous/shield CARGO_FLAGS='--run-ignored ignored-only'
+SHIELD_PREVIOUS_BINARY=/path/to/previous/shield cargo nextest run --locked --test integration --run-ignored ignored-only previous_binary_unreceipted_checkpoint
 ```
 
 This opt-in fixture initializes through that previous binary in an isolated
@@ -53,7 +55,7 @@ Shield includes MCP Kit, Registry Kit and TUI Kit; Process Kit is not used.
 The CLI needs no Node installation. Interactive commands require terminal
 stdin/stdout and a cursor-capable `TERM`; hooks and MCP stdio remain noninteractive.
 
-From this package directory, `make dev` builds `target/debug/shield`.
+From this package directory, `cargo build --locked` builds `target/debug/shield`.
 The distribution helper additionally requires Python 3.11+ and GNU binutils:
 
 ```sh
@@ -73,7 +75,7 @@ For a cross-build from x64, install an `aarch64-linux-gnu-gcc` cross-compiler
 and its GNU target libraries, then add the pinned Rust target:
 
 ```sh
-rustup target add --toolchain nightly-2026-04-16 aarch64-unknown-linux-gnu
+rustup target add --toolchain nightly-2026-11-09 aarch64-unknown-linux-gnu
 python3 scripts/release-linux.py build --architecture arm64
 python3 scripts/release-linux.py package --architecture arm64
 ```
@@ -147,7 +149,7 @@ libraries, add the pinned Rust target, and use an MSVC developer terminal target
 ARM64 (for example, the **x64_arm64 Cross Tools Command Prompt**):
 
 ```powershell
-rustup target add --toolchain nightly-2026-04-16 aarch64-pc-windows-msvc
+rustup target add --toolchain nightly-2026-11-09 aarch64-pc-windows-msvc
 powershell -NoProfile -File scripts/build-windows.ps1 -Architecture arm64
 ```
 
@@ -346,7 +348,7 @@ dependencies. Rust integration tests share `tests/integration/main.rs`.
 Install the developer tools:
 
 ```sh
-cargo install --locked cargo-nextest@0.9.146 cargo-deny@0.20.2 cargo-llvm-cov@0.9.1 cargo-insta@1.49.0
+cargo install --locked cargo-nextest@0.9.146 cargo-deny@0.20.2 cargo-llvm-cov@0.9.1 cargo-insta@1.49.0 cargo-sweep@0.8.0
 ```
 
 Tests use assert_cmd, assert_fs, predicates, insta, and proptest. Tool versions
@@ -357,7 +359,7 @@ Its JavaScript receipt-validator interoperability check is opt-in and requires
 Node 24+:
 
 ```sh
-make -C packages/shield test-focus FILTER=historical_interceptor_receipts_pass_legacy_js_validator CARGO_FLAGS='--run-ignored ignored-only'
+cargo nextest run --locked --lib --run-ignored ignored-only historical_interceptor_receipts_pass_legacy_js_validator
 ```
 
 ## Checks
@@ -416,25 +418,26 @@ docs remain under ignored target/.
 
 ## Local build and adapter checks
 
-From the repository root:
+From this package:
 
 ```sh
-make -C packages/shield build
-npm --prefix packages/shield/adapters test
-npm --prefix packages/shield/adapters/sdk-tests test
+cargo build --release --locked
+npm --prefix adapters test
+npm --prefix adapters/sdk-tests test
 ```
 
-`make -C packages/shield install-local` installs into `~/.local/bin`; `PREFIX`
-selects another root. From this package use `make build` and `make install-local`.
-`CARGO` overrides Cargo discovery and `CARGO_FLAGS=--offline` uses cached dependencies.
+`cargo xtask install` installs into `~/.local/bin`, ad-hoc signed on macOS;
+`--prefix DIR` selects another root, and Cargo options after `--` reach
+`cargo install`, such as `cargo xtask install -- --offline` to use cached
+dependencies.
 
 For one adapter or local SDK regression against the current development binary,
-use `make test-adapter-focus FILTER='test name' TEST_FILE=adapters/path/to/file.test.mjs`
-from this package. It runs `dev` and supplies that binary through
-`SHIELD_TEST_BINARY`. For example:
+use `cargo xtask adapter-test --file adapters/path/to/file.test.mjs --filter 'test name'`
+from this package. It builds `target/debug/shield` and supplies that binary
+through `SHIELD_TEST_BINARY`. For example:
 
 ```sh
-make test-adapter-focus FILTER='interactive SDK action approval' TEST_FILE=adapters/sdk-tests/action-approval.test.mjs
+cargo xtask adapter-test --file adapters/sdk-tests/action-approval.test.mjs --filter 'interactive SDK action approval'
 ```
 
 This focused SDK case uses the installed pinned SDK, an owned loopback provider,
@@ -449,8 +452,8 @@ Inspect the installed version/offline contract first without building Shield or
 starting a provider:
 
 ```sh
-make -C packages/shield native-acceptance-preflight NATIVE_HOST=copilot
-make -C packages/shield native-acceptance-preflight NATIVE_HOST=opencode
+cargo xtask native-preflight --host copilot
+cargo xtask native-preflight --host opencode
 ```
 
 A different version, missing offline route or missing CLI is a prerequisite
@@ -458,8 +461,8 @@ failure, not a reason to install or silently try a cloud provider. Once that
 preflight passes, select one host:
 
 ```sh
-make -C packages/shield test-native-acceptance NATIVE_HOST=copilot
-make -C packages/shield test-native-acceptance NATIVE_HOST=opencode
+cargo xtask native-acceptance --host copilot
+cargo xtask native-acceptance --host opencode
 ```
 
 Each command builds the development binary without installing it, then checks
@@ -475,11 +478,11 @@ target also attempts a later plugin argument mutation and requires evidence that
 it actually ran after Shield before attributing the refusal to frozen arguments.
 
 To reproduce against an already retained executable while other source work is
-in progress, use `test-native-acceptance-frozen` with the same `NATIVE_HOST` and
-an absolute `NATIVE_BINARY` path. This target does not compile or install code.
-Record that executable's SHA-256 with the result and preserve it for the entire
-run; its result describes that binary, not later source edits. Optional `FILTER`
-selects a named native case when reproducing a failure.
+in progress, add `--binary` with that executable's absolute path to the same
+`cargo xtask native-acceptance --host` command. It then does not compile or
+install code. Record that executable's SHA-256 with the result and preserve it
+for the entire run; its result describes that binary, not later source edits.
+Optional `--filter` selects a named native case when reproducing a failure.
 
 These targets need an owned loopback listener, operator-confirmation PTYs and
 TERM/KILL of their owned child process groups. Native children inherit an
@@ -498,16 +501,16 @@ are not installed-host acceptance evidence. Interactive Ask acceptance/cancel,
 other platforms, OpenCode V2 and hook/plugin startup failure protection remain
 separate targets and limits.
 
-Make prefers `~/.cargo/bin/cargo` so rustup selects the pinned toolchain,
-falling back to Cargo on PATH.
+Run Cargo through rustup, from this package, so it selects the pinned
+toolchain; use `~/.cargo/bin/cargo` when another Cargo comes first on PATH.
 
 ## Debug builds and diagnostics
 
-`make -C packages/shield build-debug` builds `target/diagnostic/shield` with release
-optimization, debug symbols, debug assertions and automatic JSONL logging. Native
-hook deadlines also apply to diagnostic builds. `make -C packages/shield install-local-debug`
-installs that build into `~/.local/bin`. `make -C packages/shield install-local`
-installs the release build, which has logging disabled by default. Replacing
+`cargo build --profile diagnostic --locked` builds `target/diagnostic/shield`
+with release optimization, debug symbols, debug assertions and automatic JSONL
+logging. Native hook deadlines also apply to diagnostic builds.
+`cargo xtask install -- --profile diagnostic` installs that build into
+`~/.local/bin`. `cargo xtask install` installs the release build, which has logging disabled by default. Replacing
 the installed executable at the same path keeps existing registrations;
 restart the agent to load the new build.
 
@@ -599,18 +602,18 @@ size checks count encoded UTF-8 bytes without retaining an output string; source
 hashing uses bounded scratch space and preserves existing compact-JSON digests.
 
 Run the focused development regression with
-`make -C packages/shield test-focus FILTER=apply_request_trace_explains_work CARGO_FLAGS='--success-output immediate'`.
+`cargo nextest run --locked --lib --success-output immediate apply_request_trace_explains_work`.
 It creates an isolated project, proposes and applies three batches through real
 stdio, and prints timings and work counts. Optional
-`APPLY_PROFILE_PROJECT=/path/to/enrolled-project` reads that project's immutable
+`SHIELD_APPLY_PROFILE_PROJECT=/path/to/enrolled-project` reads that project's immutable
 pack artifacts into the temporary fixture. It does not copy settings, custom
 rules, history or identity and does not write to the source project. This is a
 local regression/profile fixture, not a cold-start or cross-platform latency
 acceptance campaign.
 
-`make -C packages/shield test-focus FILTER=ordinary_request_sweep CARGO_FLAGS='--release --success-output immediate'`
+`cargo nextest run --locked --lib --release --success-output immediate ordinary_request_sweep`
 compares fresh and aged stores through retained MCP requests and the CLI inspection
-owners. Optional `APPLY_PROFILE_PROJECT` selects immutable pack artifacts using
+owners. Optional `SHIELD_APPLY_PROFILE_PROJECT` selects immutable pack artifacts using
 the read-only fixture described above. The test asserts source/preparation/history
 work limits, including source capture counts, independent of unrelated retained proposals.
 It prints inclusive stage timings as well as round trips. CLI-owner timings exclude
@@ -671,7 +674,7 @@ answers Accept, Decline and Escape. The fixture observes the host's permission
 mode and verifies unchanged policy while input is withheld. It uses neither an
 SDK elicitation callback nor an `Elicitation` hook. Run it independently with
 `node --test --test-concurrency=1 packages/shield/adapters/sdk-tests/claude-interactive.test.mjs`
-after `make -C packages/shield build`. It requires the installed `claude` command,
+after `cargo build --release --locked` in `packages/shield`. It requires the installed `claude` command,
 Python 3, PTYs, loopback access and permission to reap its owned child processes.
 For a fresh checkout install SDK test dependencies with
 `npm --prefix packages/shield/adapters/sdk-tests ci --ignore-scripts --no-fund --no-audit`.
@@ -682,23 +685,23 @@ owner-accepted shared behavior [described above](#native-linux-development).
 
 ## Individual Rust verification
 
-Choose the checks needed for your change; there is no aggregate target.
-`docs` generates HTML in `target/doc/`; `doctest` runs documentation examples.
-Rustdoc may recheck dependencies even with `--no-deps`, which only suppresses
-their generated pages. Keep Cargo caches between runs.
+Choose the checks needed for your change; there is no aggregate command.
+`cargo doc` generates HTML in `target/doc/`; `cargo test --doc` runs
+documentation examples. Rustdoc may recheck dependencies even with `--no-deps`,
+which only suppresses their generated pages. Keep Cargo caches between runs.
 
 | Category | Command from this package |
 | --- | --- |
-| Apply formatting | `make format` |
-| Verify formatting | `make format-check` |
-| Strict Clippy | `make lint` |
-| Type checking | `make types` |
-| Tests | `make test` |
-| Documentation examples | `make doctest` |
-| API reference HTML | `make docs` |
-| Dependency audit | `make deps` |
+| Apply formatting | `cargo fmt` |
+| Verify formatting | `cargo fmt --check` |
+| Strict Clippy and type checking | `cargo clippy --locked --workspace --all-targets -- -D warnings` |
+| Tests | `cargo nextest run --locked` |
+| Documentation examples | `cargo test --doc --locked` |
+| API reference HTML | `cargo doc --locked --no-deps --document-private-items` |
+| Dependency audit | `cargo deny check` |
+| Free disk space | `cargo sweep --time 3` (from cargo-sweep), while no build or test uses `target/` |
 
-`make format FORMAT_FILES='src/cli/public.rs'` formats the named files and their
+`rustfmt --edition 2024 src/cli/public.rs` formats the named files and their
 out-of-line child modules. Name only leaf files (files with no out-of-line child
 modules) to keep edits limited to those files. For example, naming `src/agents.rs`
 also formats modules under `src/agents/`.

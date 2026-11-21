@@ -765,9 +765,10 @@ impl Reach<'_> {
             return None;
         }
         if let Some(short) = spec.strip_prefix(":/")
-            && short.as_bytes().first().is_some_and(|byte| {
-                !byte.is_ascii_alphanumeric() && ![b'.', b'_', b'-'].contains(byte)
-            })
+            && short
+                .as_bytes()
+                .first()
+                .is_some_and(|byte| !byte.is_ascii_alphanumeric() && !b"._-".contains(byte))
         {
             return None;
         }
@@ -1243,12 +1244,21 @@ mod tests {
             ..guard
         };
         let opened = |arguments: &[&str]| policy_files(arguments, &root, &root, true, open).0;
-        assert!(opened(&["checkout", "HEAD~5", "--", ".claude/settings.json"]) == Protection::None);
-        assert!(opened(&["checkout", "HEAD~5", "--", ".shield"]) == Protection::Blocked);
+        assert_eq!(
+            opened(&["checkout", "HEAD~5", "--", ".claude/settings.json"]),
+            Protection::None
+        );
+        assert_eq!(
+            opened(&["checkout", "HEAD~5", "--", ".shield"]),
+            Protection::Blocked
+        );
         // From a subfolder, `.` holds no policy file.
-        assert!(level(&["checkout", "HEAD~1", "--", "."], &root.join("src")) == Protection::None);
+        assert_eq!(
+            level(&["checkout", "HEAD~1", "--", "."], &root.join("src")),
+            Protection::None
+        );
         // An unknown folder leaves every pathspec possibly covering them.
-        assert!(
+        assert_eq!(
             policy_files(
                 &["checkout", "HEAD~1", "--", "src"],
                 &root,
@@ -1256,7 +1266,8 @@ mod tests {
                 false,
                 guard
             )
-            .0 == Protection::Blocked
+            .0,
+            Protection::Blocked
         );
     }
 
@@ -1364,9 +1375,9 @@ mod tests {
             true,
             guard,
         );
-        assert!(safe.0 == Protection::None);
+        assert_eq!(safe.0, Protection::None);
         let unknown = content(&["show", "HEAD:notes.txt"], &root, &root, false, guard);
-        assert!(unknown.0 == Protection::Sensitive);
+        assert_eq!(unknown.0, Protection::Sensitive);
     }
 
     #[test]

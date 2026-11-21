@@ -456,7 +456,7 @@ pub(super) fn show(context: &Context, reference: &str) -> Result<Value, Error> {
         "invocations",
         "command_sets",
     ] {
-        let mut route = json!({"tool":"pack_info","reference":format!("{}{}@{}",pack["source_alias"].as_str().map(|alias|format!("{alias}/")).unwrap_or_default(),pack["id"].as_str().unwrap_or(reference),pack["version"].as_str().unwrap_or_default()),"view":"settings","section":field});
+        let mut route = json!({"tool":"pack_info","reference":format!("{}{}@{}",pack["source_alias"].as_str().map_or_default(|alias|format!("{alias}/")),pack["id"].as_str().unwrap_or(reference),pack["version"].as_str().unwrap_or_default()),"view":"settings","section":field});
         if field == "rules" {
             route = json!({"tool":"rule_list"});
         }

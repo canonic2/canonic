@@ -1165,7 +1165,10 @@ fn invalid_policy_recovery_repairs_and_aborts_a_real_active_worktree_rebase() {
         fs::read_to_string(root.join("feature.txt")).unwrap(),
         "Acme feature\n"
     );
-    assert!(checked(&["status", "--porcelain", "--untracked-files=no"]).is_empty());
+    assert_eq!(
+        checked(&["status", "--porcelain", "--untracked-files=no"]),
+        ""
+    );
     checked(&["reset", "--hard", &original]);
     assert!(!restoration_git(root, &["rebase", "main"]).status.success());
     let command = "git rebase --abort";
@@ -1482,7 +1485,7 @@ fn git_restoration_rebase_lifecycle_resolves_continues_and_aborts_in_another_wor
             .unwrap()
             .contains("Acme main")
     );
-    assert!(checked(&["status", "--porcelain"]).is_empty());
+    assert_eq!(checked(&["status", "--porcelain"]), "");
     checked(&["reset", "--hard", &original]);
     assert!(
         !reviewed_restoration_git(root, &["rebase", "main"])
@@ -1495,7 +1498,7 @@ fn git_restoration_rebase_lifecycle_resolves_continues_and_aborts_in_another_wor
             .success()
     );
     assert_eq!(checked(&["rev-parse", "HEAD"]), original);
-    assert!(checked(&["status", "--porcelain"]).is_empty());
+    assert_eq!(checked(&["status", "--porcelain"]), "");
     assert_eq!(
         fs::read_to_string(target.join("keep.txt")).unwrap(),
         "Acme unchanged\n"

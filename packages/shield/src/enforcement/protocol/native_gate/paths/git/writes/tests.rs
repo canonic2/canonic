@@ -299,14 +299,14 @@ fn a_changed_or_unknown_answer_asks_and_names_the_policy_folder() {
         guard(),
         &changed,
     );
-    assert!(finding.0 == Protection::Undetermined);
+    assert_eq!(finding.0, Protection::Undetermined);
     assert_eq!(
         finding.1.as_deref(),
         Some(root.join(".shield").to_str().unwrap())
     );
     let unknown = |_: &Target, _: &Query| None;
     let finding = policy_files_with(&["reset", "--hard"], &root, &root, true, guard(), &unknown);
-    assert!(finding.0 == Protection::Undetermined);
+    assert_eq!(finding.0, Protection::Undetermined);
     // An unknown folder asks without running Git.
     let unexpected =
         |_: &Target, _: &Query| -> Option<bool> { panic!("no query in an unknown folder") };
@@ -318,7 +318,7 @@ fn a_changed_or_unknown_answer_asks_and_names_the_policy_folder() {
         guard(),
         &unexpected,
     );
-    assert!(finding.0 == Protection::Undetermined);
+    assert_eq!(finding.0, Protection::Undetermined);
 }
 
 /// Runs the test Git with a neutral identity in `root`.
@@ -406,10 +406,14 @@ fn root_pathspecs_resolve_from_the_git_worktree_including_gate_entries() {
     // A different repository's own protected paths stay protected; ordinary
     // source is resolved there rather than against the enrolled project.
     git(&root.join("src"), &["init", "-q"]);
-    assert!(
-        level(&["-C", "src", "checkout", "--", ":/.shield/config.yml"]) == Protection::Undetermined
+    assert_eq!(
+        level(&["-C", "src", "checkout", "--", ":/.shield/config.yml"]),
+        Protection::Undetermined
     );
-    assert!(level(&["-C", "src", "checkout", "--", ":/app.txt"]) == Protection::None);
+    assert_eq!(
+        level(&["-C", "src", "checkout", "--", ":/app.txt"]),
+        Protection::None
+    );
     // Overrides and unavailable roots retain conservative handling.
     for arguments in [
         &[
@@ -724,7 +728,10 @@ fn real_git_answers_whether_committed_content_changes_the_policy_files() {
     ] {
         assert!(level(arguments, &root) == Protection::None, "{arguments:?}");
     }
-    assert!(level(&["-C", "src", "switch", "acme-same"], &root) == Protection::None);
+    assert_eq!(
+        level(&["-C", "src", "switch", "acme-same"], &root),
+        Protection::None
+    );
     for arguments in [
         &["switch", "acme-open"][..],
         &["checkout", "acme-open"],
@@ -741,18 +748,24 @@ fn real_git_answers_whether_committed_content_changes_the_policy_files() {
     }
     // An untracked file in .shield is one a clean or untracked stash removes.
     std::fs::write(root.join(".shield/acme.yml"), "acme\n").unwrap();
-    assert!(level(&["clean", "-f"], &root) == Protection::Undetermined);
-    assert!(level(&["stash", "-u"], &root) == Protection::Undetermined);
-    assert!(level(&["stash"], &root) == Protection::None);
+    assert_eq!(level(&["clean", "-f"], &root), Protection::Undetermined);
+    assert_eq!(level(&["stash", "-u"], &root), Protection::Undetermined);
+    assert_eq!(level(&["stash"], &root), Protection::None);
     std::fs::remove_file(root.join(".shield/acme.yml")).unwrap();
     // A permissive configuration staged without touching the file: keeping
     // the index rewrites the file, a plain stash or reset does not.
     let open = git(&root, &["rev-parse", "acme-open:.shield/config.yml"]);
     let entry = format!("100644,{open},.shield/config.yml");
-    assert!(level(&["update-index", "--cacheinfo", &entry], &root) == Protection::Blocked);
+    assert_eq!(
+        level(&["update-index", "--cacheinfo", &entry], &root),
+        Protection::Blocked
+    );
     git(&root, &["update-index", "--cacheinfo", &entry]);
-    assert!(level(&["stash", "--keep-index"], &root) == Protection::Undetermined);
-    assert!(level(&["reset", "--hard"], &root) == Protection::None);
+    assert_eq!(
+        level(&["stash", "--keep-index"], &root),
+        Protection::Undetermined
+    );
+    assert_eq!(level(&["reset", "--hard"], &root), Protection::None);
     // Committed, the reset to that commit rewrites it: the user decides.
     git(&root, &["commit", "-q", "-m", "Acme staged"]);
     assert_eq!(
@@ -772,7 +785,7 @@ fn real_git_answers_whether_committed_content_changes_the_policy_files() {
     }
     // Switching to a branch whose policy files match the working tree is
     // ordinary.
-    assert!(level(&["switch", "acme-same"], &root) == Protection::None);
+    assert_eq!(level(&["switch", "acme-same"], &root), Protection::None);
 }
 
 /// Starts `git rebase <options> <upstream>` on `branch`, which stops on its

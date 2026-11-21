@@ -228,7 +228,7 @@ fn exact_native_migration_deduplicates_known_callbacks_and_preserves_profile_and
         let plan = prepare(root.path(), &before, agent).unwrap().unwrap();
         let desired = plan.desired.as_ref().unwrap();
         assert_eq!(desired.approved_tools, previous.approved_tools);
-        assert!(desired.ask_fallback == previous.ask_fallback);
+        assert_eq!(desired.ask_fallback, previous.ask_fallback);
         assert_eq!(desired.connections, previous.connections);
         assert_eq!(
             desired.agents[agent].groups.keys().collect::<Vec<_>>(),

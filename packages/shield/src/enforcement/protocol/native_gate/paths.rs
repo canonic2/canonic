@@ -1212,8 +1212,8 @@ mod portable_policy_guards {
         let path = root
             .path()
             .join("developer/.shield/reviewed-policies/receipt.json");
-        assert!(classify(&path, guard, Access::Read) == Protection::Blocked);
-        assert!(classify(&path, guard, Access::Write) == Protection::Blocked);
+        assert_eq!(classify(&path, guard, Access::Read), Protection::Blocked);
+        assert_eq!(classify(&path, guard, Access::Write), Protection::Blocked);
         assert_eq!(group(path.to_str().unwrap(), root.path(), guard), "state");
         assert!(removal(path.parent().unwrap(), root.path(), guard));
     }
@@ -1262,12 +1262,13 @@ mod portable_policy_guards {
         // User-wide storage is protected independently of this project's
         // location or cache override, including removal through an ancestor.
         if let Some(private) = user_state_root() {
-            assert!(
+            assert_eq!(
                 classify(
                     &private.join("registry-trust/active.json"),
                     guard,
                     Access::Write
-                ) == Protection::Blocked
+                ),
+                Protection::Blocked
             );
             assert!(removal(private.parent().unwrap(), root.path(), guard));
         }
@@ -1433,12 +1434,13 @@ mod historical_skills {
             root.path(),
             guard
         ));
-        assert!(
+        assert_eq!(
             classify(
                 &root.path().join(".codex/config.toml"),
                 guard,
                 Access::Write
-            ) == Protection::Blocked
+            ),
+            Protection::Blocked
         );
     }
 }
@@ -1462,19 +1464,29 @@ mod editable_skills {
             allow: PathAccess::default(),
             working_files: Some(&scope),
         };
-        assert!(classify(&skills.join("new/SKILL.md"), guard, Access::Write) == Protection::None);
-        assert!(classify(&skills, guard, Access::Write) == Protection::Blocked);
+        assert_eq!(
+            classify(&skills.join("new/SKILL.md"), guard, Access::Write),
+            Protection::None
+        );
+        assert_eq!(classify(&skills, guard, Access::Write), Protection::Blocked);
         assert!(removal(&skills, root.path(), guard));
         assert!(removal(&config, root.path(), guard));
         assert!(!removal(&skills.join("new/SKILL.md"), root.path(), guard));
-        assert!(classify(&config.join("config.toml"), guard, Access::Write) == Protection::Blocked);
+        assert_eq!(
+            classify(&config.join("config.toml"), guard, Access::Write),
+            Protection::Blocked
+        );
         for state in [".shield/state/state.json", ".shield/review/state.json"] {
-            assert!(classify(&skills.join(state), guard, Access::Write) == Protection::Blocked);
+            assert_eq!(
+                classify(&skills.join(state), guard, Access::Write),
+                Protection::Blocked
+            );
         }
         std::fs::remove_dir(&skills).unwrap();
         std::os::unix::fs::symlink(&config, &skills).unwrap();
-        assert!(
-            classify(&config.join("credentials.json"), guard, Access::Write) == Protection::Blocked
+        assert_eq!(
+            classify(&config.join("credentials.json"), guard, Access::Write),
+            Protection::Blocked
         );
     }
 }

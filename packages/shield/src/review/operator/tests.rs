@@ -227,7 +227,7 @@ fn doctor_names_packs_whose_registry_is_no_longer_enrolled() {
     };
     assert_eq!(checks(&context, "sources"), Vec::<serde_json::Value>::new());
     // Metadata diagnosis does not treat an inactive preview as broken policy.
-    assert!(checks(&context, "policy").is_empty());
+    assert_eq!(checks(&context, "policy"), [] as [serde_json::Value; 0]);
     Store::open(std::path::Path::new(&context.project_root))
         .unwrap()
         .update(&context, &|| Ok(()), |state| {

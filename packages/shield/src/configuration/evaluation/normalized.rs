@@ -342,9 +342,7 @@ fn rule_ask(evaluation: &policy::Evaluation) -> (u8, String, Vec<String>) {
         return (2,"matches no rule, so the user decides".into(),vec!["If it should run without asking, propose a pack or rule that covers it with policy_propose.".into()]);
     }
     let guidance = evaluation.guidance.first();
-    let alternatives = guidance
-        .map(|item| item.alternatives.clone())
-        .unwrap_or_default();
+    let alternatives = guidance.map_or_default(|item| item.alternatives.clone());
     let applied = evaluation
         .matches
         .iter()

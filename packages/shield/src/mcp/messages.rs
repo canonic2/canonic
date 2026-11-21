@@ -37,6 +37,48 @@ pub(super) fn approval_unavailable(agent: Option<&str>) -> &'static str {
     crate::agents::review::resolve(agent).guidance().unavailable
 }
 
+/// What a call stopped at its request time limit means and how to continue.
+/// Calls wait in order without a limit, so this covers only a call's own work.
+/// `guided` calls collect input through a form; repeating one asks the user
+/// again and prepares a new review, so they check for a saved one instead.
+pub(super) fn deadline(name: &str, guided: bool) -> &'static str {
+    match name {
+        _ if guided && crate::review::mcp::prepares_review(name) => {
+            "Shield stopped preparing this review at its time limit, so nothing was applied, but a review may have been saved. Call policy_show with status pending before calling the tool again, so the user is not asked twice. If it stops again, tell the user Shield timed out on this call and include the doctor tool's result."
+        }
+        _ if crate::review::mcp::prepares_review(name) => {
+            "Shield stopped preparing this review at its time limit, so nothing was applied. Call the tool again with the same arguments; it returns the review if one was saved. If it stops again, tell the user Shield timed out on this call and include the doctor tool's result."
+        }
+        "policy_apply" | "policy_withdraw" => {
+            "Shield stopped this call at its time limit; whether it took effect is unknown. Call policy_show with its proposal_id before calling it again."
+        }
+        "request_approve" | "request_deny" => {
+            "Shield stopped this call at its time limit; whether it took effect is unknown. Call request_show for each request ID it named before calling it again."
+        }
+        "session_grant_propose"
+        | "session_grant_reconsider"
+        | "session_grant_approve"
+        | "session_grant_revoke" => {
+            "Shield stopped this call at its time limit; whether it took effect is unknown. Call session_grant_show with its proposal_id or grant_id, or with session_ref to list them, before calling it again."
+        }
+        "policy_defer" | "policy_draft_remove" => {
+            "Shield stopped this call at its time limit; whether it took effect is unknown. Call policy_draft_list before calling it again."
+        }
+        "registry_remove" => {
+            "Shield stopped this call at its time limit. Whether the registry was removed is unknown. Call registry_list with the original scope and check whether the named alias is still registered in that scope before calling it again."
+        }
+        "review_defer" => {
+            "Shield stopped this call at its time limit. Whether the reviews were deferred is unknown. Call suggestion_list with the original session_id and check review_status for the named review_ids before calling it again."
+        }
+        _ if crate::review::mcp::mutates(name) => {
+            "Shield stopped this call at its time limit; whether it took effect is unknown. Call status before calling it again."
+        }
+        _ => {
+            "Shield stopped this read at its time limit; nothing changed. Call it once more. If it stops again, tell the user Shield timed out on this call and include the doctor tool's result."
+        }
+    }
+}
+
 /// The structured message of a declined host confirmation.
 pub(super) const APPROVAL_DECLINED: &str =
     "The change was not approved. Continue without it; do not retry unless the user requests it.";

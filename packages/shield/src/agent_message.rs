@@ -265,12 +265,10 @@ fn bound(text: &mut String, max: usize) {
 pub(crate) fn diagnostics(explanation: &Value) -> Value {
     let checks = explanation["requirement_checks"]
         .as_array()
-        .map(Vec::as_slice)
-        .unwrap_or_default();
+        .map_or_default(Vec::as_slice);
     let guidance = explanation["guidance"]
         .as_array()
-        .map(Vec::as_slice)
-        .unwrap_or_default();
+        .map_or_default(Vec::as_slice);
     let denied: Vec<_> = explanation["matches"].as_array().into_iter().flatten()
         .filter(|matched| matched["applied"] == true && matched["decision"] == "deny")
         .map(|matched| json!({"executable":matched["executable"],"rule_id":matched["rule_id"],"operation_ref":matched["operation_ref"]}))

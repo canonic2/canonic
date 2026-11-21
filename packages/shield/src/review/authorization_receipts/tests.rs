@@ -294,7 +294,7 @@ fn retry_does_not_renew_retention_and_expired_or_foreign_epochs_disappear() {
     assert!(registry.replay_consumer(claim, 19).is_none());
     assert!(registry.replay_consumer(claim, until).is_none());
     registry.compact(PROJECT, until);
-    assert!(registry.records.is_empty());
+    assert_eq!(registry.records, [] as [Receipt; 0]);
     registry
         .capture(capture(
             self::claim("read-request-new"),
@@ -303,7 +303,7 @@ fn retry_does_not_renew_retention_and_expired_or_foreign_epochs_disappear() {
         ))
         .unwrap();
     registry.compact(BINDING, until);
-    assert!(registry.records.is_empty());
+    assert_eq!(registry.records, [] as [Receipt; 0]);
 }
 
 #[test]

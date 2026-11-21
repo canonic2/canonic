@@ -1,11 +1,16 @@
 [package]
 name = "canonic-shield"
-version = "0.47.0"
+version = "0.48.0"
 edition = "2024"
-rust-version = "1.97"
+rust-version = "1.102"
 publish = false
 license-file = "../../LICENSE"
 description = "Standalone AI-agent protection CLI"
+
+# Shield is the workspace root; xtask holds the development tasks run as
+# `cargo xtask <task>`. Commands in this folder still select Shield alone.
+[workspace]
+members = ["xtask"]
 
 [lib]
 name = "shield"
@@ -19,15 +24,19 @@ path = "src/main.rs"
 # process launch. Use the diagnostic profile for a debugger.
 [profile.dev]
 debug = false
+# Generic code from dependencies, such as JSON encoding and parsing, is compiled
+# into this crate, so unoptimized it dominated CPU-bound tests. Level 1 halves
+# the suite and keeps debug assertions and overflow checks; incremental rebuilds
+# stay about as quick, and only a clean build of this crate takes longer.
+opt-level = 1
 
 # Parsing, hashing and regex work in dependencies dominates the budget and
-# large-policy tests; optimizing only dependencies keeps this crate quick to
-# rebuild.
+# large-policy tests; they change rarely, so optimizing them costs little.
 [profile.dev.package."*"]
 opt-level = 2
 
-# Native hosts impose short hook deadlines. Keep diagnostics and symbols without
-# the unoptimized evaluator overhead of Cargo's development profile.
+# Native hosts impose short hook deadlines. Keep release optimization and add
+# symbols and debug assertions for diagnostics.
 [profile.diagnostic]
 inherits = "release"
 debug = 2

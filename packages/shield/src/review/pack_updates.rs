@@ -121,7 +121,7 @@ fn inspect_at(context: &Context, state: &State, selector: Option<&str>, now: u64
         let Some(snapshot) = snapshot else {
             continue;
         };
-        let alias = usable.map(|(alias, _, _)| alias).unwrap_or_default();
+        let alias = usable.map_or_default(|(alias, _, _)| alias);
         items.extend(candidates(&snapshot, rows, alias, freshness));
     }
     items.sort_by(|a, b| {

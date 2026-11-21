@@ -41,7 +41,7 @@ pub(super) fn propose(
         context,
         input,
         checkpoint,
-        &mut |_, _, _, _, _| Ok(()),
+        &mut |_, _, _, _| Ok(()),
         &|row| row.public(),
     )
 }
@@ -133,7 +133,7 @@ fn a_prepared_proposal_refuses_a_concurrently_activated_base() {
         &context,
         &input("prepared"),
         &|| Ok(()),
-        &mut |_, _, _, _, _| {
+        &mut |_, _, _, _| {
             operator::commit_proposal_fixture(&context, other["proposal_id"].as_str().unwrap())?;
             Ok(())
         },

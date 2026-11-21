@@ -22,7 +22,7 @@ fn pack_updates_launch_preference_rejects_unknown_modes_without_starting_work() 
             .unwrap();
         assert_eq!(output.status.code(), Some(1));
         assert!(serde_json::from_slice::<Value>(&output.stdout).unwrap()["error"].is_object());
-        assert!(output.stderr.is_empty());
+        assert_eq!(output.stderr, [] as [u8; 0]);
         assert!(!root.path().join(".shield/pack-updates").exists());
     }
     let output = cargo_bin_cmd!("shield")
@@ -33,7 +33,7 @@ fn pack_updates_launch_preference_rejects_unknown_modes_without_starting_work() 
         .output()
         .unwrap();
     assert_eq!(output.status.code(), Some(2));
-    assert!(output.stdout.is_empty());
+    assert_eq!(output.stdout, [] as [u8; 0]);
     assert!(
         String::from_utf8(output.stderr)
             .unwrap()
@@ -47,7 +47,7 @@ fn pack_updates_launch_preference_rejects_unknown_modes_without_starting_work() 
         .output()
         .unwrap();
     assert_eq!(output.status.code(), Some(2));
-    assert!(output.stderr.is_empty());
+    assert_eq!(output.stderr, [] as [u8; 0]);
     let result: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(result["schema_version"], 1);
     assert_eq!(result["error"]["code"], "invalid-review");
@@ -1815,8 +1815,7 @@ fn escape_in_init_and_setup_goes_back_with_answers_kept() {
         .expect("state JSON");
         saved["operator"]["integration"]["agents"]
             .as_object()
-            .map(|agents| agents.keys().cloned().collect())
-            .unwrap_or_default()
+            .map_or_default(|agents| agents.keys().cloned().collect())
     };
     assert_eq!(agents(&root), ["claude"]);
     let other = TempDir::new().expect("project");

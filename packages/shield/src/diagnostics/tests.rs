@@ -154,7 +154,7 @@ fn oversized_diagnostic_records_are_counted_without_entering_the_queue() {
     log.event("oversized", || json!({"padding":"x".repeat(32 * 1024)}));
     flush(&log);
     assert_eq!(log.traces.get().unwrap().loss(), 1);
-    assert!(std::fs::read(log.path().unwrap()).unwrap().is_empty());
+    assert_eq!(std::fs::read(log.path().unwrap()).unwrap(), [] as [u8; 0]);
     log.event("bounded", || json!({}));
     flush(&log);
     let row: Value = serde_json::from_slice(&std::fs::read(log.path().unwrap()).unwrap()).unwrap();

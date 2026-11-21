@@ -69,7 +69,10 @@ fn explicit_history_project_is_read_only_and_does_not_rebind_the_connection() {
     );
     let normal = invoke(&source, &connection, "history_list", json!({}));
     assert_eq!(normal["project_id"], source.project_id);
-    assert!(normal["data"]["entries"].as_array().unwrap().is_empty());
+    assert_eq!(
+        normal["data"]["entries"].as_array().unwrap().as_slice(),
+        [] as [serde_json::Value; 0]
+    );
     let unauthorized = invoke(
         &source,
         &connection,

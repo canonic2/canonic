@@ -495,8 +495,7 @@ fn prepare_adapter(
                 adapter.merge_mcp(source, previous.and_then(|p| p.mcp.as_deref()), new)?
             };
             let empty = crate::json::parse(merged.as_bytes())
-                .ok()
-                .is_some_and(|value| value.as_object().is_some_and(serde_json::Map::is_empty));
+                .is_ok_and(|value| value.as_object().is_some_and(serde_json::Map::is_empty));
             Ok((desired.is_some() || !empty).then_some(merged))
         })?;
     }

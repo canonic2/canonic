@@ -21,7 +21,7 @@ pub(crate) fn receive(transport: &Transport, id: &Value) -> (Value, Vec<Value>) 
 }
 
 pub(crate) fn assert_progress(progress: &[Value], token: &Value) {
-    assert!(!progress.is_empty());
+    assert_ne!(progress, [] as [serde_json::Value; 0]);
     let mut previous = 0.0;
     for step in progress {
         assert_eq!(&step["progressToken"], token);

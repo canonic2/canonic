@@ -160,8 +160,7 @@ pub(super) fn prepare(
     let target_identity = identity(&rows[target])?;
     let offline = catalog.is_none();
     let catalogs = catalog
-        .map(|catalog| BTreeMap::from([(target_identity.registry.clone(), catalog)]))
-        .unwrap_or_default();
+        .map_or_default(|catalog| BTreeMap::from([(target_identity.registry.clone(), catalog)]));
     let mut pending: BTreeSet<_> = dependencies(&releases[target]).collect();
     if floating {
         pending.insert(target_identity.clone());

@@ -105,7 +105,7 @@ fn web_reviews_decline_is_durable_per_domain_session_without_history() {
         .unwrap()
         .update_checkpoint(&context, &|| Ok(()), |state| {
             assert!(!state.settings.history_enabled);
-            assert!(state.events.is_empty());
+            assert_eq!(state.events, [] as [serde_json::Value; 0]);
             state.proposals.clear();
             Ok(json!({}))
         })

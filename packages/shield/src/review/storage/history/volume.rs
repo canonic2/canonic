@@ -13,7 +13,7 @@ fn distribution(samples: &[f64]) -> Value {
 }
 
 #[test]
-#[ignore = "explicit history-volume campaign; use make history-volume"]
+#[ignore = "explicit history-volume campaign; use cargo xtask history-volume"]
 #[expect(
     clippy::too_many_lines,
     reason = "one explicit campaign keeps its measured boundary and post-run evidence together"

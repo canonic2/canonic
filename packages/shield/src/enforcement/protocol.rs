@@ -650,14 +650,31 @@ fn evaluate_inner(
         json!({"protocol_version":1,"request_id":input.request_id,"decision":decision,
             "code":code,"identity":metadata,"operation":operation})
     };
-    let root = identity.project_root();
+    let root = Path::new(identity.project_root());
     if !Path::new(&input.cwd).is_absolute() {
         return (failure(id, "invalid-context"), 2);
     }
     let Ok(cwd) = fs::canonicalize(&input.cwd) else {
         return (failure(id, "invalid-context"), 2);
     };
-    if !cwd.is_dir() || !owns_context(Path::new(root), &cwd) || cwd.to_str().is_none() {
+    // Claude reports the same persistent cwd for shell, file and web tools.
+    // Keep the active launch policy when that cwd is an enrolled descendant.
+    let valid_scope = match (native, &input.operation) {
+        (
+            Some(NativeContext {
+                integration: "claude",
+                ..
+            }),
+            Operation::Shell {
+                dialect: crate::shell::Dialect::Bash,
+                ..
+            }
+            | Operation::File { .. }
+            | Operation::Web { .. },
+        ) => cwd.starts_with(root),
+        _ => owns_context(root, &cwd),
+    };
+    if !cwd.is_dir() || !valid_scope || cwd.to_str().is_none() {
         return (failure(id, "invalid-context"), 2);
     }
     let operation = match &input.operation {

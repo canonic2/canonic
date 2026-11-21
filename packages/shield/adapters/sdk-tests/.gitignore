@@ -1,1 +1,4 @@
 node_modules/
+# A global-style `npm install --prefix` of a host CLI writes these here.
+/bin/
+/lib/

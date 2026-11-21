@@ -1109,19 +1109,23 @@ and plan that policy limits allow. Cursors retain no result data. Pending-review
 remain protected. A session accepts at most 1,024 inbound messages; the next one
 ends it with `-32000` "Session message limit reached".
 
-One worker processes tools while the dispatcher handles input and ping. At most
-eight tool calls may be outstanding, including one waiting for confirmation;
-more are refused with `-32000`. Duplicate outstanding IDs close the session.
+One worker processes tool calls in arrival order while the dispatcher handles
+input and ping. At most 64 tool calls may be outstanding, including queued calls
+and any legacy call waiting for confirmation. Additional calls receive `-32000`.
+Duplicate outstanding IDs close the session.
 Bundled reads use a separate worker with eight outstanding reads, allowing them
 to finish while the policy evaluator is busy.
 Task management uses two separate workers with eight outstanding requests, so
 status and cancellation remain reachable while preparation runs.
-`--request-timeout-ms` bounds queued work, evaluation and encoding
-(default 5,000 ms, range 1–60,000); a call that exceeds it receives `-32001`
-"Request deadline exceeded". Cancellation suppresses pending responses.
-Policy apply uses that budget for preparation, then waits for the form answer
-without a time limit, then uses a fresh ordinary budget for queued revalidation, commit and encoding.
-Checkpoints do not interrupt native blocking I/O; clients also own process/I/O
+`--request-timeout-ms` bounds active evaluation and encoding from dispatch
+(default 5,000 ms, range 1–60,000). A call that exceeds it receives `-32001`
+with recovery guidance. Queued calls have no separate deadline and wait for
+the worker to return. Client cancellation suppresses pending responses.
+A legacy approval form pauses the call's budget while the person decides. Its
+continuation uses the remaining budget for revalidation, commit and encoding.
+Modern form continuations arrive as separate calls with their own budgets.
+Cancellation is cooperative, so a worker blocked in native I/O can continue
+to hold up the queue after its timeout reply. Clients also own process and I/O
 limits. Lost `policy_propose` replies can be recovered by resubmitting the same
 arguments. For any lost `pack_add` or `pack_configure` reply, inspect `policy_show`
 before retrying, even if no form opened. Consumed form state cannot be replayed

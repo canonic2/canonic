@@ -129,7 +129,7 @@ fn upgrade_checkpoint_with_a_policy_copy_converts_on_first_read() {
     assert!(pending);
     assert_eq!(store.checkpoint_bytes().unwrap(), bytes);
     let state = store.read_checkpoint().unwrap();
-    assert!(state.policy_revision.is_empty());
+    assert_eq!(state.policy_revision, "");
     assert!(state.candidates.is_empty());
     let saved: Value = serde_json::from_slice(&store.checkpoint_bytes().unwrap()).unwrap();
     for key in ["candidates", "policy_revision", "followed_files"] {
@@ -169,7 +169,7 @@ fn upgrade_dispatch_keeps_current_policy_and_approval_state_read_only() {
     // A checkpoint holds no copy of the policy.
     assert!(before.get("policy_revision").is_none());
     assert!(before.get("candidates").is_none());
-    assert!(state.policy_revision.is_empty());
+    assert_eq!(state.policy_revision, "");
     assert_eq!(fs::read(&path).unwrap(), bytes);
     for version in [0, 2] {
         let mut raw = before.clone();
@@ -344,7 +344,7 @@ fn upgrade_historical_inactive_preview_never_creates_authority() {
     raw.as_object_mut().unwrap().remove("history_generation");
     save(root.path(), &raw);
     let state = Store::open(root.path()).unwrap().read_checkpoint().unwrap();
-    assert!(state.authorization_events.is_empty());
+    assert_eq!(state.authorization_events, [] as [serde_json::Value; 0]);
     assert!(state.settings.registries.sources.is_empty());
     assert!(state.read_requests.is_empty());
 }

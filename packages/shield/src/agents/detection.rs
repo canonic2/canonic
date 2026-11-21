@@ -3,9 +3,8 @@ use std::path::PathBuf;
 
 /// Snapshot PATH once and let each registered adapter decide whether it is present.
 pub(crate) fn installed() -> Vec<&'static str> {
-    let search_path: Vec<_> = std::env::var_os("PATH")
-        .map(|value| std::env::split_paths(&value).collect())
-        .unwrap_or_default();
+    let search_path: Vec<_> =
+        std::env::var_os("PATH").map_or_default(|value| std::env::split_paths(&value).collect());
     super::ADAPTERS
         .iter()
         .filter(|adapter| adapter.is_installed(&search_path))

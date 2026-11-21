@@ -25,6 +25,39 @@ pub(crate) fn fits(value: &impl serde::Serialize, limit: usize) -> bool {
     serde_json::to_writer(Counter { bytes: 0, limit }, value).is_ok()
 }
 
+/// Estimate retained decoded data without creating another value or encoding.
+/// Charge collection slots as well as text, since compact JSON can represent
+/// many short heap-allocated values or map entries with very few bytes.
+pub(crate) fn retained_len(value: &impl serde::Serialize, limit: usize) -> Option<usize> {
+    struct Retained;
+    impl serde_json::ser::Formatter for Retained {
+        fn begin_array_value<W: ?Sized + Write>(
+            &mut self,
+            writer: &mut W,
+            _: bool,
+        ) -> io::Result<()> {
+            writer.write_all(&[0; 2 * std::mem::size_of::<Value>()])
+        }
+
+        fn begin_object_key<W: ?Sized + Write>(
+            &mut self,
+            writer: &mut W,
+            _: bool,
+        ) -> io::Result<()> {
+            writer.write_all(&[0; 4 * std::mem::size_of::<Value>()])
+        }
+    }
+
+    let mut counter = Counter { bytes: 0, limit };
+    value
+        .serialize(&mut serde_json::Serializer::with_formatter(
+            &mut counter,
+            Retained,
+        ))
+        .ok()?;
+    Some(counter.bytes)
+}
+
 struct Counter {
     bytes: usize,
     limit: usize,

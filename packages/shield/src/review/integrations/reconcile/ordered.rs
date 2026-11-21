@@ -43,8 +43,7 @@ impl Serialize for Ordered<'_> {
                 let previous = self
                     .source
                     .and_then(|source| serde_json::from_str::<Entries>(source).ok())
-                    .map(|entries| entries.0)
-                    .unwrap_or_default();
+                    .map_or_default(|entries| entries.0);
                 let mut map = output.serialize_map(Some(values.len()))?;
                 let retained: std::collections::BTreeSet<_> =
                     previous.iter().map(|(key, _)| key).collect();

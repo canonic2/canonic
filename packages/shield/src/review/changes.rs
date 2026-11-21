@@ -227,8 +227,14 @@ pub(super) fn prepared_binding(state: &super::model::State) -> String {
             .as_bytes(),
     )
 }
-type Reservation<'a> =
-    &'a mut dyn FnMut(&Value, &Value, &Value, &Value, Option<PreparedPair>) -> Result<(), Error>;
+/// Reserve handles for a base and candidate with their metadata, their
+/// [`super::candidate_identity`] digests and, for a fresh review, their plans.
+type Reservation<'a> = &'a mut dyn FnMut(
+    (&Value, &Value),
+    (&Value, &Value),
+    (&str, &str),
+    Option<PreparedPair>,
+) -> Result<(), Error>;
 
 /// An explicitly keyed completed captured operation can replay without acquiring
 /// its inputs again. Pending operations still bind the complete captured image.
@@ -318,12 +324,12 @@ pub(super) fn propose(
         if row.signature != signature && !applied_replay {
             return Err(Error::Invalid("idempotency key reused with changed input"));
         }
+        // Hydration checked the stored digests against these candidates.
         store.hydrate_proposal(row)?;
         reserve(
-            &row.base_candidate,
-            &row.base_metadata,
-            &row.candidate,
-            &row.candidate_metadata,
+            (&row.base_candidate, &row.base_metadata),
+            (&row.candidate, &row.candidate_metadata),
+            (&row.base_digest, &row.candidate_digest),
             None,
         )?;
         return Ok(present(row));
@@ -351,24 +357,38 @@ pub(super) fn propose(
     };
     // Applying writes the files only while they still hold what this review
     // was prepared from.
-    let reviewed_paths = Some(super::files::write::base(
-        context, &before, &candidate, &meta,
-    )?);
+    let reviewed_paths = {
+        let _trace = crate::diagnostics::trace::span("proposal.reviewed_paths");
+        Some(super::files::write::base(
+            context, &before, &candidate, &meta,
+        )?)
+    };
     let reviewed_files: Option<String> = None;
     // The proposal is the file texts it writes. Both sides are rebuilt from
     // them here, as every later load rebuilds them and refuses texts that
     // no longer match these digests.
-    let files = super::files::write::texts(context, &before, &candidate, &meta)?;
+    let files = {
+        let _trace = crate::diagnostics::trace::span("proposal.file_texts");
+        super::files::write::texts(context, &before, &candidate, &meta)?
+    };
     let root = Path::new(&context.project_root);
     let prepared_candidate = candidate;
-    let candidate = super::files::write::bundle(root, &files, true)?;
-    let base_candidate = super::files::write::bundle(root, &files, false)?;
+    let (candidate, base_candidate) = {
+        let _trace = crate::diagnostics::trace::span("proposal.rebuild_sides");
+        (
+            super::files::write::bundle(root, &files, true)?,
+            super::files::write::bundle(root, &files, false)?,
+        )
+    };
     // The prepared plan and comparison describe the stored candidate only
     // when the texts rebuild it exactly.
     let rebuilt_exactly = candidate == prepared_candidate;
     let captured = captured.filter(|_| rebuilt_exactly);
     let mut after = BTreeMap::new();
-    historical::validate(&base_candidate, &candidate)?;
+    {
+        let _trace = crate::diagnostics::trace::span("proposal.historical");
+        historical::validate(&base_candidate, &candidate)?;
+    }
     after.insert("project".into(), candidate.clone());
     let next_snapshots = {
         let _trace = crate::diagnostics::trace::span("proposal.capture_next");
@@ -409,13 +429,16 @@ pub(super) fn propose(
     if let Some(lines) = super::formatting_changes(&base_candidate, &candidate) {
         comparison["formatting"] = lines;
     }
+    // Each side is hashed once: the handles, the presentation and the
+    // proposal row all bind these identities.
+    let presentation_before = super::candidate_identity(&base_candidate);
+    let presentation_after = super::candidate_identity(&candidate);
     {
         let _trace = crate::diagnostics::trace::span("proposal.reserve");
         reserve(
-            &base_candidate,
-            &before.operator,
-            &candidate,
-            &meta,
+            (&base_candidate, &before.operator),
+            (&candidate, &meta),
+            (&presentation_before, &presentation_after),
             Some((base_plan, next_plan)),
         )?;
     }
@@ -428,8 +451,6 @@ pub(super) fn propose(
     // The complete base was validated above. Under the writer lock, bind to
     // those exact source bytes and metadata instead of hydrating every retained
     // proposal and preparing the same active policy again.
-    let presentation_before = super::candidate_identity(&base_candidate);
-    let presentation_after = super::candidate_identity(&candidate);
     let presentation_ref = super::model::presentation::capture(
         &before,
         (&base_candidate, &candidate),
@@ -456,7 +477,7 @@ pub(super) fn propose(
                 // A concurrent identical request may have won after our first
                 // read. Reserve that retained row, not this request's candidate.
                 store.hydrate_proposal(row)?;
-                reserve(&row.base_candidate, &row.base_metadata, &row.candidate, &row.candidate_metadata, None)?;
+                reserve((&row.base_candidate, &row.base_metadata), (&row.candidate, &row.candidate_metadata), (&row.base_digest, &row.candidate_digest), None)?;
                 Ok(present(row))
             } else { Err(Error::Invalid("idempotency key reused with changed input")) };
         }

@@ -1569,7 +1569,7 @@ fn fallback_is_preserved_by_agent_repair_and_validated_under_current_activation(
         IntegrationChoice::agent("claude"),
         AskFallback::Block,
     );
-    assert!(fallback_in(&context, "codex").unwrap() == AskFallback::Allow);
+    assert_eq!(fallback_in(&context, "codex").unwrap(), AskFallback::Allow);
     let checked = PathAccess::default();
     assert!(with_fallback(root.path(), "codex", checked, |s| s == AskFallback::Allow).unwrap());
     // A request checked against access the operator has since changed is stale.
@@ -1664,7 +1664,7 @@ fn retained_policy_proposal_cannot_restore_a_superseded_ask_fallback() {
         .find(|row| row["proposal_id"] == proposed["data"]["proposal_id"])
         .unwrap();
     assert_eq!(row["status"], "stale");
-    assert!(fallback_in(&context, "codex").unwrap() == AskFallback::Block);
+    assert_eq!(fallback_in(&context, "codex").unwrap(), AskFallback::Block);
 
     // A protection change edits the policy files, so a proposal prepared
     // before it is refused and the confirmed access stays current.
@@ -1686,7 +1686,7 @@ fn retained_policy_proposal_cannot_restore_a_superseded_ask_fallback() {
         crate::review::path_access::current(root.path()).unwrap(),
         access
     );
-    assert!(fallback_in(&context, "codex").unwrap() == AskFallback::Block);
+    assert_eq!(fallback_in(&context, "codex").unwrap(), AskFallback::Block);
 }
 
 #[test]
@@ -1738,7 +1738,7 @@ fn interrupted_fallback_revocation_blocks_until_confirmed_repair_finishes() {
         .unwrap()
         .unwrap();
     apply(&context, &current, &resumed).unwrap();
-    assert!(fallback_in(&context, "codex").unwrap() == AskFallback::Block);
+    assert_eq!(fallback_in(&context, "codex").unwrap(), AskFallback::Block);
     assert_eq!(
         crate::review::project::load(&context)
             .unwrap()

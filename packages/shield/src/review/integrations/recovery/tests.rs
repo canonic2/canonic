@@ -127,11 +127,12 @@ fn unreadable_or_manual_conflicts_can_be_cancelled_without_editing_any_host_file
         let before = authority(&context);
         let hooks = fs::read(root.path().join(".claude/settings.local.json")).unwrap();
         let prepared = prepare(root.path(), &metadata(&context), Action::Cancel).unwrap();
-        assert!(
-            !prepared.review(root.path())["preserved_paths"]
+        assert_ne!(
+            prepared.review(root.path())["preserved_paths"]
                 .as_array()
                 .unwrap()
-                .is_empty()
+                .as_slice(),
+            [] as [serde_json::Value; 0]
         );
         let receipt = prepared.commit(&context, &|| Ok(())).unwrap();
         assert_eq!(receipt["host_files_changed"], false);

@@ -23,7 +23,7 @@ fn the_root_default_wins_over_the_grouped_one_and_shadows_it() {
     let grouped = select(&root).unwrap();
     assert_eq!(grouped.source, Source::Grouped);
     assert_eq!(grouped.bundle(), root.join(GROUPED_BUNDLE));
-    assert!(grouped.shadowed.is_empty());
+    assert_eq!(grouped.shadowed, [] as [std::path::PathBuf; 0]);
     assert!(is_project(&root));
 
     // A present root file is selected even when it is not a valid file, so
@@ -173,11 +173,11 @@ fn a_launcher_argument_claims_the_folder_where_it_names_a_file() {
 #[test]
 fn default_selections_add_no_launch_arguments() {
     let (dir, root) = project();
-    assert!(launch_args(&root).unwrap().is_empty());
+    assert_eq!(launch_args(&root).unwrap(), [] as [std::string::String; 0]);
     dir.child(GROUPED_CONFIG)
         .write_str("schema_version: 1\n")
         .unwrap();
-    assert!(launch_args(&root).unwrap().is_empty());
+    assert_eq!(launch_args(&root).unwrap(), [] as [std::string::String; 0]);
 }
 
 #[test]

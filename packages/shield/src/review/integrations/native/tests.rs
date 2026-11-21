@@ -266,8 +266,7 @@ fn document(source: Option<&str>) -> Result<DocumentMut, Error> {
 fn groups(doc: &DocumentMut) -> HookGroups {
     doc.get("shield_hooks")
         .and_then(|v| v.as_str())
-        .map(|s| serde_json::from_str(s).unwrap())
-        .unwrap_or_default()
+        .map_or_default(|s| serde_json::from_str(s).unwrap())
 }
 impl AgentAdapter for Acme {
     fn working_files(&self, _: &Value, _: &Path) -> crate::location::WorkingFiles {

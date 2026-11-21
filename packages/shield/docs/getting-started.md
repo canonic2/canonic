@@ -9,7 +9,8 @@ You need the `shield` command on your path and an interactive terminal. If you
 are building from the Canonic checkout, the local installer is:
 
 ```sh
-make -C packages/shield install-local
+cd packages/shield
+cargo xtask install
 ```
 
 The installer puts `shield` in `~/.local/bin`; add that directory to your `PATH`.

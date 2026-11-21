@@ -48,7 +48,7 @@ fn owned_callbacks_capture_and_update_without_claiming_foreign_callbacks() {
     assert_eq!(capture(Some(&actual), &previous).unwrap(), previous);
     let mut diagnostics = Vec::new();
     diagnose(Some(&actual), &previous, &mut diagnostics).unwrap();
-    assert!(diagnostics.is_empty());
+    assert_eq!(diagnostics, [] as [&str; 0]);
     let updated = merge(Some(&actual), &previous, &desired).unwrap();
     let document = parse(Some(&updated)).unwrap();
     assert_eq!(document["env"], json!({"ACME_SETTING":"preserved"}));
@@ -60,7 +60,7 @@ fn owned_callbacks_capture_and_update_without_claiming_foreign_callbacks() {
     assert_eq!(capture(Some(&updated), &desired).unwrap(), desired);
     let mut diagnostics = Vec::new();
     diagnose(Some(&updated), &desired, &mut diagnostics).unwrap();
-    assert!(diagnostics.is_empty());
+    assert_eq!(diagnostics, [] as [&str; 0]);
 }
 
 #[test]

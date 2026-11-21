@@ -130,6 +130,11 @@ pub(in crate::policy) struct Store {
 }
 
 impl Store {
+    /// Bytes of prepared matcher programs and images this store holds.
+    pub(in crate::policy) fn prepared_bytes(&self) -> usize {
+        self.bytes
+    }
+
     pub(in crate::policy) fn collect(&mut self, value: &Value, domain: &str) -> Result<(), Error> {
         self.collect_reusing(value, domain, None)
     }

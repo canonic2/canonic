@@ -27,7 +27,7 @@ fn decode(value: &str) -> Result<[u8; 32], Error> {
         _ => Err(Error::Invalid("SDK read proof unavailable")),
     };
     let mut bytes = [0_u8; 32];
-    for (target, pair) in bytes.iter_mut().zip(value.as_bytes().chunks_exact(2)) {
+    for (target, pair) in bytes.iter_mut().zip(value.as_bytes().as_chunks::<2>().0) {
         *target = digit(pair[0])? * 16 + digit(pair[1])?;
     }
     Ok(bytes)

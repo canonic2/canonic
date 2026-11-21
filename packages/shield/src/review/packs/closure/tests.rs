@@ -373,7 +373,10 @@ fn local_dependency_graph_changes_preserve_the_complete_shared_lock() {
         crate::review::publication::projections::projections(&candidate, &metadata).unwrap()["shield.lock"],
         shared_lock
     );
-    assert!(metadata["installed"].as_array().unwrap().is_empty());
+    assert_eq!(
+        metadata["installed"].as_array().unwrap().as_slice(),
+        [] as [serde_json::Value; 0]
+    );
 }
 
 #[test]

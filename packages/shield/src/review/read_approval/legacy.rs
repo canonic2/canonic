@@ -26,7 +26,7 @@ pub(super) fn resource(request: &Request) -> Result<ResourceRequest, Error> {
     }
     let mut operation = json!({"kind":"read-text","path":request.arguments[0],
         "offset":null,"limit":null});
-    for pair in request.arguments[1..].chunks_exact(2) {
+    for pair in request.arguments[1..].as_chunks::<2>().0 {
         let name = pair[0]
             .strip_prefix("--")
             .ok_or(Error::Invalid("invalid legacy read window"))?;

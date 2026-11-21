@@ -189,10 +189,7 @@ fn locks_require_complete_valid_artifacts_with_exact_identity_and_version() {
     }
 }
 
-/// One process validates an exact set of sources once; any byte change, and
-/// any invalid source, is validated again rather than served from memory.
-#[test]
-fn identical_sources_are_validated_once_and_changed_or_invalid_ones_again() {
+fn configuration_trace() -> (assert_fs::TempDir, crate::diagnostics::trace::Request) {
     use clap::Parser as _;
     let logs = assert_fs::TempDir::new().unwrap();
     let cli = crate::cli::Cli::parse_from([
@@ -203,6 +200,14 @@ fn identical_sources_are_validated_once_and_changed_or_invalid_ones_again() {
     ]);
     let log = std::sync::Arc::new(crate::diagnostics::Log::open(&cli));
     let request = log.request("command", "status", None, None).unwrap();
+    (logs, request)
+}
+
+/// One process validates an exact set of sources once; any byte change, and
+/// any invalid source, is validated again rather than served from memory.
+#[test]
+fn identical_sources_are_validated_once_and_changed_or_invalid_ones_again() {
+    let (_logs, request) = configuration_trace();
     let _scope = request.enter();
     let counts = || {
         (
@@ -230,6 +235,122 @@ fn identical_sources_are_validated_once_and_changed_or_invalid_ones_again() {
         assert!(Bundle::capture(&config, std::slice::from_ref(&invalid), Some(RULES)).is_err());
     }
     assert_eq!(counts().0, validated + 3);
+}
+
+/// Changing one of two packs parses only that pack; the unchanged one is
+/// reused, and the same bytes under another binding are parsed again.
+#[test]
+fn only_a_changed_pack_or_binding_is_parsed_again() {
+    let cache = Mutex::new(ParsedPacks::new(PARSED_PACK_BYTES));
+    let (_logs, request) = configuration_trace();
+    let _scope = request.enter();
+    let counts = || {
+        (
+            request.recorded_count("pack.parse_reuses"),
+            cache.lock().unwrap().entries.len(),
+        )
+    };
+    let binding = Binding::default();
+    let (first, second) = (pack(), pack().replace("acme/test", "acme/other"));
+    parse_pack(&cache, &first, &binding, None).unwrap();
+    parse_pack(&cache, &second, &binding, None).unwrap();
+    let (reused, cached) = counts();
+    // The second pack changes; the first is reused.
+    parse_pack(&cache, &first, &binding, None).unwrap();
+    parse_pack(&cache, &format!("{second}\n"), &binding, None).unwrap();
+    assert_eq!(counts(), (reused + 1, cached + 1));
+    // The same bytes under another binding are never served from the cache.
+    let bound = Binding {
+        variables: BTreeMap::from([("acme_value".to_owned(), json!("x"))]),
+        ..Binding::default()
+    };
+    assert!(parse_pack(&cache, &first, &bound, None).is_err());
+    assert_eq!(counts().0, reused + 1);
+}
+
+/// Revising one pack many times keeps the parsed-pack cache within its count
+/// and byte budget, while an identical pack is still reused.
+#[test]
+fn parsed_pack_cache_stays_bounded_across_revisions() {
+    let cache = Mutex::new(ParsedPacks::new(PARSED_PACK_BYTES));
+    let (_logs, request) = configuration_trace();
+    let _scope = request.enter();
+    let binding = Binding::default();
+    for revision in 0..(2 * PARSED_PACKS_KEPT) {
+        let bytes = format!("{}{}", pack(), "\n".repeat(revision));
+        parse_pack(&cache, &bytes, &binding, None).unwrap();
+        let memo = cache.lock().unwrap();
+        assert!(memo.entries.len() <= PARSED_PACKS_KEPT, "{revision}");
+        assert!(memo.bytes <= PARSED_PACK_BYTES, "{revision}");
+        assert_eq!(
+            memo.bytes,
+            memo.entries
+                .iter()
+                .map(|(_, _, size, _)| size)
+                .sum::<usize>()
+        );
+    }
+    let newest = format!("{}{}", pack(), "\n".repeat(2 * PARSED_PACKS_KEPT - 1));
+    let before = request.recorded_count("pack.parse_reuses");
+    parse_pack(&cache, &newest, &binding, None).unwrap();
+    assert_eq!(request.recorded_count("pack.parse_reuses"), before + 1);
+}
+
+#[test]
+fn parsed_pack_cache_evicts_revisions_by_expanded_data_size() {
+    let mut source: Value = serde_json::from_str(&pack()).unwrap();
+    source["capabilities"] = json!([
+        "structured-rules-v1",
+        "argument-rules-v1",
+        "variables-v1",
+        "preconditions-v1"
+    ]);
+    source["variables"] = json!({
+        "commands":{"type":"list","description":"Commands","items":{"type":"string","max_length":64},"max_items":24}
+    });
+    let preconditions: Vec<_> = (0..8)
+        .map(|i| {
+            json!({"id":format!("gate-{i}"),
+                "conditions":{"domain":"argv","executable":{"var":"commands"},"arguments":{"kind":"any"}},
+                "requires_any":[{"arguments":{"kind":"exact","values":["status"]}}],
+                "on_unmet":{"decision":"deny"}})
+        })
+        .collect();
+    source["preconditions"] = json!(preconditions);
+    let source = source.to_string();
+    let bound = |count| Binding {
+        variables: BTreeMap::from([(
+            "commands".to_owned(),
+            json!(
+                (0..count)
+                    .map(|i| format!("acme-{}-{i}", "command".repeat(6)))
+                    .collect::<Vec<_>>()
+            ),
+        )]),
+        ..Binding::default()
+    };
+    let small = bound(1);
+    let expanded = bound(24);
+    let charge = |binding| {
+        Pack::from_retained_yaml_reusing(&source, binding, false, None)
+            .unwrap()
+            .cache_bytes(binding, source.len(), PARSED_PACK_BYTES)
+            .unwrap()
+    };
+    let size = charge(&expanded);
+    assert!(size > charge(&small) + crate::json::encoded_len(&expanded).unwrap());
+    assert!(size > 2 * source.len());
+    let cache = Mutex::new(ParsedPacks::new(size + 1));
+    let revised = format!("{source}\n");
+    for bytes in [&source, &revised] {
+        parse_pack(&cache, bytes, &expanded, None).unwrap();
+        let memo = cache.lock().unwrap();
+        assert_eq!(memo.entries.len(), 1);
+        assert!(
+            memo.get(&policy::fingerprint(bytes.as_bytes()), &expanded)
+                .is_some()
+        );
+    }
 }
 
 #[test]

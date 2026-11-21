@@ -117,16 +117,14 @@ pub(super) fn setup_choices(
 /// Hub alone in a Hub project, Box alone in a Box project, otherwise the
 /// detected agent CLIs.
 pub(super) fn preselected(root: &Path, meta: &Value) -> Result<Vec<String>, Error> {
-    let registered: Vec<String> = super::registration(meta)?
-        .map(|r| {
-            r.definition
-                .as_ref()
-                .map(|d| d.host().id.to_owned())
-                .into_iter()
-                .chain(r.agents.keys().cloned())
-                .collect()
-        })
-        .unwrap_or_default();
+    let registered: Vec<String> = super::registration(meta)?.map_or_default(|r| {
+        r.definition
+            .as_ref()
+            .map(|d| d.host().id.to_owned())
+            .into_iter()
+            .chain(r.agents.keys().cloned())
+            .collect()
+    });
     // Hub and Box setup are disabled on Windows, so neither is the preselection there.
     Ok(if !registered.is_empty() {
         registered

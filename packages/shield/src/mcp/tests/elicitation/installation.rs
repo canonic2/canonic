@@ -425,11 +425,12 @@ fn pack_installation_batch_decline_cancel_and_stale_input_leave_no_pack_proposal
         assert_eq!(project.revision(), before);
         assert_eq!(proposals(&project), count);
         let listed = transport.call(json!(13), "pack_list", &json!({}));
-        assert!(
+        assert_eq!(
             data(&listed)["data"]["packs"]
                 .as_array()
                 .unwrap()
-                .is_empty()
+                .as_slice(),
+            [] as [serde_json::Value; 0]
         );
     }
 }

@@ -392,7 +392,7 @@ fn historical_mcp_refuses_future_state_with_format_details_and_preserves_bytes()
         .arg(root.path())
         .assert()
         .code(1);
-    assert!(output.get_output().stdout.is_empty());
+    assert_eq!(output.get_output().stdout, [] as [u8; 0]);
     let message = String::from_utf8_lossy(&output.get_output().stderr);
     assert!(message.contains("observed schema 2"), "{message}");
     assert!(message.contains("supported schema 1"), "{message}");

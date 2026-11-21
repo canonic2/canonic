@@ -188,12 +188,18 @@ mod tests {
             skill_directories(candidates),
             vec![config.join("missing"), skills.clone()]
         );
-        assert!(skill_directories([(config.clone(), "file")]).is_empty());
+        assert_eq!(
+            skill_directories([(config.clone(), "file")]),
+            [] as [std::path::PathBuf; 0]
+        );
         #[cfg(unix)]
         {
             let redirected = config.join("redirected-skills");
             std::os::unix::fs::symlink(&config, &redirected).unwrap();
-            assert!(skill_directories([(config.clone(), "redirected-skills")]).is_empty());
+            assert_eq!(
+                skill_directories([(config.clone(), "redirected-skills")]),
+                [] as [std::path::PathBuf; 0]
+            );
             let alias = temp.path().join("config-alias");
             std::os::unix::fs::symlink(&config, &alias).unwrap();
             assert_eq!(skill_directories([(alias, "skills")]), vec![skills]);
@@ -201,7 +207,10 @@ mod tests {
             let project = temp.path().join("project");
             std::fs::create_dir(&project).unwrap();
             std::os::unix::fs::symlink(&config, project.join("marker")).unwrap();
-            assert!(skill_directories([(project, "marker/skills")]).is_empty());
+            assert_eq!(
+                skill_directories([(project, "marker/skills")]),
+                [] as [std::path::PathBuf; 0]
+            );
         }
     }
 

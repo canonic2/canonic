@@ -53,7 +53,7 @@ fn a_written_edit_is_the_policy_of_the_next_request() {
     assert_eq!(receipt["policy_revision"], policy.evaluator.revision());
     let store = Store::open(root.path()).unwrap();
     // The checkpoint holds no copy of the policy; a reader follows the files.
-    assert!(store.read_checkpoint().unwrap().policy_revision.is_empty());
+    assert_eq!(store.read_checkpoint().unwrap().policy_revision, "");
     let state = store.read_following_files().unwrap();
     assert_eq!(state.policy_revision, policy.evaluator.revision());
     assert_eq!(

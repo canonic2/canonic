@@ -14,19 +14,17 @@ pub(in crate::review) fn override_permission_review(
     comparison: &Value,
 ) -> Option<Value> {
     let overridden = |candidate: &Value| {
-        crate::configuration::layers::merged(candidate)
-            .ok()
-            .is_some_and(|config| {
-                config["packs"].as_array().into_iter().flatten().any(|row| {
-                    [&row["overrides"], &row["local"]["overrides"]]
-                        .iter()
-                        .any(|overrides| {
-                            overrides
-                                .as_object()
-                                .is_some_and(|entries| !entries.is_empty())
-                        })
-                })
+        crate::configuration::layers::merged(candidate).is_ok_and(|config| {
+            config["packs"].as_array().into_iter().flatten().any(|row| {
+                [&row["overrides"], &row["local"]["overrides"]]
+                    .iter()
+                    .any(|overrides| {
+                        overrides
+                            .as_object()
+                            .is_some_and(|entries| !entries.is_empty())
+                    })
             })
+        })
     };
     if !overridden(before) && !overridden(after) {
         return None;

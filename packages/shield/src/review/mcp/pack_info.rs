@@ -326,7 +326,7 @@ fn settings_summary(data: &Value, missing: &mut Vec<&'static str>) -> Value {
         missing.push("preconditions");
     }
     json!({"variables":variables,"precondition_count":preconditions.len(),
-        "mcp_integrations":data["mcp_integrations"].as_object().map(|definitions|definitions.keys().collect::<Vec<_>>()).unwrap_or_default(),
+        "mcp_integrations":data["mcp_integrations"].as_object().map_or_default(|definitions|definitions.keys().collect::<Vec<_>>()),
         "preconditions":guards,"dependencies":data["dependencies"]})
 }
 

@@ -33,7 +33,6 @@ mod windows_console;
 mod windows_security;
 
 /// Runs the selected CLI command.
-#[must_use]
 pub fn run(cli: &cli::Cli) -> std::process::ExitCode {
     if let Some(config) = &cli.config {
         // Launchers agent setup writes resolve their argument against the
