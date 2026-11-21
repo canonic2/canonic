@@ -286,8 +286,7 @@ impl<B, T: Clone + Eq> Stack<B, T> {
         let title = self
             .layers
             .last()
-            .map(|layer| layer.title.clone())
-            .unwrap_or_default();
+            .map_or_default(|layer| layer.title.clone());
         let old = self.pop(Reason::Replaced).ok_or(Invalid::Empty)?;
         let ticket = self.insert(dialog);
         self.notice(&format!("! dialog · replaced {title}"));

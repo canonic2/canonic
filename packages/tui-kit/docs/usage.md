@@ -99,8 +99,8 @@ picker. No fixture executes an agent or changes real permissions.
 ## Commands and keyboard help
 
 Open **Commands and bindings** in the catalog, or use
-`make -C packages/tui-kit run CARGO_FLAGS="-- --component commands --scenario main"` from the
-repository root. Ctrl-P opens a docked palette centered horizontally above the activity row
+`cargo gallery --component commands --scenario main` from
+`packages/tui-kit`. Ctrl-P opens a docked palette centered horizontally above the activity row
 and message box. F1 opens the full-screen keys view. Closing either preserves the
 message draft. F3 switches between the two projections.
 
@@ -143,7 +143,8 @@ belongs to [Completion Menu](#completion-menu); a later Composer Enter invokes i
 
 ## Gallery
 
-Open the gallery with `make -C packages/tui-kit run`. It starts at the component
+Open the gallery with `cargo gallery` from `packages/tui-kit`; the examples in
+this guide run from there. It starts at the component
 picker. Select a component with Enter, then select a scenario with Enter.
 Esc returns from the scenario to its scenario picker, then to the component
 picker; Esc at the component picker exits. Component-specific dismissal (such
@@ -255,9 +256,9 @@ to refuse the outstanding request. Retrying emits a fresh identified request;
 selection, the draft and its caret survive host failure. No agent runs.
 
 ```sh
-make -C packages/tui-kit run CARGO_FLAGS="-- --component chat --scenario answer"
-make -C packages/tui-kit run CARGO_FLAGS="-- --component chat --scenario search-folded"
-make -C packages/tui-kit run CARGO_FLAGS="-- --component chat --scenario select-code --colors none --ascii"
+cargo gallery --component chat --scenario answer
+cargo gallery --component chat --scenario search-folded
+cargo gallery --component chat --scenario select-code --colors none --ascii
 ```
 
 For headless inventory use `cargo run --locked --features gallery -- --list`
@@ -266,10 +267,10 @@ changing terminal modes.
 
 ## Composer workflows
 
-Open **Composer**, or run from the repository root:
+Open **Composer**, or run from `packages/tui-kit`:
 
 ```sh
-make -C packages/tui-kit run CARGO_FLAGS="-- --component composer --scenario main"
+cargo gallery --component composer --scenario main
 ```
 
 Enter fixes the sent turn and clears the box immediately. Its dim `sending`
@@ -418,10 +419,10 @@ no timer. Empty footer props use line/column and selection metadata.
 
 ## Dialogs
 
-Open **Dialogs** from the catalog, or run from the repository root:
+Open **Dialogs** from the catalog, or run from `packages/tui-kit`:
 
 ```sh
-make -C packages/tui-kit run CARGO_FLAGS="-- --component dialog --scenario main"
+cargo gallery --component dialog --scenario main
 ```
 
 F2 cycles prompt → nested → long → locked → outside → removed-return → error →
@@ -513,9 +514,9 @@ use `--colors ansi256` for the indexed palette when RGB is unavailable.
 An explicit `truecolor` option requests RGB output without verifying support.
 
 ```sh
-make -C packages/tui-kit run CARGO_FLAGS="-- --component editor --scenario main --colors truecolor"
-make -C packages/tui-kit run CARGO_FLAGS="-- --component editor --scenario main --colors truecolor --light"
-make -C packages/tui-kit run CARGO_FLAGS="-- --component editor --scenario main --colors none --ascii"
+cargo gallery --component editor --scenario main --colors truecolor
+cargo gallery --component editor --scenario main --colors truecolor --light
+cargo gallery --component editor --scenario main --colors none --ascii
 ```
 
 Tokens cover body/dim/accent/success/warning/error/info, surface and selection;
@@ -558,7 +559,7 @@ Never acquire another terminal session for a nested picker.
 ## Completion Menu
 
 ```sh
-make -C packages/tui-kit run CARGO_FLAGS="-- --component completion-menu --scenario main"
+cargo gallery --component completion-menu --scenario main
 ```
 
 The scenario picker offers all 30 menu states, plus `narrow-40`, `ansi16`,
@@ -608,8 +609,8 @@ prefix/word matches; tags are host-provided `kind · source` labels.
 ## Tool Call Card
 
 ```sh
-make -C packages/tui-kit run CARGO_FLAGS="-- --component tool-call-card --scenario main"
-make -C packages/tui-kit run CARGO_FLAGS="-- --component tool-call-card --scenario many-at-once --colors none --ascii"
+cargo gallery --component tool-call-card --scenario main
+cargo gallery --component tool-call-card --scenario many-at-once --colors none --ascii
 ```
 
 The picker offers 79 scenarios and eight standard main-view profiles. Cards
@@ -674,7 +675,7 @@ Details lets a real host fetch the complete source.
 Open the dedicated-screen fixture:
 
 ```sh
-make -C packages/tui-kit run CARGO_FLAGS="-- --component session-browser --scenario main"
+cargo gallery --component session-browser --scenario main
 ```
 
 Up/Down, PageUp/PageDown and Home/End navigate host-ordered sessions. Enter opens

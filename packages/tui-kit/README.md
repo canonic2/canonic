@@ -12,14 +12,15 @@ none of those product operations.
 
 ## Try the gallery
 
-TUI Kit is unpublished and built from source. Consumers require Rust 1.97 or
+TUI Kit is unpublished and built from source. Consumers require Rust 1.102 or
 newer, and the gallery needs an interactive terminal. This checkout pins its
 own development toolchain.
 
 From the repository root:
 
 ```sh
-make -C packages/tui-kit run
+cd packages/tui-kit
+cargo gallery
 ```
 
 Choose a component with the arrow keys and Enter, then select a scenario.
@@ -37,7 +38,7 @@ From a sibling Rust package, add a versioned local dependency:
 
 ```toml
 [dependencies]
-canonic-tui-kit = { version = "0.5.0", path = "../tui-kit" }
+canonic-tui-kit = { version = "0.6.0", path = "../tui-kit" }
 ```
 
 Adjust the path to your checkout's `packages/tui-kit` directory. Rust code imports

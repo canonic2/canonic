@@ -124,7 +124,7 @@ fn numbered_question_answers_need_a_visible_confirmation_region() {
     let mut questions = setup_form(&question).unwrap();
     let number = Event::Key(KeyEvent::new(KeyCode::Char('1'), KeyModifiers::NONE));
     question_event(&mut questions, &number, false);
-    assert!(questions.take_intents().is_empty());
+    assert_eq!(questions.take_intents(), Vec::<form::Intent>::new());
     question_event(&mut questions, &number, true);
     let response = questions
         .take_intents()
@@ -367,7 +367,7 @@ fn filtered_marks_survive_back_and_enter_below_minimum_stays_open() {
     prompt.update(&key(KeyCode::Char(' ')), true);
     assert_eq!(prompt.picker.query(), "9");
     assert_eq!(prompt.update(&key(KeyCode::Esc), true), None);
-    assert!(prompt.picker.query().is_empty());
+    assert_eq!(prompt.picker.query(), "");
     assert_eq!(prompt.update(&key(KeyCode::Esc), true), Some(Outcome::Back));
     // Revisiting the same prompt retains marks even after a Back outcome.
     assert_eq!(

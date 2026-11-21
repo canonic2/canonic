@@ -1,33 +1,34 @@
 # Development
 
 This is one unpublished Cargo package, with optional `gallery` feature and
-`tui-gallery` binary. Rust nightly-2026-04-16 (rustc 1.97), Rust 2024, Cargo.lock, rustfmt, strict Clippy,
+`tui-gallery` binary. Rust nightly-2026-11-09 (rustc 1.102), Rust 2024, Cargo.lock, rustfmt, strict Clippy,
 nextest, doctests, rustdoc, cargo-deny, insta and proptest.
 
-`make build` builds a release gallery.
-`make coverage` uses `cargo llvm-cov nextest --html` and writes to
-`target/llvm-cov/`. There is no coverage percentage gate. `CARGO_FLAGS=--offline`
-uses cached dependencies. `make run` opens the component selector. No root
-workspace, distribution script or registry publication exists.
-
-Make prefers `~/.cargo/bin/cargo` so rustup selects the pinned toolchain,
-falling back to Cargo on PATH. `CARGO` overrides that selection.
+Run Cargo from this package directory, where rustup selects the pinned
+toolchain. `cargo build --release --locked --all-features` builds a release
+gallery. `cargo llvm-cov nextest --locked --all-features --html` writes a
+coverage report to `target/llvm-cov/`. There is no coverage percentage gate.
+Add `--offline` to use cached dependencies. `cargo gallery` opens the
+component selector; it is an alias in `.cargo/config.toml` for
+`cargo run --quiet --locked --features gallery --bin tui-gallery --`, so gallery
+options follow it. No root workspace, distribution script or registry
+publication exists.
 
 ## Fast iteration
 
 From this package directory:
 
 ```sh
-make dev
-make test-focus FILTER='picker::'
+cargo build --locked --all-features
+cargo nextest run --locked --all-features --test integration 'picker::'
 ```
 
-`dev` uses Cargo's incremental development build, writing `target/debug/tui-gallery`.
-It does not install a command or build a release. `test-focus` requires a
-substring filter and defaults to `--test integration`, where this package keeps
-its component tests. It uses the existing nextest runner and builds with all
-features so gallery fixtures are available. `TEST_TARGET` selects other targets.
-Nextest fails when no tests match the filter.
+`cargo build` uses Cargo's incremental development build, writing
+`target/debug/tui-gallery`. It does not install a command or build a release.
+`--test integration` selects the binary where this package keeps its component
+tests, with a substring filter; `--lib` selects library tests. Building with all
+features keeps gallery fixtures available. Nextest fails when no tests match the
+filter.
 Keep this package's `target/` directory between iterations; Cargo checks source
 freshness on every run. Dependency, toolchain, profile and feature changes may
 require a longer rebuild. Run the development executable directly to try edits. Use release builds
@@ -180,11 +181,11 @@ their generated reference pages. Keep Cargo caches between runs.
 
 | Category | Command from this package |
 | --- | --- |
-| Apply formatting | `make format` |
-| Verify formatting | `make format-check` |
-| Strict Clippy | `make lint` |
-| Type checking | `make types` |
-| Tests | `make test` |
-| Documentation examples | `make doctest` |
-| API reference HTML | `make docs` |
-| Dependency audit | `make deps` |
+| Apply formatting | `cargo fmt` |
+| Verify formatting | `cargo fmt --check` |
+| Strict Clippy and type checking | `cargo clippy --locked --all-targets --all-features` |
+| Tests | `cargo nextest run --locked --all-features` |
+| Documentation examples | `cargo test --doc --locked --all-features` |
+| API reference HTML | `cargo doc --locked --all-features --no-deps --document-private-items` |
+| Dependency audit | `cargo deny check` |
+| Free disk space | `cargo sweep --time 3` (from cargo-sweep), while no build or test uses `target/` |
