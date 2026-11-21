@@ -90,10 +90,8 @@ pub(crate) fn decision(context: &Context, mut details: Value) -> Result<Value, E
             }
         }
     }
-    Store::open(Path::new(&context.project_root))?.observe(context, |state| {
-        if !state.settings.history_enabled {
-            return Ok(json!({"status":"disabled","request_id":null,"event_id":null}));
-        }
+    let store = Store::open(Path::new(&context.project_root))?;
+    store.observe(context, history::lock_optional, |state| {
         let request = details["approval"]["request_id"]
             .as_str()
             .map(str::to_owned)
@@ -130,15 +128,7 @@ pub(crate) fn completion(
     if matches!(input.status.as_str(), "failed" | "cancelled") {
         details["status"] = json!(input.status);
     }
-    // Raw publication only: history readers derive links, duplicates and
-    // conflicts, so the receipt claims no correlation.
-    Store::open(Path::new(&context.project_root))?.observe(context, |state| {
-        let mut event = state.event("completion", context, json!({}), json!({}), details);
-        event["event_id"] = json!(history::identifier("event", &state.project_id)?);
-        let result = receipt(&event, &Value::Null);
-        state.record(event);
-        Ok(result)
-    })
+    record_completion(context, || details)
 }
 
 /// Records an owned native child's result, separate from SDK-supplied observations.
@@ -151,12 +141,22 @@ pub(crate) fn execution_completion(
     exit_code: Option<i32>,
     signal: Option<i32>,
 ) -> Result<Value, Error> {
-    Store::open(Path::new(&context.project_root))?.observe(context, |state| {
-        let mut event = state.event("completion",context,json!({}),json!({}),json!({"operation":operation,"status":status,"exit_code":exit_code,"signal":signal,"evidence":"owned-child","reported_request_id":request}));
+    record_completion(context, || {
+        json!({"operation":operation,"status":status,"exit_code":exit_code,"signal":signal,
+            "evidence":"owned-child","reported_request_id":request})
+    })
+}
+
+/// Publish raw completion evidence. History readers derive links, duplicates
+/// and conflicts, so the receipt claims no correlation.
+fn record_completion(context: &Context, details: impl FnOnce() -> Value) -> Result<Value, Error> {
+    let store = Store::open(Path::new(&context.project_root))?;
+    store.observe(context, history::lock_completion, |state| {
+        let mut event = state.event("completion", context, json!({}), json!({}), details());
         event["event_id"] = json!(history::identifier("event", &state.project_id)?);
-        let value = receipt(&event,&Value::Null);
+        let result = receipt(&event, &Value::Null);
         state.record(event);
-        Ok(value)
+        Ok(result)
     })
 }
 

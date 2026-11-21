@@ -1,6 +1,6 @@
 [package]
 name = "canonic-shield"
-version = "0.48.0"
+version = "0.49.0"
 edition = "2024"
 rust-version = "1.102"
 publish = false
@@ -107,7 +107,6 @@ assert_fs = "1.1"
 insta = { version = "1.49", features = ["filters"] }
 predicates = "3.1"
 proptest = { version = "1.11", default-features = false, features = ["std"] }
-sha2 = "0.11"
 regex = "1.13.1"
 
 [target.'cfg(windows)'.dev-dependencies]

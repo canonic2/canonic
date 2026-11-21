@@ -228,9 +228,12 @@ fn translate_hook(
     if !request.event.post() {
         request.working_files = Some(adapter.working_files(&host, root));
     }
-    handle(root,adapter,&request,log).unwrap_or_else(|| {
-        if event.post() { json!({"systemMessage":"Shield completion history unavailable; outcome remains unknown."}) }
-        else { deny("protection-failure") }
+    handle(root, adapter, &request, log).unwrap_or_else(|| {
+        if event.post() {
+            json!({"systemMessage":"Shield could not record the tool completion in history."})
+        } else {
+            deny("protection-failure")
+        }
     })
 }
 

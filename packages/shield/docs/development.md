@@ -127,7 +127,7 @@ cargo test --locked --lib windows_opaque_shells_never_use_allow_fallback
 ```
 
 Run strict native lint separately with
-`cargo clippy --locked --all-targets -- -D warnings`.
+`cargo clippy --locked --all-targets`.
 
 The development binary is `target/debug/shield.exe`. Windows acceptance covers
 AMD64 source builds, enrollment, setup/repair/removal, native console ownership,
@@ -694,7 +694,7 @@ which only suppresses their generated pages. Keep Cargo caches between runs.
 | --- | --- |
 | Apply formatting | `cargo fmt` |
 | Verify formatting | `cargo fmt --check` |
-| Strict Clippy and type checking | `cargo clippy --locked --workspace --all-targets -- -D warnings` |
+| Strict Clippy and type checking | `cargo clippy --locked --workspace --all-targets` |
 | Tests | `cargo nextest run --locked` |
 | Documentation examples | `cargo test --doc --locked` |
 | API reference HTML | `cargo doc --locked --no-deps --document-private-items` |

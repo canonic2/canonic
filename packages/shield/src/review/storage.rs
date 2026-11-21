@@ -34,6 +34,7 @@ pub(crate) struct Store {
     root: String,
     writer_owned: Mutex<Option<std::thread::ThreadId>>,
 }
+
 /// A store-local witness for conversion reached from an existing writer.
 struct Writer<'a> {
     lock: Option<Lock>,
@@ -782,20 +783,21 @@ impl Store {
     pub(in crate::review) fn read_history(&self) -> Result<State, Error> {
         let _trace = crate::diagnostics::trace::span("history.read");
         let (mut state, view) = {
-            let (state, _guard) = self.observation_checkpoint(false)?;
+            let (state, _guard) = self.observation_checkpoint(history::lock)?;
             let view = history::capture(self, &state);
             (state, view)
         };
         history::finish(view, &mut state);
         Ok(state)
     }
-    /// Appends one callback's observations; no earlier record is read.
+    /// Appends one callback's observations under its selected history lock.
     pub(in crate::review) fn observe(
         &self,
         context: &Context,
+        lock: fn(&Self) -> Result<fs::File, Error>,
         operation: impl FnOnce(&mut State) -> Result<Value, Error>,
     ) -> Result<Value, Error> {
-        let (mut state, _guard) = self.observation_checkpoint(true)?;
+        let (mut state, _guard) = self.observation_checkpoint(lock)?;
         state.check(context)?;
         if !state.settings.history_enabled {
             return Ok(json!({"status":"disabled","request_id":null,"event_id":null}));
@@ -809,16 +811,15 @@ impl Store {
     }
     /// Capture optional observations under their own lock. Legacy conversion
     /// needs authority -> history ordering, so release history before converting.
-    fn observation_checkpoint(&self, optional: bool) -> Result<(State, fs::File), Error> {
+    fn observation_checkpoint(
+        &self,
+        lock: fn(&Self) -> Result<fs::File, Error>,
+    ) -> Result<(State, fs::File), Error> {
         // One conversion attempt: a conversion that cannot write leaves the
         // earlier checkpoint readable in memory.
         let mut converted = false;
         loop {
-            let guard = if optional {
-                history::lock_optional(self)?
-            } else {
-                history::lock(self)?
-            };
+            let guard = lock(self)?;
             let _trace = crate::diagnostics::trace::span("state.checkpoint");
             crate::diagnostics::trace::count("state.checkpoint_reads", 1);
             let bytes = self.checkpoint_bytes()?;

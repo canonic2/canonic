@@ -390,9 +390,11 @@ fn propose(root: &Path, change: &Value) -> Session {
         json!({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"policy_propose","arguments":{"change":change,"agent_reason":"Read the Acme repository state."}}}),
     ];
     let mut child = std::process::Command::new(assert_cmd::cargo::cargo_bin!("shield"))
-        .args(["mcp", "serve", "--project"])
+        .args(["mcp", "serve", "--agent", "claude", "--project"])
         .arg(root)
+        .current_dir(root)
         .env("HOME", root.join(".fixture-home"))
+        .env("CLAUDE_PROJECT_DIR", root)
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::null())
@@ -410,7 +412,7 @@ fn propose(root: &Path, change: &Value) -> Session {
         .expect("proposal reply");
     let proposal = replies["result"]["structuredContent"]["data"]["proposal_id"]
         .as_str()
-        .expect("proposal ID")
+        .unwrap_or_else(|| panic!("proposal ID missing: {replies}"))
         .to_owned();
     Session {
         child,
@@ -422,11 +424,18 @@ fn propose(root: &Path, change: &Value) -> Session {
 #[test]
 fn live_proposals_are_selected_explicitly_in_shield_policy_review() {
     let root = TempDir::new().expect("project");
-    screen(
+    let initialized = screen(
         root.path(),
         &["init", "--no-setup", "--no-baseline"],
         "yes\n",
     );
+    assert!(initialized.ends_with("--- exit 0\n"), "{initialized}");
+    let registered = screen(
+        root.path(),
+        &["mcp", "setup", "--agent", "claude"],
+        "\nyes\n",
+    );
+    assert!(registered.ends_with("--- exit 0\n"), "{registered}");
     let rule = |id: &str, arguments: &[&str]| {
         json!({"kind":"rule_add","rule":{"id":id,"decision":"allow","reason":"Acme repository state",
             "conditions":{"domain":"argv","executable":"git","arguments":{"kind":"exact","values":arguments}}}})

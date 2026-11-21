@@ -96,22 +96,29 @@ impl Server {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone()
     }
-    /// A call that needs the project's runtime checks its review state is the
-    /// one this connection opened.
+    /// Check the host can review proposals before opening runtime state, then
+    /// verify that the connection can use the project's current review state.
     fn check_runtime(
         &self,
         name: &str,
         args: &serde_json::Value,
     ) -> Result<(), crate::review::Error> {
-        if crate::review::mcp::needs_runtime(name, args) {
-            let before = self.review();
-            let current = crate::review::mcp::runtime_context(&before)?;
-            if current.project_id != before.project_id {
-                *self
-                    .review
-                    .write()
-                    .map_err(|_| crate::review::Error::Locked)? = Arc::new(current);
-            }
+        if !crate::review::mcp::needs_runtime(name, args) {
+            return Ok(());
+        }
+        let before = self.review();
+        if crate::review::mcp::prepares_review(name)
+            && crate::agents::review::for_context(&before).confirmation()
+                == crate::agents::review::Confirmation::Terminal
+        {
+            return Err(crate::review::Error::ApprovalRequired);
+        }
+        let current = crate::review::mcp::runtime_context(&before)?;
+        if current.project_id != before.project_id {
+            *self
+                .review
+                .write()
+                .map_err(|_| crate::review::Error::Locked)? = Arc::new(current);
         }
         Ok(())
     }

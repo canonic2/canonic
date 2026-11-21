@@ -649,8 +649,19 @@ fn guidance_uses_the_enrolled_agent_never_client_metadata() {
         {
             assert!(catalog.get(name).is_some(), "{name}");
         }
-        for name in ["policy_propose", "policy_apply", "policy_evaluate"] {
+        for name in ["pack_list", "pack_show", "policy_evaluate", "rule_list"] {
             assert!(instructions.contains(name), "{name}");
+        }
+        let supports_approval = matches!(agent, Some("codex" | "claude"));
+        for name in [
+            "policy_propose",
+            "policy_apply",
+            "pack_add",
+            "pack_configure",
+            "pack_update",
+            "pack_remove",
+        ] {
+            assert_eq!(instructions.contains(name), supports_approval, "{name}");
         }
     }
 }
@@ -947,13 +958,12 @@ fn structured_errors_carry_the_same_recovery_as_the_text_summary() {
 #[test]
 fn proposals_put_the_adapter_activation_route_in_structured_data() {
     for (agent, route) in [
-        (Some("claude"), "policy_apply for MCP confirmation"),
-        (Some("codex"), "policy_apply for Codex approval"),
-        (Some("gemini"), "policy_apply for MCP form confirmation"),
-        (Some("agy"), "policy_apply for MCP form confirmation"),
-        (None, "withdraw the attempt"),
+        ("claude", "policy_apply for MCP confirmation"),
+        ("codex", "policy_apply for Codex approval"),
+        ("gemini", "policy_apply for MCP form confirmation"),
+        ("agy", "policy_apply for MCP form confirmation"),
     ] {
-        let (server, _project) = fixture(agent);
+        let (server, _project) = fixture(Some(agent));
         let transport = Transport::start(server);
         for message in initialize(&json!({}), "acme-client") {
             transport.send(&message);
@@ -967,7 +977,7 @@ fn proposals_put_the_adapter_activation_route_in_structured_data() {
         );
         let next = proposal["result"]["structuredContent"]["data"]["next_action"]
             .as_str()
-            .unwrap();
+            .unwrap_or_else(|| panic!("missing activation route for {agent}: {proposal}"));
         assert!(next.contains(route), "{next}");
         assert!(
             proposal["result"]["content"][0]["text"]
@@ -1097,8 +1107,7 @@ fn a_burst_of_calls_is_queued_and_answered_instead_of_refused() {
     }
 }
 
-/// Every review-preparing tool is a published change, so the two hand-kept
-/// lists cannot drift apart.
+/// The catalog publishes review-preparing tools as mutations.
 #[test]
 fn review_preparing_tools_are_published_changes() {
     let catalog = crate::review::mcp::tools();

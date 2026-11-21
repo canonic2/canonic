@@ -487,7 +487,7 @@ that installed packs are current. The operator can launch Shield with
 [cached availability](local-registry.md#check-for-pack-updates) for freshness and
 terminal behavior.
 
-The CLI and MCP use the same pack verbs. Call `pack_update` with `{}` to
+On a connection that supports in-session approval, call `pack_update` with `{}` to
 update all direct packs, including pins, or with `{"reference":"gate"}` to update
 one selection and its dependencies. Use `{"reference":"main/canonic/gate@0.2.7"}`
 to request an exact release. Profiles and pin modes are retained, and applying
@@ -635,7 +635,7 @@ shortened or omitted constraints are identified.
 | Claude | An MCP confirmation form. Accept applies, decline rejects, and cancel withdraws the attempt. |
 | Gemini CLI / Antigravity CLI | MCP form confirmation when the client can present it. Unavailable forms close the attempt and report the missing in-session capability. |
 | Codex | The per-call tool prompt for ordinary policy; an additional Shield form for connection settings. If prompts are disabled, enable them with `/permissions`, then prepare fresh in the session. |
-| Other or unrecognized host | In-session approval is unsupported. Report that capability gap and withdraw the attempt. |
+| Other or unrecognized host | Shield refuses preparation with `operator_review_required` before a proposal exists. Use inspection tools and report that in-session approval is unavailable. |
 
 Claude's form works in `default`, `auto`, and `bypassPermissions` modes and
 requires its own Accept response, independently of ordinary tool approval.
@@ -876,7 +876,7 @@ capacity is reserved before persisting a proposal that needs new handles.
 
 `policy_evaluate` accepts typed input, its preserved vendor `original_input`, cwd
 within the enrolled project, and a nullable explicit environment map. It selects
-active policy by default, or a retained `candidate_id`. For example:
+active policy by default, or a retained `candidate_id`.
 
 ```json
 {
@@ -906,7 +906,8 @@ Read `data.decision` for the policy result and the returned matching-rule and
 requirement evidence for its explanation. Keep `candidate_id` if you want to
 inspect rules from that same snapshot. Changing the arguments or cwd may change
 the result. This diagnostic does not run Git or supply permission for a later
-tool call.
+tool call. When active policy allows the request, submit it through the normal
+tool so the host can run its checks.
 
 Supported input kinds are argv, shell, file, web, mcp and unknown. Literal argv and
 structured POSIX/Bash analysis reuse the Rust evaluator. Exact-request conditions

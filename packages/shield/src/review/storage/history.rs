@@ -88,7 +88,7 @@ pub(in crate::review) struct View {
 
 #[cfg(test)]
 pub(in crate::review) use locking::lock_diagnostics;
-pub(in crate::review) use locking::{lock, lock_control, lock_optional};
+pub(in crate::review) use locking::{lock, lock_completion, lock_control, lock_optional};
 fn regular(path: &Path) -> Result<(), Error> {
     let m = fs::symlink_metadata(path)?;
     if !m.is_file() || m.file_type().is_symlink() {

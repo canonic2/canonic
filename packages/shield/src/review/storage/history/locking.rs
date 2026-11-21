@@ -11,10 +11,15 @@ pub(in crate::review) fn lock_diagnostics(store: &Store) -> Result<File, Error> 
     acquire(store, false, 500, false)
 }
 
-/// Optional callbacks never wait behind a reader/control. Losing observation
-/// evidence cannot occupy an operation's permission deadline.
+/// Decision and authority writers never wait behind another history user.
 pub(in crate::review) fn lock_optional(store: &Store) -> Result<File, Error> {
     acquire(store, false, 1, true)
+}
+
+/// Completions can arrive in a burst after parallel tools finish. Allow eight
+/// one-millisecond retries without using the reader/control wait budget.
+pub(in crate::review) fn lock_completion(store: &Store) -> Result<File, Error> {
+    acquire(store, false, 9, true)
 }
 
 /// Called only while publishing a human-confirmed history control. Never
@@ -95,20 +100,23 @@ fn acquire(store: &Store, control: bool, attempts: usize, create: bool) -> Resul
     }
     let mut file = open(&path, control, create)?;
     checked(&path, &file, !control)?;
-    for _ in 0..attempts {
+    retry_lock(&file, attempts, || thread::sleep(Duration::from_millis(1)))?;
+    checked(&path, &file, !control)?;
+    if control {
+        normalize(&mut file)?;
+        checked(&path, &file, true)?;
+    }
+    Ok(file)
+}
+
+fn retry_lock(file: &File, attempts: usize, mut wait: impl FnMut()) -> Result<(), Error> {
+    for attempt in 1..=attempts {
         match file.try_lock() {
-            Ok(()) => {
-                checked(&path, &file, !control)?;
-                if control {
-                    normalize(&mut file)?;
-                    checked(&path, &file, true)?;
-                }
-                return Ok(file);
-            }
+            Ok(()) => return Ok(()),
             Err(std::fs::TryLockError::WouldBlock) => {
                 crate::diagnostics::trace::count("history.lock_waits", 1);
-                if attempts > 1 {
-                    thread::sleep(Duration::from_millis(1));
+                if attempt < attempts {
+                    wait();
                 }
             }
             Err(std::fs::TryLockError::Error(error)) => return Err(error.into()),
@@ -173,4 +181,25 @@ fn normalize(file: &mut File) -> Result<(), Error> {
         crate::windows_security::make_private_file(file)?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn history_lock_retries_after_writer_releases() {
+        let (root, _) = crate::review::tests::enrolled();
+        let store = Store::open(root.path()).unwrap();
+        let mut writer = Some(lock(&store).unwrap());
+        let contender = open(&store.directory.join("history.lock"), false, false).unwrap();
+
+        retry_lock(&contender, 2, || {
+            drop(writer.take().expect("the first retry releases the writer"));
+        })
+        .unwrap();
+
+        assert!(writer.is_none(), "the contender must wait for the writer");
+        assert!(matches!(lock_optional(&store), Err(Error::Locked)));
+    }
 }

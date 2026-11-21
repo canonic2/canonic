@@ -276,10 +276,14 @@ Run the command yourself in an interactive, cursor-capable terminal. Redirected
 input, JSON mode, and intercepted agent tool calls cannot provide CLI operator
 confirmation. Enlarge the terminal if a prompt cannot fit.
 
-Agents can prepare changes with `policy_propose` and request your host's
-approval with `policy_apply`. If confirmation prompts are disabled, enable them
-for the session, then prepare a fresh change if it is still needed. If the host
-cannot present supported confirmation, the agent must close the attempt and
-report that missing capability. Closed reviews remain inspectable through
-`policy_show` and cannot be accepted later.
+On a host that supports in-session confirmation, agents can prepare changes
+with `policy_propose` and request approval with `policy_apply`. If confirmation
+prompts are disabled, enable them for the session, then prepare a fresh change
+if it is still needed. If the host cannot present confirmation for a prepared
+review, close that attempt. Use `policy_show` to inspect its outcome.
+
+For a host without a supported approval adapter, Shield returns
+`operator_review_required` before creating a proposal. The agent can use
+inspection tools, report the missing capability, and continue with work the
+active policy allows.
 See [terminal controls](operator-experience.md#controls-and-output).

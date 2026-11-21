@@ -143,17 +143,10 @@ fn rules_selection() -> Value {
 /// Shared by catalog annotations and pre-dispatch setup maintenance.
 pub(super) fn mutates(name: &str) -> bool {
     super::super::admin::supports(name)
+        || super::prepares_review(name)
         || [
-            "policy_propose",
             "policy_defer",
             "policy_draft_remove",
-            "rule_add",
-            "rule_edit",
-            "rule_remove",
-            "pack_configure",
-            "pack_add",
-            "pack_update",
-            "pack_remove",
             "policy_withdraw",
             "policy_apply",
             "review_defer",

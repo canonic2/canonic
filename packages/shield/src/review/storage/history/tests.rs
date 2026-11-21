@@ -57,21 +57,25 @@ fn event(store: &Store, receipt: &Value) -> Option<Value> {
         .find(|e| e["event_id"] == receipt["event_id"])
 }
 
+fn history_log(directory: &Path) -> std::sync::Arc<crate::diagnostics::Log> {
+    use clap::Parser as _;
+    let cli = crate::cli::Cli::parse_from([
+        "shield",
+        "--debug-log-dir",
+        directory.to_str().unwrap(),
+        "status",
+    ]);
+    std::sync::Arc::new(crate::diagnostics::Log::open(&cli))
+}
+
 #[test]
 fn diagnostic_history_capture_waits_for_the_history_writer() {
-    use clap::Parser as _;
     let (root, context) = enrolled();
     decision(&context, "before rotation");
     let store = Store::open(root.path()).unwrap();
     let state = store.read_checkpoint().unwrap();
     let logs = assert_fs::TempDir::new().unwrap();
-    let cli = crate::cli::Cli::parse_from([
-        "shield",
-        "--debug-log-dir",
-        logs.path().to_str().unwrap(),
-        "status",
-    ]);
-    let log = std::sync::Arc::new(crate::diagnostics::Log::open(&cli));
+    let log = history_log(logs.path());
     let trace = log.request("command", "status", None, None).unwrap();
     let guard = lock(&store).unwrap();
     std::thread::scope(|scope| {
@@ -149,17 +153,10 @@ fn corrupt_optional_history_owner_does_not_revoke_policy_and_clear_repairs_it() 
 
 #[test]
 fn callback_work_counters_separate_bounded_append_from_history_inspection() {
-    use clap::Parser as _;
     let (root, context) = enrolled();
     let request = decision(&context, "before");
     let logs = assert_fs::TempDir::new().unwrap();
-    let cli = crate::cli::Cli::parse_from([
-        "shield",
-        "--debug-log-dir",
-        logs.path().to_str().unwrap(),
-        "status",
-    ]);
-    let log = std::sync::Arc::new(crate::diagnostics::Log::open(&cli));
+    let log = history_log(logs.path());
     let callback = log.request("hook", "completion", None, None).unwrap();
     {
         let _scope = callback.enter();
@@ -199,37 +196,40 @@ fn callback_work_counters_separate_bounded_append_from_history_inspection() {
 }
 
 #[test]
-fn optional_history_callbacks_do_not_wait_or_read_state_behind_a_busy_writer() {
-    use clap::Parser as _;
+fn busy_history_skips_decisions_and_bounds_completion_retries() {
     let (root, context) = enrolled();
     let store = Store::open(root.path()).unwrap();
     let _guard = lock(&store).unwrap();
     let logs = assert_fs::TempDir::new().unwrap();
-    let cli = crate::cli::Cli::parse_from([
-        "shield",
-        "--debug-log-dir",
-        logs.path().to_str().unwrap(),
-        "status",
-    ]);
-    let log = std::sync::Arc::new(crate::diagnostics::Log::open(&cli));
-    let request = log.request("hook", "completion", None, None).unwrap();
+    let log = history_log(logs.path());
+    let request = log.request("hook", "decision", None, None).unwrap();
     {
         let _scope = request.enter();
         assert!(matches!(
-            observations::completion(
-                &context,
-                &review::EventInput {
-                    delivery_id: "busy-history".into(),
-                    request_id: None,
-                    status: "completed".into(),
-                },
-                &operation("busy")
-            ),
+            observations::decision(&context, json!({"operation":operation("busy")})),
             Err(Error::Locked)
         ));
     }
     assert_eq!(request.recorded_count("history.lock_attempts"), 1);
     assert_eq!(request.recorded_count("history.lock_waits"), 1);
+    assert_eq!(request.recorded_count("state.checkpoint_reads"), 0);
+    assert_eq!(request.recorded_count("history.appended_records"), 0);
+    request.finish("dropped");
+
+    let request = log.request("hook", "completion", None, None).unwrap();
+    {
+        let _scope = request.enter();
+        let input = review::EventInput {
+            delivery_id: "busy-history".into(),
+            request_id: None,
+            status: "completed".into(),
+        };
+        assert!(matches!(
+            observations::completion(&context, &input, &operation("busy")),
+            Err(Error::Locked)
+        ));
+    }
+    assert_eq!(request.recorded_count("history.lock_waits"), 9);
     assert_eq!(request.recorded_count("state.checkpoint_reads"), 0);
     assert_eq!(request.recorded_count("history.appended_records"), 0);
     request.finish("dropped");
@@ -1049,7 +1049,7 @@ fn failed_optional_publication_marks_incomplete_history_without_changing_authori
     // restrictions, which privileged CI users can bypass.
     assert!(
         store
-            .observe(&context, |state| {
+            .observe(&context, lock_optional, |state| {
                 state
                     .pending_history
                     .push(json!({"fault_injection":"x".repeat(LINE_LIMIT + 1)}));

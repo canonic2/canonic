@@ -64,10 +64,13 @@ pub(super) fn evaluate(
         mcp_match: Option<Value>,
         candidate_id: &'a str,
         policy_revision: &'a str,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        next_action: Option<&'static str>,
     }
     fields(args, &["input", "context", "candidate_id"])?;
     let (input, request_context) = request(context, args)?;
-    let id = match text(args, "candidate_id")? {
+    let selected = text(args, "candidate_id")?;
+    let id = match selected {
         Some(id) => id.into(),
         None => views.active(context)?,
     };
@@ -75,11 +78,14 @@ pub(super) fn evaluate(
     let (evaluation, mcp_match) =
         evaluate_captured(context, &captured, &input, &request_context, checkpoint)?;
     checkpoint()?;
+    let next_action = (selected.is_none() && evaluation.decision == policy::Decision::Allow)
+        .then_some("Active policy already allows this request. Submit it through the normal tool. A policy change is unnecessary to run it.");
     let report = Report {
         evaluation,
         mcp_match,
         candidate_id: &id,
-        policy_revision: captured.evaluator()?.revision(),
+        policy_revision: captured.revision(),
+        next_action,
     };
     let projected =
         Projected::encode_sources(&report, checkpoint, &report.evaluation.sensitive_sources())?;

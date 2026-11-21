@@ -1,11 +1,11 @@
 //! Public workflows use a real controlling terminal, without a confirmation bypass.
 use assert_cmd::cargo::cargo_bin_cmd;
 use assert_fs::{TempDir, prelude::*};
+#[cfg(any(unix, windows))]
+use ring::digest::{SHA256, digest};
 use serde_json::Value;
 #[cfg(any(unix, windows))]
 use serde_json::json;
-#[cfg(any(unix, windows))]
-use sha2::{Digest, Sha256};
 #[cfg(any(unix, windows))]
 use std::fmt::Write;
 
@@ -553,12 +553,7 @@ fn guided_add_asks_setup_questions_in_declaration_order_and_reasks_refused_value
           "endpoint":{"type":"string","description":"Endpoint","setup":{"unset":"Any endpoint","ask_when":[{"var":"profile","set":true}]}}},
         "rules":[{"id":"cloud","decision":"allow","conditions":{"domain":"argv","executable":"acme-cloud","arguments":{"kind":"sequence","prefix":[{"var":"profile"}],"rest":{"kind":"any"}}}}]}"#;
     source.child("pack.json").write_str(pack).expect("artifact");
-    let digest = Sha256::digest(pack.as_bytes())
-        .iter()
-        .fold(String::new(), |mut output, byte| {
-            write!(output, "{byte:02x}").expect("String formatting");
-            output
-        });
+    let digest = fixture_digest(pack.as_bytes());
     source.child("catalog.json").write_str(&json!({"schema_version":1,"packs":[{"id":"acme/cloud","version":"0.1.0","path":"pack.json","sha256":digest}]}).to_string()).expect("catalog");
     assert_eq!(interactive(&root, &["init"], "yes\n")["code"], 0);
     let source_path = source.path().to_str().expect("fixture path");
@@ -666,12 +661,7 @@ fn guided_rule_overrides_mark_a_filtered_rule_with_space() {
         .child("pack.json")
         .write_str(&pack)
         .expect("artifact");
-    let digest = Sha256::digest(pack.as_bytes())
-        .iter()
-        .fold(String::new(), |mut output, byte| {
-            write!(output, "{byte:02x}").expect("String formatting");
-            output
-        });
+    let digest = fixture_digest(pack.as_bytes());
     source.child("catalog.json").write_str(&json!({"schema_version":1,"packs":[{"id":"acme/tools","version":"0.1.0","path":"pack.json","sha256":digest}]}).to_string()).expect("catalog");
     assert_eq!(interactive(&root, &["init"], "yes\n")["code"], 0);
     let source_path = source.path().to_str().expect("fixture path");
@@ -723,12 +713,7 @@ fn going_back_through_rule_overrides_keeps_an_existing_override() {
         .child("pack.json")
         .write_str(&pack)
         .expect("artifact");
-    let digest = Sha256::digest(pack.as_bytes())
-        .iter()
-        .fold(String::new(), |mut output, byte| {
-            write!(output, "{byte:02x}").expect("String formatting");
-            output
-        });
+    let digest = fixture_digest(pack.as_bytes());
     source.child("catalog.json").write_str(&json!({"schema_version":1,"packs":[{"id":"acme/tools","version":"0.1.0","path":"pack.json","sha256":digest}]}).to_string()).expect("catalog");
     assert_eq!(interactive(&root, &["init"], "yes\n")["code"], 0);
     let source_path = source.path().to_str().expect("fixture path");
@@ -791,12 +776,7 @@ fn local_registration_install_profile_change_and_offline_removal_are_atomic() {
     let source = TempDir::new().expect("registry");
     let path = super::policy::candidate(&source);
     let bytes = std::fs::read_to_string(path.path()).expect("artifact");
-    let digest = Sha256::digest(bytes.as_bytes())
-        .iter()
-        .fold(String::new(), |mut output, byte| {
-            write!(output, "{byte:02x}").expect("String formatting");
-            output
-        });
+    let digest = fixture_digest(bytes.as_bytes());
     source.child("catalog.json").write_str(&json!({"schema_version":1,"packs":[{"id":"acme/test","version":"0.1.0","path":"pack.json","sha256":digest}]}).to_string()).expect("catalog");
     assert_eq!(interactive(&root, &["init"], "yes\n")["code"], 0);
     let source_path = source.path().to_str().expect("fixture path");
@@ -1027,12 +1007,7 @@ fn registry_short_refs_preserve_pins_profiles_and_unchanged_activation() {
     let source = TempDir::new().expect("registry");
     let pack = super::policy::candidate(&source);
     let bytes = std::fs::read(pack.path()).expect("pack");
-    let digest = Sha256::digest(&bytes)
-        .iter()
-        .fold(String::new(), |mut output, byte| {
-            write!(output, "{byte:02x}").expect("digest formatting");
-            output
-        });
+    let digest = fixture_digest(&bytes);
     source.child("catalog.json").write_str(&json!({"schema_version":1,"packs":[{"id":"acme/test","version":"0.1.0","path":"pack.json","sha256":digest}]}).to_string()).expect("catalog");
     for args in [
         vec!["init", "--no-baseline"],
@@ -1292,13 +1267,7 @@ pub(super) fn local_dependency_source() -> TempDir {
     ] {
         let bytes = pack.to_string();
         source.child(path).write_str(&bytes).expect("artifact");
-        let digest =
-            Sha256::digest(bytes.as_bytes())
-                .iter()
-                .fold(String::new(), |mut out, byte| {
-                    write!(out, "{byte:02x}").expect("hex");
-                    out
-                });
+        let digest = fixture_digest(bytes.as_bytes());
         entries
             .push(json!({"id":pack["id"],"version":pack["version"],"path":path,"sha256":digest.to_ascii_uppercase()}));
     }
@@ -1311,7 +1280,8 @@ pub(super) fn local_dependency_source() -> TempDir {
 
 #[cfg(any(unix, windows))]
 pub(super) fn fixture_digest(bytes: &[u8]) -> String {
-    Sha256::digest(bytes)
+    digest(&SHA256, bytes)
+        .as_ref()
         .iter()
         .fold(String::new(), |mut out, byte| {
             write!(out, "{byte:02x}").expect("hex fixture digest");
@@ -1460,13 +1430,7 @@ fn dependency_update_cli_reviews_all_changes_and_preserves_cancelled_activation(
         let path = format!("updated-{template}");
         let bytes = pack.to_string();
         std::fs::write(source.path().join(&path), &bytes).unwrap();
-        let digest =
-            Sha256::digest(bytes.as_bytes())
-                .iter()
-                .fold(String::new(), |mut out, byte| {
-                    write!(out, "{byte:02x}").unwrap();
-                    out
-                });
+        let digest = fixture_digest(bytes.as_bytes());
         catalog["packs"]
             .as_array_mut()
             .unwrap()
@@ -1624,12 +1588,7 @@ fn inspected_project() -> (TempDir, TempDir) {
         .expect("rules");
     let source = TempDir::new().expect("registry");
     let pack = super::policy::candidate(&source);
-    let digest = Sha256::digest(std::fs::read(pack.path()).expect("pack"))
-        .iter()
-        .fold(String::new(), |mut output, byte| {
-            write!(output, "{byte:02x}").expect("digest formatting");
-            output
-        });
+    let digest = fixture_digest(&std::fs::read(pack.path()).expect("pack"));
     source.child("catalog.json").write_str(&json!({"schema_version":1,"packs":[{"id":"acme/test","version":"0.1.0","path":"pack.json","sha256":digest}]}).to_string()).expect("catalog");
     for args in [
         vec!["init"],

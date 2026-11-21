@@ -169,7 +169,12 @@ fn suggestions_structured_projection_contains_action_examples_and_pending_recove
     let data = &result["data"];
     assert!(data["coverage"]["available"].as_bool().unwrap());
     assert!(data["authoring_examples"][0]["change"]["rule"].is_object());
-    assert!(data["approval_guidance"].is_string());
+    assert!(
+        data["approval_guidance"]
+            .as_str()
+            .unwrap()
+            .contains("Skip proposal and approval calls")
+    );
     let row = &data["requests"][0];
     let mut input = row["next_action"]["proposal_context"].clone();
     input["change"] = row["suggested_change"].clone();

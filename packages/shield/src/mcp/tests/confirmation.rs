@@ -77,15 +77,31 @@ pub(super) fn rule(id: &str, executable: &str) -> Value {
     json!({"change":{"kind":"rule_add","rule":{"id":id,"decision":"allow","conditions":{"domain":"argv","executable":executable,"arguments":{"kind":"any"}}}}})
 }
 
-/// A live Claude Code connection with one pending proposal.
+/// A live connection with one pending proposal. For unsupported hosts, seed a
+/// proposal as an older version would have retained it to test apply refusal.
 fn prepared(agent: Option<&str>, capabilities: &Value) -> (Transport, Project, Value) {
     let (server, project) = fixture(agent);
+    let arguments = rule("acme-read", "acme");
+    let retained = (crate::agents::review::resolve(agent).confirmation()
+        == crate::agents::review::Confirmation::Terminal)
+        .then(|| {
+            let proposal = crate::review::mcp::call(
+                &project.review,
+                &server.connection,
+                "policy_propose",
+                &arguments,
+                &|| Ok(()),
+            );
+            let args = &proposal["data"]["apply_arguments"];
+            assert!(args.is_object(), "{proposal}");
+            args.clone()
+        });
     let transport = Transport::start(server);
     for message in initialize(capabilities, "claude-code") {
         transport.send(&message);
     }
     assert!(transport.receive()["result"].is_object());
-    let args = propose(&transport, json!(2), &rule("acme-read", "acme"));
+    let args = retained.unwrap_or_else(|| propose(&transport, json!(2), &arguments));
     (transport, project, args)
 }
 
@@ -538,7 +554,7 @@ fn unsupported_agents_report_the_missing_in_session_capability() {
 }
 
 #[test]
-fn generic_adapter_is_used_for_missing_and_unrecognized_hosts_even_with_form_support() {
+fn generic_adapter_refuses_new_proposals_even_with_form_support() {
     // A client's self-reported name never selects a review adapter.
     for (agent, client) in [
         (None, "acme-client"),
@@ -558,31 +574,84 @@ fn generic_adapter_is_used_for_missing_and_unrecognized_hosts_even_with_form_sup
             initialized["result"]["instructions"]
                 .as_str()
                 .unwrap()
-                .contains("never send the user to a terminal")
+                .contains("Skip proposal and approval calls")
         );
-        let proposal = transport.call(json!(2), "policy_propose", &rule("acme-generic", "acme"));
-        let data = &proposal["result"]["structuredContent"]["data"];
-        assert!(
-            data["next_action"]
-                .as_str()
-                .unwrap()
-                .contains("withdraw the attempt"),
-            "{proposal}"
-        );
-        assert_eq!(
-            data["provenance"]["agent"],
-            agent.unwrap_or(client),
-            "{proposal}"
-        );
-        let args = data["apply_arguments"].clone();
         let before = project.revision();
-        let response = transport.call(json!(3), "policy_apply", &args);
-        assert_eq!(response["id"], 3, "{response}");
-        assert_ne!(response["method"], "elicitation/create", "{response}");
-        assert_eq!(error_code(&response), "operator_review_required");
-        assert!(response["result"]["structuredContent"]["error"]["operator_route"].is_null());
+        for (id, name, args) in [
+            (2, "policy_propose", rule("acme-generic", "acme")),
+            (
+                3,
+                "rule_add",
+                json!({"rule":rule("acme-direct", "acme")["change"]["rule"]}),
+            ),
+            (4, "pack_update", json!({})),
+        ] {
+            let response = transport.call(json!(id), name, &args);
+            let envelope = &response["result"]["structuredContent"];
+            assert_eq!(response["id"], id, "{response}");
+            assert_eq!(
+                error_code(&response),
+                "operator_review_required",
+                "{response}"
+            );
+            assert!(envelope["data"].is_null(), "{response}");
+            assert!(envelope["error"]["operator_route"].is_null(), "{response}");
+        }
+        assert_eq!(
+            crate::review::proposals(&project.review, None).unwrap()["proposals"],
+            json!([])
+        );
         assert_eq!(project.revision(), before);
     }
+}
+
+#[test]
+fn only_active_policy_allow_continues_without_a_proposal() {
+    let (server, project) = fixture(Some("codex"));
+    let transport = Transport::start(server);
+    for message in initialize(&json!({}), "codex") {
+        transport.send(&message);
+    }
+    assert!(transport.receive()["result"].is_object());
+    let input = json!({"context":{"cwd":project.review.project_root},
+        "input":{"kind":"argv","executable":"acme","arguments":[],"original_input":{}}});
+    let ask = transport.call(json!(2), "policy_evaluate", &input);
+    assert_eq!(
+        ask["result"]["structuredContent"]["data"]["decision"], "ask",
+        "{ask}"
+    );
+    let proposal = transport.call(json!(3), "policy_propose", &rule("acme-read", "acme"));
+    let proposal = &proposal["result"]["structuredContent"]["data"];
+    assert!(proposal["after_candidate_id"].is_string(), "{proposal}");
+    let mut selected = input.clone();
+    selected["candidate_id"] = proposal["after_candidate_id"].clone();
+    let candidate = transport.call(json!(4), "policy_evaluate", &selected);
+    let candidate_data = &candidate["result"]["structuredContent"]["data"];
+    assert_eq!(candidate_data["decision"], "allow", "{candidate}");
+    assert!(candidate_data.get("next_action").is_none(), "{candidate}");
+    assert!(
+        candidate["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap()
+            .contains("does not authorize execution")
+    );
+
+    let applied = transport.call(json!(5), "policy_apply", &proposal["apply_arguments"]);
+    assert_eq!(applied["result"]["isError"], false, "{applied}");
+    let active = transport.call(json!(6), "policy_evaluate", &input);
+    let action = active["result"]["structuredContent"]["data"]["next_action"]
+        .as_str()
+        .unwrap();
+    assert!(
+        action.contains("A policy change is unnecessary to run it"),
+        "{active}"
+    );
+    assert!(
+        active["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap()
+            .contains(action)
+    );
 }
 
 #[test]
