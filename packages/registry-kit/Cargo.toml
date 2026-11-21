@@ -1,8 +1,8 @@
 [package]
 name = "canonic-registry-kit"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2024"
-rust-version = "1.97"
+rust-version = "1.102"
 publish = false
 license-file = "../../LICENSE"
 description = "Signed pack catalogs, verified acquisition and dependency resolution"

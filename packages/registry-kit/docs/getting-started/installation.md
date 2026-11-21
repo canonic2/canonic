@@ -11,8 +11,8 @@ serde_json = "1.0"
 ```
 
 Adjust `../registry-kit` to your checkout. The crate is imported as
-`canonic_registry_kit`. It requires Rust 1.97 or newer and uses the Rust 2024 edition.
-The library checkout pins Rust nightly-2026-04-16 in `rust-toolchain.toml`.
+`canonic_registry_kit`. It requires Rust 1.102 or newer and uses the Rust 2024 edition.
+The library checkout pins Rust nightly-2026-11-09 in `rust-toolchain.toml`.
 
 Add `semver` when constructing version requirements or releases. Add `serde` and
 `serde_json` when embedding registrations, checkpoints or locked entries in your

@@ -8,7 +8,7 @@ published.
 
 ## Add the library
 
-Consumers require Rust 1.97 or newer; the checkout pins its own development
+Consumers require Rust 1.102 or newer; the checkout pins its own development
 toolchain. From a sibling Rust package, add a local dependency in `Cargo.toml`
 (adjust paths for your application):
 
@@ -52,8 +52,9 @@ position. Products own cursor encoding. See [Find and select packs](docs/guides/
 - [Publish a registry](docs/publishing/hosting-and-signing.md): serve signed catalogs and releases.
 - [Development](docs/contributing/development.md): checks, tests and tools.
 
-Select checks individually from this directory: `make format-check`, `make lint`,
-`make types`, `make test`, `make doctest`, `make docs` or `make deps`.
+Select checks individually from this directory with Cargo: `cargo fmt --check`,
+strict `cargo clippy`, `cargo nextest run`, `cargo test --doc`, `cargo doc` or
+`cargo deny check`.
 See [development](docs/contributing/development.md) for their purposes and costs.
 
 ## License

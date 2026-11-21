@@ -604,7 +604,7 @@ proptest! {
         // Each release of `a` depends on a `b` major chosen by the strategy.
         let mut catalog = vec![release("b", "0.0.0", vec![]), release("b", "1.0.0", vec![]), release("b", "2.0.0", vec![])];
         for (major, minor, dependency) in &versions {
-            let edges = dependency.map(|m| vec![edge("b", &format!("^{m}"))]).unwrap_or_default();
+            let edges = dependency.map_or_default(|m| vec![edge("b", &format!("^{m}"))]);
             catalog.push(release("a", &format!("{major}.{minor}.0"), edges));
         }
         let mut seen = BTreeSet::new();

@@ -87,11 +87,9 @@ fn discovery_pages_span_more_than_maximum_page_size() {
         now(),
     )
     .unwrap();
-    assert!(
-        empty
-            .heads_page(PageLimit::default(), None)
-            .items
-            .is_empty()
+    assert_eq!(
+        empty.heads_page(PageLimit::default(), None).items,
+        [] as [&Entry; 0]
     );
     assert_eq!(
         empty.entries_page(PageLimit::default(), None).next_position,
@@ -128,12 +126,18 @@ fn identity_pages_ignore_input_order_and_keep_every_release_tie() {
         id: "z/end".parse().unwrap(),
         version: Version::new(0, 0, 0),
     };
-    assert!(catalog.entries_page(limit, Some(&beyond)).items.is_empty());
+    assert_eq!(
+        catalog.entries_page(limit, Some(&beyond)).items,
+        [] as [&Entry; 0]
+    );
     assert_eq!(
         catalog.search_page("missing", limit, None).next_position,
         None
     );
-    assert!(catalog.search_page("Git", limit, None).items.is_empty());
+    assert_eq!(
+        catalog.search_page("Git", limit, None).items,
+        [] as [&Entry; 0]
+    );
     assert_eq!(
         catalog.search_page("", limit, None),
         catalog.entries_page(limit, None)
@@ -243,11 +247,11 @@ fn release_pages_use_exclusive_descending_versions_including_build_metadata() {
         ["1.0.0", "0.0.0-alpha"]
     );
     assert_eq!(last.next_position, None);
-    assert!(
+    assert_eq!(
         after
             .releases_page(&"acme/missing".parse().unwrap(), limit, None)
-            .items
-            .is_empty()
+            .items,
+        [] as [&Entry; 0]
     );
 }
 
@@ -409,7 +413,7 @@ fn byte_budget_ends_every_listing_early_without_losing_releases() {
                 }
             };
             assert!(serde_json::to_vec(&page.items).unwrap().len() <= MAX_PAGE_BYTES);
-            assert!(!page.items.is_empty());
+            assert_ne!(page.items, [] as [&Entry; 0]);
             if pages == 0 {
                 assert!(page.items.len() < 64);
                 let last = page.items.last().unwrap();

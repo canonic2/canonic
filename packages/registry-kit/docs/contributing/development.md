@@ -5,23 +5,23 @@ For application integration tests, start with
 the library itself. Run the commands below from `packages/registry-kit`.
 
 This is one unpublished Cargo package with a library and no binary. It uses
-Rust nightly-2026-04-16 (rustc 1.97), Rust 2024, a committed `Cargo.lock`, rustfmt, strict Clippy,
+Rust nightly-2026-11-09 (rustc 1.102), Rust 2024, a committed `Cargo.lock`, rustfmt, strict Clippy,
 nextest, doctests, rustdoc, cargo-deny, insta and proptest.
 
 | Task | Command (from this directory) |
 | --- | --- |
 | Formatting | `cargo fmt --check` |
-| Lint | `cargo clippy --locked --all-targets --all-features -- -D warnings` |
+| Lint | `cargo clippy --locked --all-targets --all-features` |
 | Tests | `cargo nextest run --locked --all-features` |
 | Doctests | `cargo test --doc --locked --all-features` |
 | API docs | `cargo doc --locked --all-features --no-deps --document-private-items` |
 | Dependencies | `cargo deny check` |
-| Coverage report | `make coverage` (writes `target/llvm-cov/`) |
-| Release build | `make build` |
+| Coverage report | `cargo llvm-cov nextest --locked --all-features --html` (writes `target/llvm-cov/`) |
+| Release build | `cargo build --release --locked --all-features` |
+| Free disk space | `cargo sweep --time 3` (from cargo-sweep), while no build or test uses `target/` |
 
-`CARGO_FLAGS=--offline` uses cached dependencies. Make prefers
-`~/.cargo/bin/cargo` so rustup selects the pinned toolchain, falling back to Cargo
-on PATH. `CARGO` overrides that selection. Install the tools with:
+Add `--offline` to use cached dependencies. Run Cargo from this directory so
+rustup selects the pinned toolchain. Install the tools with:
 
 ```sh
 cargo install --locked cargo-nextest@0.9.146 cargo-deny@0.20.2 cargo-llvm-cov@0.9.1 cargo-insta@1.49.0
@@ -32,16 +32,15 @@ cargo install --locked cargo-nextest@0.9.146 cargo-deny@0.20.2 cargo-llvm-cov@0.
 From this package directory:
 
 ```sh
-make dev
-make test-focus FILTER='digest::'
+cargo build --locked --all-features
+cargo nextest run --locked --all-features --lib 'digest::'
 # Select integration tests explicitly when needed:
-make test-focus FILTER='selected_test_name' TEST_TARGET='--test integration'
+cargo nextest run --locked --all-features --test integration 'selected_test_name'
 ```
 
-`dev` uses Cargo's incremental development build.
-It does not install a command or build a release. `test-focus` requires a
-substring filter and defaults to `--lib`, avoiding unrelated integration and
-binary test targets. It uses the existing nextest runner.
+`cargo build` uses Cargo's incremental development build.
+It does not install a command or build a release. Pass `--lib` with a
+substring filter to avoid unrelated integration and binary test targets.
 Use a real test name in the integration example; nextest fails when nothing matches.
 Keep this package's `target/` directory between iterations; Cargo checks source
 freshness on every run. Dependency, toolchain, profile and feature changes may
@@ -54,7 +53,7 @@ behavior.
 
 - `Cargo.toml` owns lint policy: `unsafe_code` is forbidden, `unreachable_pub`
   warns, Clippy pedantic
-  and `unwrap_used` warn (errors under `-D warnings`), `mod_module_files`
+  and `unwrap_used` warn (`.cargo/config.toml` denies warnings), `mod_module_files`
   enforces self-named modules, and rustdoc denies broken and private links.
 - `clippy.toml` allows `unwrap` in tests only.
 - `deny.toml` allows Apache-2.0, MIT and Unicode-3.0, plus reviewed
@@ -83,21 +82,21 @@ an API, keep its rustdoc and the corresponding usage guide consistent.
 ## Individual Rust verification
 
 Run Rust verification categories individually and select only those needed for
-the task. A request for tests does not also request formatting, lint, type
-checking, doctests, API docs, dependency auditing or coverage. Name the selected
-commands before running them; there is no aggregate Rust check target.
-`docs` generates browsable HTML API reference in `target/doc/`; `doctest`
-executes Rust documentation examples. Run either as its own explicit category.
+the task. A request for tests does not also request formatting, lint,
+doctests, API docs, dependency auditing or coverage. Clippy also type-checks
+every target. Name the selected commands before running them; there is no
+aggregate Rust check command. `cargo doc` generates browsable HTML API
+reference in `target/doc/`; `cargo test --doc` executes Rust documentation
+examples. Run either as its own explicit category.
 Rustdoc can recheck dependencies even with `--no-deps`, which only suppresses
 their generated reference pages. Keep Cargo caches between runs.
 
 | Category | Command from this package |
 | --- | --- |
-| Apply formatting | `make format` |
-| Verify formatting | `make format-check` |
-| Strict Clippy | `make lint` |
-| Type checking | `make types` |
-| Tests | `make test` |
-| Documentation examples | `make doctest` |
-| API reference HTML | `make docs` |
-| Dependency audit | `make deps` |
+| Apply formatting | `cargo fmt` |
+| Verify formatting | `cargo fmt --check` |
+| Strict Clippy and type checking | `cargo clippy --locked --all-targets --all-features` |
+| Tests | `cargo nextest run --locked --all-features` |
+| Documentation examples | `cargo test --doc --locked --all-features` |
+| API reference HTML | `cargo doc --locked --all-features --no-deps --document-private-items` |
+| Dependency audit | `cargo deny check` |
