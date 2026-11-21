@@ -1,27 +1,26 @@
 # Development
 
-Rust nightly-2026-04-16 (rustc 1.97) and edition 2024 are pinned. Cargo.lock pins dependencies. Run
-individual Make targets from the package or use `make -C packages/process-kit`.
+Rust nightly-2026-11-09 (rustc 1.102) and edition 2024 are pinned. Cargo.lock pins dependencies. Run
+these commands from `packages/process-kit/`, where rustup selects the pinned
+toolchain.
 
-| Target | Purpose |
+| Command | Purpose |
 | --- | --- |
-| `dev` | Incremental development build |
-| `test-focus FILTER='lifecycle::' TEST_TARGET='--test integration'` | Focused acceptance |
-| `test` | All non-documentation tests through cargo-nextest |
-| `format` / `format-check` | Apply / check rustfmt |
-| `lint` | Clippy with warnings denied |
-| `types` | Check all targets |
-| `doctest` | Compile documentation examples |
-| `docs` | Generate local rustdoc HTML |
-| `deps` | cargo-deny advisory, license and source checks |
-| `coverage` | LLVM coverage through cargo-llvm-cov and nextest |
-| `prune` | Delete incremental caches and test binaries untouched for more than `PRUNE_DAYS` days (default 3) |
+| `cargo build --locked --all-features` | Incremental development build |
+| `cargo nextest run --locked --all-features --test integration 'lifecycle::'` | Focused acceptance |
+| `cargo nextest run --locked --all-features` | All non-documentation tests |
+| `cargo fmt` / `cargo fmt --check` | Apply / check rustfmt |
+| `cargo clippy --locked --all-targets --all-features` | Clippy, with warnings denied by `.cargo/config.toml`; type-checks all targets |
+| `cargo test --doc --locked --all-features` | Compile documentation examples |
+| `cargo doc --locked --all-features --no-deps --document-private-items` | Generate local rustdoc HTML |
+| `cargo deny check` | cargo-deny advisory, license and source checks |
+| `cargo llvm-cov nextest --locked --all-features --html` | LLVM coverage through cargo-llvm-cov and nextest |
+| `cargo sweep --time 3` | Delete build output unused for more than three days (from cargo-sweep) |
 
-Run `make prune` on its own, to free space, while no build or test run uses
-`target/`. It matches Unix test executables, so on Windows it removes only
-incremental caches.
+Run `cargo sweep` on its own, to free space, while no build or test run uses
+`target/`.
 
-These targets are independent. Tests use one integration binary, temporary
+These commands are independent. Tests use one integration binary, temporary
 Acme roots, real sockets and locks, and the test binary itself for process
 fixtures. Socket/process/signal tests require host access when sandboxed.
 Preserve Cargo caches. Never use default user roots, real login registrations

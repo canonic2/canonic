@@ -35,6 +35,14 @@ The manager runtime is supported on macOS, Linux and Windows 10 version 1803 or
 later, which provides `AF_UNIX` sockets. On Windows, a root must be on a local
 drive letter; network shares and mapped network drives are refused.
 
+`Root::identity()` returns serializable native directory evidence for durable
+product scope binding. Compare it under exclusion to reject copied or recreated
+roots, including replacements at the same path; it grants no authority.
+
+`Lease::verify()` rechecks the private directory and lock-anchor identity. Use it
+before product-owned writes outside the endpoint loop; it does not make later
+filesystem operations atomic with that check.
+
 For a custom driver, `Lease::bind(control)` returns an `Endpoint` borrowing the
 lease. `Endpoint::listener() -> &net::Listener` borrows its bound listener.
 `Endpoint::path() -> &Path` returns the socket pathname without filesystem I/O:
@@ -80,7 +88,12 @@ renew the idle deadline. An observer cannot create a new hold after closure.
 
 `retire_if_empty()` closes admission and rechecks counts under one short lock.
 Busy work reopens admission and emits `DrainRefused`; observers need not be zero
-to commit retirement. `drain()` permanently closes new admission. The product's
+to commit retirement. `retire_if_only_hold(&hold)` atomically permits a product
+to retire with exactly its own final hold and no other work; that hold stays
+counted until the product drops it. Preparation, a foreign hold and any other
+obligation refuse without releasing resources. `drain()` permanently closes new admission for local
+reconciliation. External controls use `try_drain()`, which can preempt reversible
+preparation but atomically refuses irreversible fencing. The product's
 drain callback starts its cleanup; held obligations keep the process alive until
 it settles. After closure `Admission::hold()` refuses; a resource that starts
 further work, such as a cleanup worker, pins it with `Hold::split()`, which
@@ -166,6 +179,12 @@ endpoints accept control envelopes. The dedicated control endpoint refuses
 ordinary envelopes. Built-ins are `identity`, `status`, `retire_if_empty`,
 `retire_if_older` and `drain`. Retirement and drain require the exact
 `manager_id` observed in identity.
+
+`Handler::identity_details` can attach a bounded, secret-free observation to
+the identity reply. Return it promptly without admitting work or taking a
+hold. `client::connect_observed` keeps the details and lifecycle from the
+successful readiness response so the caller can make its next decision in
+one exchange. A peer without details yields JSON null.
 
 `Handler::extensions()` advertises accepted control actions; `control()` handles
 them. Declare each required capability in `Identity::capabilities` and in the

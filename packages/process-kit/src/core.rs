@@ -319,6 +319,26 @@ impl Admission {
         true
     }
 
+    /// Retire when `hold` is this admission's only resource obligation and no
+    /// mutation remains. The hold stays counted until its owner drops it after
+    /// success; observers can finish their replies. Preparation and closure
+    /// refuse without changing admission or releasing the hold.
+    #[must_use]
+    pub fn retire_if_only_hold(&self, hold: &Hold) -> bool {
+        if !Arc::ptr_eq(&self.0, &hold.0.0) {
+            return false;
+        }
+        let mut inner = self.lock();
+        if inner.quiescing() || inner.closed() || inner.work != 0 || inner.held != 1 {
+            return false;
+        }
+        inner.state = State::Draining;
+        inner.reason = ExitReason::Retired;
+        inner.event(Event::DrainAdmitted);
+        Self::notify(inner);
+        true
+    }
+
     /// Remember an explicit replacement request without interrupting live work.
     /// Returns true if admission is already closed or can close immediately.
     /// A busy manager keeps serving and closes on an atomic empty recheck,
@@ -345,11 +365,30 @@ impl Admission {
         true
     }
 
-    /// Close new admission; admitted work and holds must settle before exit.
+    /// Close admission for local reconciliation; admitted work and holds must
+    /// settle before exit. External controls use [`Self::try_drain`] so they
+    /// cannot override irreversible fencing.
     /// Returns true only on the first drain transition.
     #[must_use]
     pub fn drain(&self) -> bool {
-        let mut inner = self.lock();
+        Self::drain_locked(self.lock())
+    }
+
+    /// Request external drain cleanup, preempting reversible preparation.
+    /// Unlike local reconciliation through [`Self::drain`], this cannot revoke
+    /// an irreversible handover fence or stop resources transferred elsewhere.
+    ///
+    /// # Errors
+    /// Returns `HandoverState` after irreversible fencing. No state changes.
+    pub fn try_drain(&self) -> Result<bool> {
+        let inner = self.lock();
+        if inner.handover == Handover::Fenced {
+            return Err(Error::HandoverState);
+        }
+        Ok(Self::drain_locked(inner))
+    }
+
+    fn drain_locked(mut inner: MutexGuard<'_, Inner>) -> bool {
         if inner.closed() {
             return false;
         }
@@ -475,7 +514,7 @@ impl Permit {
             return Ok(());
         }
         let mut inner = self.gate.lock();
-        if inner.handover == Handover::Fenced && inner.quiescing() {
+        if inner.handover == Handover::Fenced {
             return Err(Error::Draining);
         }
         if (inner.closed() || inner.quiescing())
@@ -588,6 +627,35 @@ impl Drop for Hold {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn retirement_of_one_product_hold_is_atomic_with_preparation_and_other_work() {
+        let gate = Admission::new();
+        gate.ready();
+        let retained = gate.hold().unwrap();
+        let foreign = Admission::new().hold().unwrap();
+        assert!(!gate.retire_if_only_hold(&foreign));
+        let other = retained.split();
+        assert!(!gate.retire_if_only_hold(&retained));
+        drop(other);
+        let work = gate.enter(false).unwrap();
+        assert!(!gate.retire_if_only_hold(&retained));
+        drop(work);
+        let preparation = gate.quiesce().unwrap();
+        assert!(!gate.retire_if_only_hold(&retained));
+        assert_eq!(gate.snapshot().held, 1);
+        preparation.abort().unwrap();
+        let inspection = gate.control().unwrap();
+        assert!(gate.retire_if_only_hold(&retained));
+        assert_eq!(gate.snapshot().held, 1);
+        assert!(!gate.tick(Duration::ZERO, &Explicit));
+        drop((inspection, retained));
+        assert!(gate.tick(Duration::ZERO, &Explicit));
+        assert_eq!(
+            gate.events().last(),
+            Some(&Event::Exit(ExitReason::Retired))
+        );
+    }
 
     #[test]
     fn control_roles_preserve_grace_and_cannot_reopen_settled_drain() {

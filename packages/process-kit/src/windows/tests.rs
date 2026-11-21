@@ -7,6 +7,54 @@ use crate::net::Listener;
 use std::{io::Write, process::Command};
 use windows_sys::Win32::Security::Authorization::ConvertSecurityDescriptorToStringSecurityDescriptorW;
 
+#[test]
+fn stdio_child() {
+    use std::io::Read;
+    unsafe extern "C" {
+        fn _write(fd: i32, bytes: *const c_void, count: u32) -> i32;
+        fn _read(fd: i32, bytes: *mut c_void, count: u32) -> i32;
+    }
+    if std::env::var_os("ACME_STDIO_CHILD").is_none() {
+        return;
+    }
+    let (mut input, mut output) = protect_stdio().unwrap();
+    println!("stray Rust output");
+    let text = b"stray CRT output\n";
+    // SAFETY: both buffers remain valid for their exact supplied sizes; CRT
+    // standard descriptors were redirected by the function under test.
+    assert_eq!(
+        unsafe { _write(1, text.as_ptr().cast(), u32::try_from(text.len()).unwrap()) },
+        i32::try_from(text.len()).unwrap()
+    );
+    let mut byte = 0_u8;
+    assert_eq!(unsafe { _read(0, (&raw mut byte).cast(), 1) }, 0);
+    let mut frame = String::new();
+    input.read_to_string(&mut frame).unwrap();
+    write!(output, "private:{frame}").unwrap();
+}
+
+#[test]
+fn stdio_protection_redirects_native_and_crt_streams() {
+    use std::process::Stdio;
+    let mut child = Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", "windows::tests::stdio_child", "--nocapture"])
+        .env("ACME_STDIO_CHILD", "1")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child.stdin.take().unwrap().write_all(b"frame").unwrap();
+    let result = child.wait_with_output().unwrap();
+    assert!(result.status.success(), "{result:?}");
+    let stdout = String::from_utf8_lossy(&result.stdout);
+    assert!(stdout.contains("private:frame"), "{stdout}");
+    assert!(!stdout.contains("stray"), "{stdout}");
+    let stderr = String::from_utf8_lossy(&result.stderr);
+    assert!(stderr.contains("stray Rust output"), "{stderr}");
+    assert!(stderr.contains("stray CRT output"), "{stderr}");
+}
+
 fn sddl(path: &Path) -> String {
     let file = open(path, false).unwrap();
     let mut descriptor: PSECURITY_DESCRIPTOR = ptr::null_mut();

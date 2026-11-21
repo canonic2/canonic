@@ -71,6 +71,23 @@ owner channel and `owner::Connection` are available for socket-based adapters;
 hostile-user validation and inherited-handle isolation still apply. An arbitrary
 child does not acquire parent-death cleanup just by implementing this trait.
 
+For an incremental cancellation/progress pump, use `frame::Channel` with
+exclusive stream ownership. It retains partial frames between nonblocking reads;
+your adapter keeps the original absolute deadline and aggregate input budget.
+`endpoint::peer_pid` verifies the peer user and obtains its kernel PID for binding
+to the retained child handle and authenticated incarnation. Durable executable
+directories can use `endpoint::prepare_directory` without a socket path limit.
+`Spawn::start_reaped_from` lets an independently pinned manager use its original
+authorized image after the command worker changes.
+
+On Windows, `launch::contain_worker` places the current inert worker in an owned
+kill-on-close Job Object. Keep the guard through its lifetime. Ordinary children
+remain contained; explicitly detached manager launches use native breakaway.
+`launch::protect_stdio` returns non-inherited protocol copies and redirects both
+native and CRT standard streams. Native Windows fixtures verify Rust/CRT output
+isolation, private protocol copies, ordinary-child containment and detached
+manager survival after worker termination; see the [acceptance map](../specs/verification.md).
+
 ## Retain dispatch through the response
 
 The worker returned by a reservation remains its original target during
@@ -187,7 +204,11 @@ Independent native/owner-channel supervision handles abrupt frontend death.
 
 The controller uses portable Rust and existing platform leases. The native
 Acme fixture demonstrates separate frontend/worker processes, a retained host
-stream, owner-pipe EOF and reaping on macOS. Linux/Windows execution, Windows job
-containment, protocol-specific MCP legacy/modern behavior and product resource
-adoption require separate integration acceptance. Generic fixtures do not prove
+stream, owner-pipe EOF and reaping on macOS. Separate native Windows fixtures
+verify Job containment, CRT isolation and incremental framing with peer identity.
+The incremental framing/peer identity and explicit-image detached-launch fixtures
+also pass natively on Linux.
+The complete generic controller fixture on Linux/Windows, protocol-specific MCP
+legacy/modern behavior and product resource adoption require their own integration
+acceptance. Generic fixtures do not prove
 that an existing MCP server transparently upgrades.

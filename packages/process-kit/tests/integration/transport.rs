@@ -18,6 +18,100 @@ use std::{
     path::Path,
 };
 
+/// The same incremental framing and kernel peer binding on every native host.
+#[test]
+fn lease_writer_revalidation_refuses_a_replaced_lock_anchor() {
+    let (_temp, root) = root();
+    let lease = Lease::acquire(&root, Duration::ZERO).unwrap();
+    lease.verify().unwrap();
+    std::fs::rename(
+        root.path().join("manager.lock"),
+        root.path().join("retired.lock"),
+    )
+    .unwrap();
+    let replacement = Lease::acquire(&root, Duration::ZERO).unwrap();
+    replacement.verify().unwrap();
+    assert!(matches!(lease.verify(), Err(Error::PrivatePath)));
+}
+
+#[test]
+fn native_root_identity_refuses_copied_or_recreated_directory_scope() {
+    let (temp, root) = root();
+    root.prepare().unwrap();
+    let original = root.identity().unwrap();
+    let encoded = serde_json::to_vec(&original).unwrap();
+    let decoded: canonic_process_kit::endpoint::RootIdentity =
+        serde_json::from_slice(&encoded).unwrap();
+    assert_eq!(original, decoded);
+    std::fs::rename(root.path(), temp.path().join("retired-root")).unwrap();
+    root.prepare().unwrap();
+    assert_ne!(original, root.identity().unwrap());
+}
+
+#[test]
+fn quiescent_handoff_refusals_remain_definite_with_unread_request_bytes() {
+    let (_temp, root) = root();
+    let gate = Admission::new();
+    let handler = Arc::new(Acme::default());
+    let server = thread_server(
+        &root,
+        &gate,
+        Arc::clone(&handler),
+        server::Options::default(),
+    );
+    ready(&root);
+    let preparation = gate.quiesce().unwrap();
+    let request = request(json!({"data":"x".repeat(8192)}));
+    let mut unexpected = None;
+    for _ in 0..512 {
+        let result = client::open(&root, &request, &options());
+        if !matches!(result, Err(Error::Draining)) {
+            unexpected = Some(format!("{result:?}"));
+            break;
+        }
+    }
+    preparation.abort().unwrap();
+    let _ = gate.drain();
+    server.join().unwrap().unwrap();
+    assert!(
+        unexpected.is_none(),
+        "Non-admission became ambiguous: {unexpected:?}"
+    );
+    assert_eq!(
+        handler.dispatched.load(std::sync::atomic::Ordering::SeqCst),
+        0
+    );
+}
+
+/// The same incremental framing and kernel peer binding on every native host.
+#[test]
+fn incremental_channel_retains_partial_frames_and_checks_native_peer_identity() {
+    let (_temp, root) = root();
+    let lease = Lease::acquire(&root, Duration::ZERO).unwrap();
+    let endpoint = lease.bind(false).unwrap();
+    let client = endpoint::connect(&root, false, Duration::from_secs(1)).unwrap();
+    let (mut peer, _) = wait(|| endpoint.listener().accept().ok());
+    assert_eq!(endpoint::peer_pid(&client).unwrap(), std::process::id());
+    assert_eq!(endpoint::peer_pid(&peer).unwrap(), std::process::id());
+    peer.set_nonblocking(false).unwrap();
+    peer.set_write_timeout(Some(Duration::from_secs(1)))
+        .unwrap();
+    let mut channel = frame::Channel::new(client, 16).unwrap();
+    peer.write_all(&[0, 0]).unwrap();
+    assert!(channel.receive().unwrap().is_none());
+    peer.write_all(&[0, 3, b'a']).unwrap();
+    assert!(channel.receive().unwrap().is_none());
+    peer.write_all(b"bc").unwrap();
+    assert_eq!(wait(|| channel.receive().unwrap()), b"abc");
+    channel.set_receive_limit(2).unwrap();
+    peer.write_all(&3_u32.to_be_bytes()).unwrap();
+    wait(|| match channel.receive() {
+        Err(Error::FrameTooLarge) => Some(()),
+        Ok(None) => None,
+        other => panic!("unexpected oversized-frame outcome: {other:?}"),
+    });
+}
+
 /// A private socket at `path`, left behind when dropped.
 #[cfg(unix)]
 fn foreign_listener(path: &Path) -> Listener {
@@ -187,6 +281,8 @@ fn real_socket_checks_peer_and_forged_other_uid_is_refused() {
     let (server, _) = endpoint.listener().accept().unwrap();
     endpoint::check_peer(&server).unwrap();
     endpoint::check_peer(&client).unwrap();
+    assert_eq!(endpoint::peer_pid(&server).unwrap(), std::process::id());
+    assert_eq!(endpoint::peer_pid(&client).unwrap(), std::process::id());
     let uid = nix::unistd::geteuid().as_raw();
     assert!(matches!(
         endpoint::check_uid(uid.wrapping_add(1), uid),
@@ -207,6 +303,9 @@ fn absent_inspection_creates_nothing_and_long_paths_are_refused() {
         endpoint::Root::explicit(temp.path().join("a".repeat(110))),
         Err(Error::PathTooLong)
     ));
+    let folder = endpoint::prepare_directory(temp.path().join("a".repeat(110))).unwrap();
+    assert!(folder.is_dir());
+    assert_eq!(endpoint::local_path(&folder).unwrap(), folder);
 }
 
 #[test]

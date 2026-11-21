@@ -75,6 +75,16 @@ impl Identity {
     }
 }
 
+/// An identity reply with the lifecycle and the handler's optional observation.
+#[derive(Debug, Deserialize)]
+pub struct IdentityObservation {
+    #[serde(flatten)]
+    pub identity: Identity,
+    pub lifecycle: Option<String>,
+    #[serde(default)]
+    pub details: Value,
+}
+
 /// A control request is decoded before any product payload or protocol check.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

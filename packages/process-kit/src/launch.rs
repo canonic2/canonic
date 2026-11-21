@@ -8,6 +8,33 @@ use std::{
     process::{Command, ExitStatus, Stdio},
 };
 
+/// Redirect the Windows Rust/Win32 and CRT standard streams while retaining
+/// non-inherited private copies for a protocol driver. Call before any I/O.
+/// # Errors
+/// Returns handle duplication or native/CRT redirection failures.
+#[cfg(windows)]
+pub fn protect_stdio() -> std::io::Result<(File, File)> {
+    crate::windows::protect_stdio()
+}
+
+/// A worker's kill-on-close Job Object. Explicit detached launches must use the
+/// native breakaway path; ordinary children remain in the worker's job.
+#[cfg(windows)]
+pub struct WorkerContainment {
+    _job: std::os::windows::io::OwnedHandle,
+}
+
+/// Contain the current inert worker before it receives effect authority.
+/// Keep the guard for its entire lifetime. Unsupported nesting refuses.
+/// # Errors
+/// Returns native Job Object creation, configuration or assignment failures.
+#[cfg(windows)]
+pub fn contain_worker() -> Result<WorkerContainment> {
+    Ok(WorkerContainment {
+        _job: crate::windows::contain_worker()?,
+    })
+}
+
 /// The client can start through either detached spawn or an OS registration.
 pub trait Launcher {
     /// Request startup; readiness is observed separately over the private endpoint.
@@ -79,8 +106,23 @@ impl Spawn {
     /// # Errors
     /// Returns unsupported, executable lookup, descriptor duplication or spawn errors.
     pub fn start_reaped(&self) -> Result<std::thread::JoinHandle<std::io::Result<ExitStatus>>> {
+        self.start_reaped_from(&std::env::current_exe()?)
+    }
+
+    /// Launch a product-authorized immutable executable instead of this process's
+    /// image. The product validates and retains that image for re-execution.
+    /// This preserves the detached environment, streams and native reaper.
+    /// # Errors
+    /// Returns invalid relative paths, unsupported hosts or spawn errors.
+    pub fn start_reaped_from(
+        &self,
+        executable: &std::path::Path,
+    ) -> Result<std::thread::JoinHandle<std::io::Result<ExitStatus>>> {
         crate::supported()?;
-        let mut command = Command::new(std::env::current_exe()?);
+        if !executable.is_absolute() {
+            return Err(Error::Options);
+        }
+        let mut command = Command::new(executable);
         command
             .args(&self.args)
             .env_clear()

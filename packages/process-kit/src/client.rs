@@ -112,6 +112,18 @@ pub fn connect(
     connect_until(root, launcher, options, Instant::now() + options.readiness)
 }
 
+/// Connect or explicitly start and retain the successful identity observation.
+///
+/// # Errors
+/// Returns the same startup and transport errors as [`connect`].
+pub fn connect_observed(
+    root: &Root,
+    launcher: Option<&dyn Launcher>,
+    options: &Options,
+) -> Result<crate::protocol::IdentityObservation> {
+    observe_until(root, launcher, options, Instant::now() + options.readiness)
+}
+
 /// Connect using a release version, retiring an older manager without killing work.
 /// An empty older manager exits immediately and the supplied launcher starts a
 /// replacement after lease release. A busy one keeps serving and remembers to
@@ -239,6 +251,15 @@ pub(crate) fn connect_until(
     options: &Options,
     deadline: Instant,
 ) -> Result<Identity> {
+    observe_until(root, launcher, options, deadline).map(|observed| observed.identity)
+}
+
+fn observe_until(
+    root: &Root,
+    launcher: Option<&dyn Launcher>,
+    options: &Options,
+    deadline: Instant,
+) -> Result<crate::protocol::IdentityObservation> {
     let started = Instant::now();
     let mut delay = Duration::from_millis(2);
     let mut child: Option<Launched> = None;
@@ -345,7 +366,7 @@ fn control_until(
     } else {
         options.io
     };
-    let mut stream = endpoint::connect(root, true, timeout)?;
+    let mut stream = endpoint::connect_for_exchange(root, true, timeout)?;
     exchange(&mut stream, request, &request.request_id, options, deadline)
 }
 
@@ -379,7 +400,7 @@ pub fn open(root: &Root, request: &Request, options: &Options) -> Result<(Reply,
             .push(crate::protocol::CONNECTION_HANDOFF.into());
     }
     let id = request.request_id.clone();
-    let mut stream = endpoint::connect(root, false, options.io)?;
+    let mut stream = endpoint::connect_for_exchange(root, false, options.io)?;
     let reply = exchange(
         &mut stream,
         &crate::protocol::ConnectionRequest {
@@ -406,7 +427,7 @@ pub fn open(root: &Root, request: &Request, options: &Options) -> Result<(Reply,
 /// As [`call`] before the acknowledgement: definite refusal codes, or
 /// `OutcomeUnknown` after a partial send or a lost acknowledgement.
 pub fn submit(root: &Root, request: &Request, options: &Options) -> Result<Admitted> {
-    let mut stream = endpoint::connect(root, false, options.io)?;
+    let mut stream = endpoint::connect_for_exchange(root, false, options.io)?;
     let ack = acknowledge(&mut stream, request, &request.request_id, options, None)?;
     if ack.accepted == Some(false) {
         // Typed refusals keep their errors; any other complete refusal is
@@ -487,7 +508,7 @@ pub(crate) fn call_until(
     if remaining.is_zero() {
         return Err(Error::Starting);
     }
-    let mut stream = endpoint::connect(root, false, remaining)?;
+    let mut stream = endpoint::connect_for_exchange(root, false, remaining)?;
     exchange(&mut stream, request, &request.request_id, options, deadline)
 }
 
@@ -583,18 +604,6 @@ struct FrameDeadline<'a> {
     until: Instant,
 }
 
-/// Darwin can reject a timeout change after the peer exits.
-fn darwin_invalid_timeout(error: &std::io::Error) -> bool {
-    #[cfg(target_os = "macos")]
-    {
-        error.raw_os_error() == Some(nix::errno::Errno::EINVAL as i32)
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = error;
-        false
-    }
-}
 impl std::io::Read for FrameDeadline<'_> {
     fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
         let remaining = self.until.saturating_duration_since(Instant::now());
@@ -603,7 +612,7 @@ impl std::io::Read for FrameDeadline<'_> {
         }
         match self.stream.set_read_timeout(Some(remaining)) {
             Ok(()) => {}
-            Err(error) if darwin_invalid_timeout(&error) => {
+            Err(error) if crate::connection::peer_closed_timeout(&error) => {
                 // Darwin can reject timeout changes after peer exit while a
                 // complete reply is buffered. Nonblocking reads preserve that
                 // reply without letting an incomplete frame exceed its deadline.

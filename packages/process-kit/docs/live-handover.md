@@ -1,5 +1,11 @@
 # Build a live manager handover
 
+External drain requests use `Admission::try_drain`: they can cancel reversible
+preparation, but refuse once handover is irreversibly fenced. The server's built-in
+`drain` follows this rule. `Admission::drain` remains a local reconciliation
+primitive; products must verify which resources they still own before invoking
+cleanup after a fenced failure.
+
 Use planned handover when a replacement manager must take over without stopping
 live resources. Process Kit supplies admission fences and bounded copies of files
 and sockets. Your application owns candidate selection, resource inventories,

@@ -28,6 +28,17 @@ pub struct Root {
     path: PathBuf,
 }
 
+/// Opaque native directory identity for product-owned durable scope binding.
+/// A copied or recreated directory has a different identity even at the same
+/// path. This is evidence to compare under exclusion, not an authority token.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RootIdentity {
+    platform: String,
+    volume: u64,
+    object: String,
+}
+
 impl Root {
     /// Resolve a default root beneath the account home, or explicitly opt into `HOME`.
     ///
@@ -51,6 +62,21 @@ impl Root {
     /// Returns I/O or path-length errors. Parent components and symlinks are
     /// refused, as are Windows roots that are not on a local drive letter.
     pub fn explicit(path: impl AsRef<Path>) -> Result<Self> {
+        let root = Self::resolve(path)?;
+        if root
+            .path
+            .join("manager.sock")
+            .as_os_str()
+            .as_encoded_bytes()
+            .len()
+            >= SOCKET_PATH_LIMIT
+        {
+            return Err(Error::PathTooLong);
+        }
+        Ok(root)
+    }
+
+    fn resolve(path: impl AsRef<Path>) -> Result<Self> {
         let path = std::path::absolute(path)?;
         if path.components().any(|c| matches!(c, Component::ParentDir)) || !local_prefix(&path) {
             return Err(Error::PrivatePath);
@@ -79,21 +105,24 @@ impl Root {
         if !local_prefix(&path) {
             return Err(Error::PrivatePath);
         }
-        if path
-            .join("manager.sock")
-            .as_os_str()
-            .as_encoded_bytes()
-            .len()
-            >= SOCKET_PATH_LIMIT
-        {
-            return Err(Error::PathTooLong);
-        }
         Ok(Self { path })
     }
     /// Root path, without creating it.
     #[must_use]
     pub fn path(&self) -> &Path {
         &self.path
+    }
+
+    /// Read the current private directory's native identity without creating it.
+    /// # Errors
+    /// Returns native privacy, missing-path or metadata errors.
+    pub fn identity(&self) -> Result<RootIdentity> {
+        let identity = private(self.path(), false)?;
+        Ok(RootIdentity {
+            platform: std::env::consts::OS.into(),
+            volume: identity.0,
+            object: format!("{:x}", identity.1),
+        })
     }
     /// Ordinary or reserved control socket path.
     #[must_use]
@@ -416,6 +445,45 @@ pub fn check_peer(stream: &Stream) -> Result<()> {
     }
 }
 
+/// Prepare a native private directory without imposing an IPC socket-path limit.
+/// The same owner, ACL, local-volume and no-symlink checks as [`Root::prepare`]
+/// apply. This does not create an endpoint or grant a process lease.
+/// # Errors
+/// Returns invalid paths, ownership/privacy failures or filesystem errors.
+pub fn prepare_directory(path: impl AsRef<Path>) -> Result<PathBuf> {
+    let root = Root::resolve(path)?;
+    root.prepare()?;
+    Ok(root.path)
+}
+
+/// Resolve parent aliases and native local-path spelling without creating files
+/// or imposing a socket-length limit. This does not establish ownership/privacy.
+/// # Errors
+/// Refuses parent traversal, unsupported volume roots or resolution errors.
+pub fn local_path(path: impl AsRef<Path>) -> Result<PathBuf> {
+    Ok(Root::resolve(simplify(path.as_ref().to_path_buf()))?.path)
+}
+
+/// Obtain the kernel-reported process ID after checking the peer's user.
+/// Bind it to an already retained native child/process handle; a PID alone is
+/// not a process incarnation or executable-authentication proof.
+/// # Errors
+/// Returns credential/query errors or `Unsupported` on other native platforms.
+pub fn peer_pid(stream: &Stream) -> Result<u32> {
+    check_peer(stream)?;
+    #[cfg(target_os = "macos")]
+    let pid = nix::sys::socket::getsockopt(stream, nix::sys::socket::sockopt::LocalPeerPid)?;
+    #[cfg(target_os = "linux")]
+    let pid =
+        nix::sys::socket::getsockopt(stream, nix::sys::socket::sockopt::PeerCredentials)?.pid();
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    return u32::try_from(pid).map_err(|_| Error::Peer);
+    #[cfg(windows)]
+    return Ok(crate::windows::peer_pid(stream)?);
+    #[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
+    Err(Error::Unsupported)
+}
+
 /// Kernel-owned exclusive lock. The anchor is never unlinked or rewritten.
 pub struct Lease {
     root: Root,
@@ -456,7 +524,14 @@ impl Lease {
             }
         }
     }
-    fn verify(&self) -> Result<()> {
+    /// Revalidate that the private directory and lock anchor still name this
+    /// lease. Products with writers outside the endpoint loop use this before
+    /// publishing state or fencing authority. This is a bounded check, not an
+    /// atomic filesystem transaction with subsequent product writes.
+    ///
+    /// # Errors
+    /// Returns `PrivatePath` after replacement, or native validation/I/O errors.
+    pub fn verify(&self) -> Result<()> {
         let root = private(self.root.path(), false)?;
         let anchor = path_identity(&self.root.path.join("manager.lock"))?;
         if root != self.identity || anchor != file_identity(&self.file)? {
@@ -557,6 +632,19 @@ impl Drop for Endpoint<'_> {
 /// errors. An ambiguous refused connection to a leased endpoint is `Starting`;
 /// on macOS this includes a full backlog as well as a stale/closed listener.
 pub fn connect(root: &Root, control: bool, timeout: Duration) -> Result<Stream> {
+    let stream = connect_for_exchange(root, control, timeout)?;
+    stream.set_read_timeout(Some(timeout))?;
+    stream.set_write_timeout(Some(timeout))?;
+    Ok(stream)
+}
+
+// Framed exchanges set their own timeouts and can read a buffered refusal
+// even when the peer closes before socket timeout setup on macOS.
+pub(crate) fn connect_for_exchange(
+    root: &Root,
+    control: bool,
+    timeout: Duration,
+) -> Result<Stream> {
     if timeout.is_zero() {
         return Err(io::Error::from(io::ErrorKind::InvalidInput).into());
     }
@@ -615,8 +703,6 @@ pub fn connect(root: &Root, control: bool, timeout: Duration) -> Result<Stream> 
         Err(e) => return Err(e.into()),
     };
     check_peer(&stream)?;
-    stream.set_read_timeout(Some(timeout))?;
-    stream.set_write_timeout(Some(timeout))?;
     Ok(stream)
 }
 
@@ -858,6 +944,10 @@ mod windows_roots {
         let root = Root::explicit(temporary.path().join("acme").join("runtime")).unwrap();
         root.prepare().unwrap();
         assert!(!root.leased().unwrap());
+        assert_eq!(
+            local_path(root.path().canonicalize().unwrap()).unwrap(),
+            root.path()
+        );
         let lease = Lease::acquire(&root, Duration::ZERO).unwrap();
         assert!(root.leased().unwrap());
         let endpoint = lease.bind(false).unwrap();

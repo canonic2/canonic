@@ -10,7 +10,7 @@ supplies the request handler and decides which resources keep the manager alive.
 ## Add the library
 
 Process Kit is unpublished and used from source. It supports macOS, Linux and
-Windows 10 version 1803 or later. Consumers require Rust 1.97 or newer; the
+Windows 10 version 1803 or later. Consumers require Rust 1.102 or newer; the
 checkout pins its own development toolchain.
 
 From a sibling Rust package, add this to `Cargo.toml`:

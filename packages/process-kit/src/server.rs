@@ -76,6 +76,11 @@ pub trait Handler: Send + Sync + 'static {
     fn blockers(&self) -> Value {
         Value::Null
     }
+    /// Optional bounded, secret-free status supplied with an identity reply.
+    /// This fast inspection must not admit work or acquire an obligation.
+    fn identity_details(&self) -> Value {
+        Value::Null
+    }
     /// Product-specific controls, independent of the product protocol version.
     ///
     /// # Errors
@@ -358,8 +363,14 @@ fn drain_after_failure<H: Handler>(shared: &Shared<H>, start: Instant) {
     shared.gate.set_waker(Some(Waker::from(Arc::new(CleanupWake(
         std::thread::current(),
     )))));
-    if shared.gate.drain() {
-        shared.handler.drain();
+    match shared.gate.try_drain() {
+        Ok(true) => shared.handler.drain(),
+        Ok(false) => {}
+        Err(_) => {
+            // An irreversible transfer owns cleanup now. Close the failed
+            // runtime's admission, but never run predecessor cleanup callbacks.
+            let _ = shared.gate.drain();
+        }
     }
     while !shared.gate.tick(start.elapsed(), &crate::core::Explicit) {
         std::thread::park();
@@ -646,14 +657,14 @@ fn handle_control<H: Handler>(s: &Shared<H>, job: &mut Job, r: &Control) -> Resu
     if r.action == "force_stop" && !r.arguments.is_null() {
         return refuse(s, &mut &job.stream, id, Code::Invalid);
     }
-    let newer = if r.action == "retire_if_older" {
-        match newer_version(s, r) {
+    if r.action == "drain" && s.gate.snapshot().handover_fenced {
+        return refuse(s, &mut &job.stream, id, Code::Draining);
+    }
+    let newer = r.action == "retire_if_older"
+        && match newer_version(s, r) {
             Ok(newer) => newer,
             Err(code) => return refuse(s, &mut &job.stream, id, code),
-        }
-    } else {
-        false
-    };
+        };
     if !built_in {
         let role = s.handler.control_role(r);
         if job.permit.classify_control(role).is_err() {
@@ -711,6 +722,10 @@ fn dispatch_control<H: Handler>(
         "identity" => {
             let mut value = json!(s.identity);
             value["lifecycle"] = json!(s.gate.snapshot().state);
+            let details = s.handler.identity_details();
+            if !details.is_null() {
+                value["details"] = details;
+            }
             Ok(value)
         }
         "status" => Ok(
@@ -729,7 +744,9 @@ fn dispatch_control<H: Handler>(
             )
         }
         "drain" => {
-            if s.gate.drain() {
+            if s.gate.try_drain().map_err(|_| protocol::ProductError(
+                json!({"code":"draining","message":"handover fenced this manager; inspect the current owner before draining"})
+            ))? {
                 s.handler.drain();
             }
             Ok(json!({"draining":true}))
@@ -825,6 +842,42 @@ mod tests {
         let mut unread = [0; 4];
         stream.read_exact(&mut unread).unwrap();
         assert_eq!(&unread, b"acme");
+    }
+
+    #[test]
+    fn failed_driver_after_handover_fencing_never_calls_predecessor_cleanup() {
+        struct Cleanup(Arc<AtomicUsize>);
+        impl Handler for Cleanup {
+            fn call(
+                &self,
+                _: &Request,
+                _: &Context<'_>,
+            ) -> std::result::Result<Value, protocol::ProductError> {
+                Err(protocol::ProductError(Value::Null))
+            }
+            fn drain(&self) {
+                self.0.fetch_add(1, Ordering::SeqCst);
+            }
+        }
+        let gate = Admission::new();
+        gate.ready();
+        let mut preparation = gate.quiesce().unwrap();
+        preparation.fence().unwrap();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let shared = Shared {
+            identity: Identity::new("1.0.0".into(), 1, vec![]).unwrap(),
+            version: None,
+            gate: gate.clone(),
+            handler: Arc::new(Cleanup(Arc::clone(&calls))),
+            options: Options::default(),
+            ordinary_count: Arc::new(AtomicUsize::new(0)),
+            control_count: Arc::new(AtomicUsize::new(0)),
+            connections: Slots::new(0),
+        };
+        drain_after_failure(&shared, Instant::now());
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+        assert_eq!(gate.snapshot().state, crate::core::State::Exiting);
+        assert!(gate.snapshot().handover_fenced);
     }
 
     #[test]

@@ -1,8 +1,8 @@
 [package]
 name = "canonic-process-kit"
-version = "0.7.0"
+version = "0.8.0"
 edition = "2024"
-rust-version = "1.97"
+rust-version = "1.102"
 publish = false
 license-file = "LICENSE"
 description = "Per-user background process lifetime, local IPC and detached startup"
@@ -29,6 +29,7 @@ windows-sys = { version = "0.61", features = [
     "Win32_Security_Authorization",
     "Win32_Storage_FileSystem",
     "Win32_System_IO",
+    "Win32_System_Console",
     "Win32_System_JobObjects",
     "Win32_System_SystemServices",
     "Win32_System_Threading",

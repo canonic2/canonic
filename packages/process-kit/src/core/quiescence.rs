@@ -209,6 +209,42 @@ mod tests {
     }
 
     #[test]
+    fn quiescence_external_drain_preempts_preparation_but_refuses_irreversible_fence() {
+        let gate = Admission::new();
+        gate.ready();
+        let preparation = gate.quiesce().unwrap();
+        assert!(gate.try_drain().unwrap());
+        preparation.abort().unwrap();
+        assert_eq!(gate.snapshot().state, State::Draining);
+
+        let gate = Admission::new();
+        gate.ready();
+        let hold = gate.hold().unwrap();
+        let mut preparation = gate.quiesce().unwrap();
+        preparation.fence().unwrap();
+        assert!(matches!(gate.try_drain(), Err(Error::HandoverState)));
+        assert_eq!(gate.snapshot().state, State::Serving);
+        assert!(gate.snapshot().handover_fenced);
+        drop(hold);
+        preparation.commit().unwrap();
+    }
+
+    #[test]
+    fn quiescence_local_reconciliation_cannot_reopen_external_cleanup_after_fence() {
+        let gate = Admission::new();
+        gate.ready();
+        let hold = gate.hold().unwrap();
+        let mut preparation = gate.quiesce().unwrap();
+        preparation.fence().unwrap();
+        assert!(gate.drain());
+        let mut cleanup = gate.control().unwrap();
+        assert!(cleanup.classify_control(ControlRole::Cleanup).is_err());
+        cleanup.classify_control(ControlRole::Inspection).unwrap();
+        drop((cleanup, hold, preparation));
+        assert!(gate.tick(Duration::ZERO, &Explicit));
+    }
+
+    #[test]
     fn quiescence_irreversible_fence_cannot_reopen_after_durable_commit_failure() {
         let gate = Admission::new();
         gate.ready();

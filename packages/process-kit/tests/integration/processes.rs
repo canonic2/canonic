@@ -17,6 +17,37 @@ use std::{
 
 #[cfg(windows)]
 #[test]
+fn worker_containment_keeps_ordinary_children_and_detached_manager_ownership_separate() {
+    struct Cleanup(canonic_process_kit::endpoint::Root);
+    impl Drop for Cleanup {
+        fn drop(&mut self) {
+            if let Ok(identity) = client::connect(&self.0, None, &options()) {
+                let mut request = control(&self.0, "drain");
+                request.manager_id = Some(identity.manager_id);
+                let _ = client::control(&self.0, &request, &options());
+            }
+        }
+    }
+    let (_temp, root) = root();
+    let ordinary =
+        canonic_process_kit::endpoint::Root::explicit(root.path().join("ordinary")).unwrap();
+    let detached =
+        canonic_process_kit::endpoint::Root::explicit(root.path().join("detached")).unwrap();
+    let _cleanup = Cleanup(detached.clone());
+    let mut worker = child(&root, "contained-worker");
+    wait(|| root.path().join("contained-ready").exists().then_some(()));
+    assert!(ordinary.leased().unwrap());
+    let original = ready(&detached);
+    worker.0.kill().unwrap();
+    worker.0.wait().unwrap();
+    wait(|| (!ordinary.leased().unwrap()).then_some(()));
+    assert_eq!(ready(&detached).manager_id, original.manager_id);
+    stop(&detached, "drain");
+    wait(|| (!detached.leased().unwrap()).then_some(()));
+}
+
+#[cfg(windows)]
+#[test]
 fn captured_parent_output_closes_while_its_detached_manager_keeps_running() {
     use std::{
         io::Read,
@@ -295,7 +326,14 @@ fn sigkill_releases_kernel_lease_and_next_client_replaces_stale_socket() {
 #[test]
 fn detached_start_has_only_allowlist_null_stdin_and_new_session() {
     let (_temp, root) = root();
-    let reap = spawn(&root).start_reaped().unwrap();
+    let launch = spawn(&root);
+    assert!(matches!(
+        launch.start_reaped_from(std::path::Path::new("relative")),
+        Err(Error::Options)
+    ));
+    let reap = launch
+        .start_reaped_from(&std::env::current_exe().unwrap())
+        .unwrap();
     ready(&root);
     let reply = client::call(&root, &request(json!("environment")), &options()).unwrap();
     let data = reply.data;

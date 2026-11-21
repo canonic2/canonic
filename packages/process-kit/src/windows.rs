@@ -8,6 +8,81 @@
 )]
 
 use crate::net::Stream;
+
+pub(crate) fn protect_stdio() -> io::Result<(File, File)> {
+    use std::os::windows::io::{AsHandle, IntoRawHandle};
+    use windows_sys::Win32::System::Console::{STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, SetStdHandle};
+    unsafe extern "C" {
+        fn _open_osfhandle(handle: isize, flags: i32) -> i32;
+        fn _dup2(source: i32, target: i32) -> i32;
+        fn _close(descriptor: i32) -> i32;
+    }
+    let input = io::stdin().as_handle().try_clone_to_owned()?;
+    let output = io::stdout().as_handle().try_clone_to_owned()?;
+    let null = File::open("NUL")?;
+    let crt_null = null.try_clone()?.into_raw_handle();
+    // SAFETY: transfer a fresh owned NUL handle to the CRT descriptor table.
+    let descriptor = unsafe { _open_osfhandle(crt_null as isize, 0) };
+    if descriptor < 0 {
+        // SAFETY: failed transfer leaves ownership with this function.
+        drop(unsafe { OwnedHandle::from_raw_handle(crt_null) });
+        return Err(io::Error::other("cannot create private CRT input"));
+    }
+    // SAFETY: descriptor is a live CRT descriptor; 0/1/2 are the standard slots.
+    let redirected = unsafe { _dup2(descriptor, 0) == 0 && _dup2(2, 1) == 0 };
+    // SAFETY: this function owns the temporary CRT descriptor.
+    unsafe { _close(descriptor) };
+    if !redirected {
+        return Err(io::Error::other("cannot redirect CRT standard streams"));
+    }
+    let diagnostic = io::stderr().as_handle().try_clone_to_owned()?;
+    let null = null.into_raw_handle();
+    // SAFETY: transfer these non-inherited handles to the process's standard
+    // handle table. The OS closes them at process exit; protocol copies stay owned.
+    if unsafe { SetStdHandle(STD_INPUT_HANDLE, null) } == 0 {
+        drop(unsafe { OwnedHandle::from_raw_handle(null) });
+        return Err(io::Error::last_os_error());
+    }
+    let diagnostic = diagnostic.into_raw_handle();
+    if unsafe { SetStdHandle(STD_OUTPUT_HANDLE, diagnostic) } == 0 {
+        drop(unsafe { OwnedHandle::from_raw_handle(diagnostic) });
+        return Err(io::Error::last_os_error());
+    }
+    Ok((File::from(input), File::from(output)))
+}
+
+pub(crate) fn contain_worker() -> io::Result<OwnedHandle> {
+    use windows_sys::Win32::System::{
+        JobObjects::{
+            AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_LIMIT_BREAKAWAY_OK,
+            JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+            JobObjectExtendedLimitInformation, SetInformationJobObject,
+        },
+        Threading::GetCurrentProcess,
+    };
+    // SAFETY: null security/name pointers create a fresh unnamed owned job.
+    let handle = unsafe { CreateJobObjectW(ptr::null(), ptr::null()) };
+    if handle.is_null() {
+        return Err(io::Error::last_os_error());
+    }
+    let job = unsafe { OwnedHandle::from_raw_handle(handle) };
+    let mut limits = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
+    limits.BasicLimitInformation.LimitFlags =
+        JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_BREAKAWAY_OK;
+    // SAFETY: the owned job, initialized structure and its exact byte size live
+    // through both calls. Assignment is performed while the worker is inert.
+    check(unsafe {
+        SetInformationJobObject(
+            handle,
+            JobObjectExtendedLimitInformation,
+            (&raw const limits).cast(),
+            u32::try_from(size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>())
+                .map_err(|_| io::ErrorKind::InvalidInput)?,
+        )
+    })?;
+    check(unsafe { AssignProcessToJobObject(handle, GetCurrentProcess()) })?;
+    Ok(job)
+}
 mod launch;
 pub(crate) mod transfer;
 pub(crate) use launch::spawn_detached;
@@ -733,6 +808,20 @@ pub(crate) fn restrict_socket(path: &Path) -> io::Result<()> {
 /// Returns false when the peer process or its token cannot be opened, as for
 /// an elevated peer in another logon session seen from medium integrity.
 pub(crate) fn peer_is_user(stream: &Stream) -> io::Result<bool> {
+    let pid = peer_pid(stream)?;
+    // SAFETY: opening a process by ID has no memory-safety preconditions.
+    let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+    if process.is_null() {
+        return Ok(false);
+    }
+    // SAFETY: OpenProcess succeeded, so `process` is an open handle we own.
+    let process = unsafe { OwnedHandle::from_raw_handle(process) };
+    Ok(open_token(process.as_raw_handle())
+        .and_then(|token| token_user(&token))
+        .is_ok_and(|sid| is_user(&sid)))
+}
+
+pub(crate) fn peer_pid(stream: &Stream) -> io::Result<u32> {
     let mut pid = 0_u32;
     let mut returned = 0_u32;
     // SAFETY: the socket is open; the output buffer is a u32, as this ioctl
@@ -753,16 +842,7 @@ pub(crate) fn peer_is_user(stream: &Stream) -> io::Result<bool> {
     if result != 0 {
         return Err(wsa_error());
     }
-    // SAFETY: opening a process by ID has no memory-safety preconditions.
-    let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
-    if process.is_null() {
-        return Ok(false);
-    }
-    // SAFETY: OpenProcess succeeded, so `process` is an open handle we own.
-    let process = unsafe { OwnedHandle::from_raw_handle(process) };
-    Ok(open_token(process.as_raw_handle())
-        .and_then(|token| token_user(&token))
-        .is_ok_and(|sid| is_user(&sid)))
+    Ok(pid)
 }
 
 /// Whether a peer's token user is the effective user; a lookup failure refuses.

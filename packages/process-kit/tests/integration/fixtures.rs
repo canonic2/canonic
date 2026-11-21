@@ -235,6 +235,31 @@ pub(super) fn stop(root: &Root, action: &str) {
     });
 }
 
+#[cfg(windows)]
+fn contained_worker(root: &Root) {
+    root.prepare().unwrap();
+    let _job = canonic_process_kit::launch::contain_worker().unwrap();
+    let ordinary = Root::explicit(root.path().join("ordinary")).unwrap();
+    let _child = child(&ordinary, "manager");
+    ready(&ordinary);
+    let detached = Root::explicit(root.path().join("detached")).unwrap();
+    let _reaper = spawn(&detached)
+        .start_reaped_from(&std::env::current_exe().unwrap())
+        .unwrap();
+    ready(&detached);
+    std::fs::write(root.path().join("contained-ready"), b"ready").unwrap();
+    let _ = std::io::stdin().read(&mut [0]);
+}
+
+fn parent(root: &Root, wait_for_input: bool) {
+    if wait_for_input {
+        std::io::stdin().read_exact(&mut [0]).unwrap();
+    }
+    let _reaper = spawn(root).start_reaped().unwrap();
+    ready(root);
+    let _ = std::io::stdin().read(&mut [0]);
+}
+
 #[test]
 fn entry() {
     let Some(path) = std::env::var_os("ACME_ROOT") else {
@@ -273,14 +298,9 @@ fn entry() {
                 }
             }
         }
-        "parent" | "parent-on-input" => {
-            if mode == "parent-on-input" {
-                std::io::stdin().read_exact(&mut [0]).unwrap();
-            }
-            let _reaper = spawn(&root).start_reaped().unwrap();
-            ready(&root);
-            let _ = std::io::stdin().read(&mut [0]);
-        }
+        #[cfg(windows)]
+        "contained-worker" => contained_worker(&root),
+        "parent" | "parent-on-input" => parent(&root, mode == "parent-on-input"),
         "fails-at-startup" => std::process::exit(70),
         _ => {
             if mode == "delayed-manager" {

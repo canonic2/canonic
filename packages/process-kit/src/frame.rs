@@ -104,6 +104,120 @@ impl Write for Deadline<'_> {
 /// Default maximum payload: one MiB, excluding the four-byte prefix.
 pub const DEFAULT_LIMIT: usize = 1024 * 1024;
 
+/// Incremental private framing for a single nonblocking channel pump. Partial
+/// prefixes/bodies remain owned here while the caller routes cancellation and
+/// checks its absolute deadlines. Never reconnect/replay a partial exchange.
+#[cfg(any(unix, windows))]
+pub struct Channel {
+    stream: crate::net::Stream,
+    prefix: [u8; 4],
+    prefix_used: usize,
+    body: Vec<u8>,
+    body_used: usize,
+    limit: usize,
+    receive_limit: usize,
+}
+
+#[cfg(any(unix, windows))]
+impl Channel {
+    /// Take exclusive I/O ownership of a connected stream.
+    /// # Errors
+    /// Returns an invalid bound or native socket error.
+    pub fn new(stream: crate::net::Stream, limit: usize) -> Result<Self> {
+        if limit == 0 || limit > u32::MAX as usize {
+            return Err(Error::Options);
+        }
+        stream.set_read_timeout(None)?;
+        stream.set_write_timeout(None)?;
+        stream.set_nonblocking(true)?;
+        Ok(Self {
+            stream,
+            prefix: [0; 4],
+            prefix_used: 0,
+            body: Vec::new(),
+            body_used: 0,
+            limit,
+            receive_limit: limit,
+        })
+    }
+    /// Tighten the next incoming frame without reducing the output budget.
+    /// Change it only between complete frames, after authenticating and reserving
+    /// that frame's declared bytes in the consumer's aggregate budget.
+    /// # Errors
+    /// Refuses a zero/oversized bound or a partially read frame.
+    pub fn set_receive_limit(&mut self, limit: usize) -> Result<()> {
+        if limit == 0 || limit > self.limit || self.prefix_used != 0 {
+            return Err(Error::Options);
+        }
+        self.receive_limit = limit;
+        Ok(())
+    }
+    /// Consume currently available bytes, retaining partial frames. `None`
+    /// means pending, never EOF. A zero-length frame is returned as an empty Vec.
+    /// # Errors
+    /// Returns EOF, native errors or an oversized prefix before allocation.
+    pub fn receive(&mut self) -> Result<Option<Vec<u8>>> {
+        loop {
+            let bytes = if self.prefix_used < 4 {
+                &mut self.prefix[self.prefix_used..]
+            } else {
+                &mut self.body[self.body_used..]
+            };
+            if bytes.is_empty() {
+                self.prefix_used = 0;
+                self.body_used = 0;
+                return Ok(Some(std::mem::take(&mut self.body)));
+            }
+            match self.stream.read(bytes) {
+                Ok(0) => return Err(std::io::Error::from(std::io::ErrorKind::UnexpectedEof).into()),
+                Ok(count) if self.prefix_used < 4 => {
+                    self.prefix_used += count;
+                    if self.prefix_used == 4 {
+                        let length = u32::from_be_bytes(self.prefix) as usize;
+                        if length > self.receive_limit {
+                            return Err(Error::FrameTooLarge);
+                        }
+                        self.body = vec![0; length];
+                    }
+                }
+                Ok(count) => self.body_used += count,
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => return Ok(None),
+                Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
+                Err(error) => return Err(error.into()),
+            }
+        }
+    }
+    /// Send one bounded frame against an absolute deadline. An error after any
+    /// byte was written is uncertain; this channel cannot be replayed elsewhere.
+    /// # Errors
+    /// Returns an oversized frame, expired deadline or native write failure.
+    pub fn send(&mut self, bytes: &[u8], until: std::time::Instant) -> Result<()> {
+        if bytes.len() > self.limit {
+            return Err(Error::FrameTooLarge);
+        }
+        let prefix = u32::try_from(bytes.len())
+            .map_err(|_| Error::FrameTooLarge)?
+            .to_be_bytes();
+        for mut pending in [prefix.as_slice(), bytes] {
+            while !pending.is_empty() {
+                if std::time::Instant::now() >= until {
+                    return Err(std::io::Error::from(std::io::ErrorKind::TimedOut).into());
+                }
+                match self.stream.write(pending) {
+                    Ok(0) => return Err(std::io::Error::from(std::io::ErrorKind::WriteZero).into()),
+                    Ok(count) => pending = &pending[count..],
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        std::thread::sleep(std::time::Duration::from_millis(1));
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
+                    Err(error) => return Err(error.into()),
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
 /// Read exactly one frame, refusing the advertised length before allocation.
 ///
 /// # Errors
@@ -194,6 +308,39 @@ mod deadline_tests {
         os::unix::net::UnixStream,
         time::{Duration, Instant},
     };
+
+    #[test]
+    fn channel_retains_partial_prefix_and_body_and_bounds_before_allocation() {
+        let (client, mut peer) = UnixStream::pair().unwrap();
+        let mut channel = Channel::new(client, 16).unwrap();
+        peer.write_all(&[0, 0]).unwrap();
+        assert!(channel.receive().unwrap().is_none());
+        assert!(channel.set_receive_limit(8).is_err());
+        peer.write_all(&[0, 3, b'a']).unwrap();
+        assert!(channel.receive().unwrap().is_none());
+        peer.write_all(b"bc").unwrap();
+        assert_eq!(channel.receive().unwrap(), Some(b"abc".to_vec()));
+        channel.set_receive_limit(2).unwrap();
+        peer.write_all(&3_u32.to_be_bytes()).unwrap();
+        assert!(matches!(channel.receive(), Err(Error::FrameTooLarge)));
+    }
+
+    #[test]
+    fn channel_distinguishes_pending_empty_frame_eof_and_expired_output() {
+        let (client, mut peer) = UnixStream::pair().unwrap();
+        let mut channel = Channel::new(client, 16).unwrap();
+        assert!(channel.receive().unwrap().is_none());
+        peer.write_all(&0_u32.to_be_bytes()).unwrap();
+        assert_eq!(channel.receive().unwrap(), Some(vec![]));
+        assert!(channel.send(b"x", Instant::now()).is_err());
+        peer.set_nonblocking(true).unwrap();
+        assert_eq!(
+            peer.read(&mut [0]).unwrap_err().kind(),
+            std::io::ErrorKind::WouldBlock
+        );
+        drop(peer);
+        assert!(channel.receive().is_err());
+    }
 
     #[test]
     fn deadline_retains_buffered_reply_after_peer_close_and_refuses_expired_io() {
