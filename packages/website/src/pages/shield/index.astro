@@ -8,7 +8,7 @@ import { download, github, pages, shieldNav } from '../../lib/shield.js';
 const mark = products.find(product => product.name === 'Shield');
 const quickStart = 'shield init\nshield status\nshield doctor';
 const packs = 'shield pack search node\nshield pack add node --profile strict\nshield pack update';
-const install = 'git clone https://github.com/canonic2/canonic.git\ncd canonic\nmake -C packages/shield install-local';
+const install = 'git clone https://github.com/canonic2/canonic.git\ncd canonic/packages/shield\ncargo xtask install';
 ---
 <Base title="Canonic Shield" description="Project permissions for Claude Code and Codex, with reviewed rules, signed permission packs and request history."
   product="Shield" nav={shieldNav('Overview')} github={github} download={download}>
