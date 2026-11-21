@@ -139,6 +139,13 @@ pub struct Transition<'a> {
 /// Identity is immutable and must describe the actual authenticated process.
 pub trait Worker: Send + Sync + 'static {
     fn identity(&self) -> &Identity;
+    /// Positively observe exit of this exact worker to permit same-build recovery.
+    ///
+    /// # Errors
+    /// An observation failure leaves exit unproved.
+    fn exited(&self) -> Result<bool> {
+        Ok(false)
+    }
     /// Idempotently validate inert standby state and compatibility without effects.
     /// Called before waiting for existing work and again against fenced state.
     /// # Errors

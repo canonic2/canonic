@@ -53,6 +53,7 @@ Implement `Worker` around an exact owned process and its private control channel
 | Callback | Required proof |
 | --- | --- |
 | `identity` | Immutable identity of the authenticated process; a build string or same-user socket alone does not authorize the executable |
+| `exited` | Observe exit of the exact owned worker to permit same-build recovery. The default returns `false`, and an observation error refuses replacement before launch. |
 | `prepare` | Idempotent read-only proof that the candidate is inert and compatible, checked before settling calls and again against fenced state |
 | `fence` | Predecessor writers and callbacks cannot authorize further effects; exclusion remains held for commit |
 | `retire` | Transferred cleanup is disarmed, worker locks released and the predecessor reaped; retry is safe |
@@ -65,6 +66,9 @@ responsibility. A failed launch must leave no untracked process. If launch retur
 a candidate late, the supervisor still retains and cleans it up.
 Panics are caught. Before fencing, successful candidate cleanup resumes the
 predecessor; after fencing, failures leave replacement blocked for reconciliation.
+Same-build recovery uses the same settlement, fencing and retirement sequence.
+For a worker whose exit was observed, the adapter still verifies that cleanup
+and fencing obligations are satisfied before the successor can activate.
 
 Arrange worker owner-loss detection before exposing the frontend. A private
 owner channel and `owner::Connection` are available for socket-based adapters;

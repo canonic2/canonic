@@ -100,6 +100,12 @@ impl Worker for Native {
         );
         &self.identity
     }
+    fn exited(&self) -> kit::Result<bool> {
+        if self.fault.load(Ordering::SeqCst) == 7 {
+            return Err(kit::Error::Worker);
+        }
+        Ok(self.child.lock().unwrap().0.try_wait()?.is_some())
+    }
     fn prepare(&self, _: &Transition<'_>) -> kit::Result<()> {
         if self.fault.load(Ordering::SeqCst) == 6 {
             return Err(kit::Error::Worker);
@@ -115,6 +121,9 @@ impl Worker for Native {
     fn fence(&self, _: &Transition<'_>) -> kit::Result<()> {
         if self.fault.load(Ordering::SeqCst) == 1 {
             return Err(kit::Error::Envelope);
+        }
+        if self.exited()? {
+            return Ok(());
         }
         self.control("fence").map(|_| ())
     }
@@ -224,6 +233,38 @@ fn supervisor(root: &Root, options: Options) -> Arc<Supervisor<Native>> {
     let worker = Native::start(root.path(), "1.0.0");
     worker.control("activate").unwrap();
     Arc::new(Supervisor::new(lease, frontend_identity(), worker, options).unwrap())
+}
+
+#[test]
+fn worker_replacement_same_build_requires_proved_exit() {
+    let (_temporary, root) = fixtures::root();
+    root.prepare().unwrap();
+    let supervisor = supervisor(&root, options());
+    let status = supervisor.status().unwrap();
+    let same = request(&status.frontend.manager_id, 1, "1.0.0");
+    let dispatch = supervisor.enter().unwrap();
+    let old = dispatch.worker();
+    let old_id = old.identity.manager_id.clone();
+    old.stop(Instant::now() + options().cleanup).unwrap();
+    old.fault.store(7, Ordering::SeqCst);
+    assert!(matches!(
+        supervisor.replace(&same, |_| panic!("exit was not proved"), |_| Ok(())),
+        Err(kit::Error::Worker)
+    ));
+    assert_eq!(supervisor.status().unwrap().phase, Phase::Serving);
+    old.fault.store(0, Ordering::SeqCst);
+    drop(dispatch);
+    let replaced = supervisor.replace(
+        &same,
+        |_| Ok(Native::start(root.path(), "1.0.0")),
+        |_| Ok(()),
+    );
+    assert_eq!(replaced.unwrap().phase, Phase::Replaced);
+    let dispatch = supervisor.enter().unwrap();
+    assert_ne!(dispatch.worker().identity.manager_id, old_id);
+    assert_eq!(dispatch.worker().call(json!("recovered"))["build"], "1.0.0");
+    drop(dispatch);
+    supervisor.shutdown().unwrap();
 }
 
 #[test]
@@ -471,6 +512,11 @@ fn worker_replacement_deduplicates_changed_and_expired_attempts_and_bounds_dispa
     let held = supervisor.enter().unwrap();
     assert!(matches!(supervisor.enter(), Err(kit::Error::Capacity)));
     drop(held);
+    let same = request(&frontend, 1, "1.0.0");
+    assert!(matches!(
+        supervisor.replace(&same, |_| panic!("live worker replaced"), |_| Ok(())),
+        Err(kit::Error::Incompatible)
+    ));
     let first = request(&frontend, 1, "2.0.0");
     assert!(
         supervisor

@@ -153,6 +153,9 @@ impl lifecycle::Worker for Process {
     fn identity(&self) -> &Identity {
         self.implementation.identity()
     }
+    fn exited(&self) -> process::Result<bool> {
+        self.implementation.exited()
+    }
     fn prepare(&self, transition: &Transition<'_>) -> process::Result<()> {
         if self.implementation.contract()
             != &*self.contract.lock().map_err(|_| process::Error::Worker)?

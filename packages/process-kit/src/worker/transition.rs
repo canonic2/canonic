@@ -11,7 +11,8 @@ pub(super) fn callback<T>(call: impl FnOnce() -> Result<T>) -> Result<T> {
 }
 
 impl<W: Worker> Supervisor<W> {
-    /// Replace at a between-call boundary. `launch` returns an inert, owned
+    /// Replace at a between-call boundary. A same-build restart requires proved
+    /// exit of the active worker. `launch` returns an inert, owned
     /// candidate; on error it must leave no untracked process. `commit` publishes
     /// product authority under its writer locks and may durably record the attempt.
     /// Both callbacks execute synchronously outside state/admission locks and must
@@ -36,7 +37,11 @@ impl<W: Worker> Supervisor<W> {
         if let Some(outcome) = Self::find(&*lock(&self.state)?, request)? {
             return Ok(outcome);
         }
-        let old = self.begin(request)?;
+        let old = lock(&self.state)?.active.clone().ok_or(Error::Draining)?;
+        if request.selection.build == old.identity().build && !callback(|| old.worker.exited())? {
+            return Err(Error::Incompatible);
+        }
+        self.begin(request, &old)?;
         let mut pause = old.gate.quiesce()?;
         let result = callback(|| self.prepare(request, &old, &mut pause, launch, commit));
         if let Err(error) = result {
@@ -90,7 +95,7 @@ impl<W: Worker> Supervisor<W> {
         Version::parse(&request.selection.build)?;
         Ok(())
     }
-    fn begin(&self, request: &Request) -> Result<Slot<W>> {
+    fn begin(&self, request: &Request, old: &Slot<W>) -> Result<()> {
         let mut state = lock(&self.state)?;
         if self.closing.load(Ordering::SeqCst)
             || !matches!(
@@ -103,9 +108,9 @@ impl<W: Worker> Supervisor<W> {
         if request.sequence <= state.high_water {
             return Err(Error::HandoverState);
         }
-        let old = state.active.as_ref().ok_or(Error::Draining)?.clone();
-        if !Version::parse(&request.selection.build)?
-            .is_newer_than(&Version::parse(&old.identity().build)?)
+        if request.selection.build != old.identity().build
+            && !Version::parse(&request.selection.build)?
+                .is_newer_than(&Version::parse(&old.identity().build)?)
         {
             return Err(Error::Incompatible);
         }
@@ -132,7 +137,7 @@ impl<W: Worker> Supervisor<W> {
             commit: super::Commit::NotStarted,
         });
         state.phase = Phase::Preparing;
-        Ok(old)
+        Ok(())
     }
     fn prepare(
         &self,
