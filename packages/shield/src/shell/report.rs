@@ -407,7 +407,8 @@ impl Operation {
     pub(crate) fn policy_request(&self) -> Option<&PolicyRequest> {
         match &self.data {
             Data::Invocation { detail, .. } => match detail.as_ref() {
-                Invocation::Literal { policy_request, .. } => policy_request.as_deref(),
+                Invocation::Literal { policy_request, .. }
+                | Invocation::Foreign { policy_request, .. } => policy_request.as_deref(),
                 _ => None,
             },
             _ => None,
@@ -483,6 +484,7 @@ pub(super) enum Invocation {
         effects: Option<std::rc::Rc<effects::Hints>>,
         evaluation_model: &'static str,
         context: Facts,
+        policy_request: Option<Box<PolicyRequest>>,
     },
 }
 #[derive(Serialize)]

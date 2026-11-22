@@ -532,6 +532,15 @@ be overridden by ordinary host approval. Web searches and fetches follow web
 rules; see [policy rules](policy-rules.md). Git/Docker effect hints do not override
 Allow merely because indirect effects are possible. Hooks use the submitted
 command and available context; they do not verify execution.
+With Docker pack 0.1.0 and baseline 0.16.0 or 0.17.0, a direct `exec` or an
+explicit `--entrypoint` on an allowed `--context` can read container paths
+such as `/bin` using supported forms of `ls`, `cat`, `head`, `tail`,
+`wc` and `find`. Recognized container fetches follow web policy. For
+example, `curl -q http://localhost:3200/ready` skips curl configuration
+and can proceed when web policy allows the URL. Exact client help queries
+such as `wget --help` can also proceed. Docker options, host-side shell
+operations and explicit project restrictions still follow policy. Select
+contexts whose Docker daemons you trust for agent work.
 The [native run](native-run.md) flow remains a separate checked execution path.
 
 Shield MCP inspection and proposals remain available. Neither a proposal nor a

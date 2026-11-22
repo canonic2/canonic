@@ -4,6 +4,15 @@ use super::{Artifact, Lock, LockedPack};
 use crate::policy::{self, Error, Profile, Scope};
 use serde::{Deserialize, Serialize};
 
+// SHA-256s of reviewed release artifacts from the Canonic registry catalog.
+// Rule names alone do not identify the implementations this behavior depends on.
+pub(super) const DOCKER_RUNTIME: &str =
+    "62e6739e83df2cfcdbca8fc353e1efee75ff72b339b92787964d627ae8a2a230";
+pub(super) const CONTAINER_BASELINES: [&str; 2] = [
+    "f59a663e1bd6e3670148dea221bfa5128e73bfaa1084a1af8d6d9b1a96c04615", // 0.16.0
+    "d87872dff6ceab06a2c08b947c141a028b9aa7e34fecce5a64ad30d1935aec64", // 0.17.0
+];
+
 #[cfg(test)]
 mod tests;
 
@@ -96,6 +105,11 @@ pub fn compose(inputs: &[(Scope, Lock)]) -> Result<Effective, Error> {
 }
 
 impl Effective {
+    pub(super) fn has_pack_artifact(&self, source: &str, digests: &[&str]) -> bool {
+        self.pack_artifacts()
+            .any(|(id, _, digest)| id == source && digests.contains(&digest))
+    }
+
     /// Exact selected pack identities and byte digests from the compiled lock.
     /// Metadata inspection is not a substitute for this active artifact binding.
     pub(crate) fn pack_artifacts(&self) -> impl Iterator<Item = (&str, &str, &str)> {

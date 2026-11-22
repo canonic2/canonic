@@ -238,6 +238,7 @@ impl Precondition {
             reason: self.reason.clone().unwrap_or_default(),
             specificity: 2,
             applied: false,
+            yielded_reason: None,
             tier: 1,
             branch: "unmet",
             requirement_checks,

@@ -3,6 +3,22 @@ use super::{Descendants, Target, Targets};
 use crate::policy::resolution::normalized::Input;
 use std::{fs, path::Path};
 
+/// Recognize the portable reader forms whose parsers need no host observations.
+pub(crate) fn container_read(executable: &str, arguments: &[String]) -> bool {
+    let leaf = executable
+        .strip_prefix("/bin/")
+        .or_else(|| executable.strip_prefix("/usr/bin/"))
+        .unwrap_or(executable);
+    match leaf {
+        "ls" | "cat" | "head" | "tail" | "wc" => {
+            let (operands, complete) = read_operands(leaf, arguments);
+            complete && !operands.is_empty()
+        }
+        "find" => find_starts(arguments).1,
+        _ => false,
+    }
+}
+
 /// `alone` reports that the request runs no other operation, which lets a
 /// missing in-place input count as absent; see [`super::text::collect`].
 /// `stable` means shell effects have not invalidated missing-path observations.
@@ -206,9 +222,29 @@ fn destructive_argv(leaf: &str, arguments: &[String], cwd: &Path) -> Targets {
 // Explicit portable read forms. No recursive listing, monitoring, option-file
 // loading or helper execution is inferred from an unfamiliar option.
 fn read_argv(leaf: &str, arguments: &[String], cwd: &Path) -> Targets {
+    let (operands, syntax_known) = read_operands(leaf, arguments);
+    let mut complete = syntax_known && cfg!(any(unix, windows));
+    Targets {
+        items: operands
+            .into_iter()
+            .map(|path| Target {
+                action: "read",
+                role: "source",
+                path: super::join_operand(cwd, path, &mut complete),
+                recursive: false,
+                descendants: Descendants::All,
+                follow: true,
+            })
+            .collect(),
+        complete,
+        ..Targets::default()
+    }
+}
+
+fn read_operands(leaf: &str, arguments: &[String]) -> (Vec<String>, bool) {
     let mut operands = Vec::new();
     let mut options = true;
-    let mut complete = cfg!(any(unix, windows));
+    let mut complete = true;
     let mut position = 0;
     while position < arguments.len() {
         let argument = &arguments[position];
@@ -259,21 +295,7 @@ fn read_argv(leaf: &str, arguments: &[String], cwd: &Path) -> Targets {
     if leaf == "ls" && operands.is_empty() {
         operands.push(".".into());
     }
-    Targets {
-        items: operands
-            .into_iter()
-            .map(|path| Target {
-                action: "read",
-                role: "source",
-                path: super::join_operand(cwd, path, &mut complete),
-                recursive: false,
-                descendants: Descendants::All,
-                follow: true,
-            })
-            .collect(),
-        complete,
-        ..Targets::default()
-    }
+    (operands, complete)
 }
 
 /// grep's short flags in GNU grep 3 and BSD grep, which change only how
@@ -829,13 +851,33 @@ fn rg_metadata_issue(metadata: &std::io::Result<fs::Metadata>) -> Option<&'stati
 // the checked footprint. Actions, output files, link-following options and
 // reference-file tests are unmodeled.
 fn find_argv(arguments: &[String], cwd: &Path) -> Targets {
+    let (starts, syntax_known) = find_starts(arguments);
+    let mut complete = syntax_known && cfg!(any(unix, windows));
+    Targets {
+        items: starts
+            .into_iter()
+            .map(|start| Target {
+                action: "read",
+                role: "source",
+                path: super::join_operand(cwd, start, &mut complete),
+                recursive: true,
+                descendants: Descendants::Present,
+                follow: true,
+            })
+            .collect(),
+        complete,
+        ..Targets::default()
+    }
+}
+
+fn find_starts(arguments: &[String]) -> (Vec<&str>, bool) {
     const NULLARY: &str = "! ( ) , -a -and -o -or -not -print -print0 -prune -empty -true -false -depth \
         -xdev -mount -quit -nouser -nogroup -readable -writable -executable -ls -noleaf -daystart \
         -nowarn -warn";
     const VALUED: &str = "-name -iname -path -ipath -wholename -iwholename -regex -iregex -lname -ilname \
         -type -maxdepth -mindepth -size -mtime -mmin -atime -amin -ctime -cmin -Btime -Bmin -perm \
         -user -group -uid -gid -links -inum -regextype -fstype -printf -flags";
-    let mut complete = cfg!(any(unix, windows));
+    let mut complete = true;
     let mut rest = arguments.iter().peekable();
     while let Some(argument) = rest.next_if(|a| {
         a.as_str() == "--"
@@ -862,21 +904,7 @@ fn find_argv(arguments: &[String], cwd: &Path) -> Targets {
     if starts.is_empty() {
         starts.push(".");
     }
-    Targets {
-        items: starts
-            .into_iter()
-            .map(|start| Target {
-                action: "read",
-                role: "source",
-                path: super::join_operand(cwd, start, &mut complete),
-                recursive: true,
-                descendants: Descendants::Present,
-                follow: true,
-            })
-            .collect(),
-        complete,
-        ..Targets::default()
-    }
+    (starts, complete)
 }
 
 // mkdir's missing parents stay below its resolved operand. Modes are unmodeled.

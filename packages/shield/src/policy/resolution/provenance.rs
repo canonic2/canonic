@@ -35,6 +35,12 @@ pub(crate) struct Evidence {
     override_layer: Option<Layer>,
 }
 
+impl Evidence {
+    pub(crate) fn unchanged_default(&self) -> bool {
+        self.override_layer.is_none()
+    }
+}
+
 /// Original branches for one overridden source entry. At most one per override.
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]

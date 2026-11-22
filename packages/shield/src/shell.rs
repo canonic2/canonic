@@ -20,8 +20,11 @@ mod words;
 mod wrappers;
 
 use crate::{
-    configuration::Evaluator,
-    policy::{Decision, Error, Request},
+    configuration::{CandidateEvaluation, Evaluator},
+    policy::{
+        Decision, Error, Request,
+        resolution::normalized::{Context, Input},
+    },
 };
 #[cfg(test)]
 use report::ReportCoverage;
@@ -35,10 +38,7 @@ pub(crate) const LAUNCHERS: [&str; 12] = [
 ];
 
 /// One evaluated invocation and the normalized request it was decided as, if any.
-type Evaluated = (
-    crate::configuration::CandidateEvaluation,
-    Option<PolicyRequest>,
-);
+type Evaluated = (CandidateEvaluation, Option<PolicyRequest>);
 use report::{Data, Facts as ReportFacts, Invocation, Parent as SourceParent, Transition};
 use serde_json::{Value, json};
 use state::{FunctionBinding, State, state_effect, taint};
@@ -1005,11 +1005,11 @@ impl Analysis<'_> {
             || find_launches(words)
             || bindings::printf_mutates(words);
         let effects = crate::effects::classify(&request);
-        let indirect = self.tool_nested(effects.as_ref(), span, state, depth)?;
         // Cwd determines contextual rule eligibility. Submitted constructs and
         // unresolved operands have their own coverage checks.
         let unknown_context = state.cwd_unknown;
         let (evaluation, policy_request) = self.contextual_evaluation(&request, state)?;
+        let indirect = self.tool_nested(effects.as_ref(), span, state, depth, Some(&evaluation))?;
         budget::measure(
             &evaluation,
             budget::MAX_EVIDENCE_BYTES.saturating_sub(self.evidence_bytes),
@@ -1200,7 +1200,6 @@ impl Analysis<'_> {
 
     /// Decide a read-only command as the file read it performs.
     fn read_evaluation(&self, request: &Request, sources: Vec<String>) -> Result<Evaluated, Error> {
-        use crate::policy::resolution::normalized::{Context, Input};
         let input = Input::File {
             action: "read".into(),
             sources,
@@ -1228,7 +1227,7 @@ impl Analysis<'_> {
         if scope.http_environment {
             return true;
         }
-        // Only curl skips its configuration with -q, and curl reads .netrc only with -n.
+        // A client with configuration and netrc disabled needs no home lookup.
         if fetch.skips_config && !fetch.reads_netrc {
             return false;
         }
@@ -1245,25 +1244,14 @@ impl Analysis<'_> {
         request: &Request,
         fetch: &crate::http_client::Fetch<'_>,
     ) -> Result<Evaluated, Error> {
-        use crate::policy::resolution::normalized::{Context, Input};
         let context = Context {
             cwd: request.cwd.clone(),
             environment: None,
             working_files: self.working_files.cloned(),
         };
-        let web = Input::Web {
-            action: "fetch".into(),
-            query: None,
-            url: Some(fetch.url.as_ref().into()),
-            method: Some(fetch.method.into()),
-            conditions: json!({"client":"shell","redirects":fetch.redirects}),
-            original_input: json!(request),
-        };
-        let fetched = self
-            .evaluator
-            .evaluate_resource(request, &web, &context, self.checkpoint)?;
+        let (fetched, web) = self.web_fetch_evaluation(request, fetch, &context)?;
         let Some(output) = fetch.output else {
-            return Ok((fetched, Some(PolicyRequest::Normalized(web))));
+            return Ok((fetched, Some(web)));
         };
         let file = Input::File {
             action: "write".into(),
@@ -1278,8 +1266,82 @@ impl Analysis<'_> {
         Ok(if written.decision > fetched.decision {
             (written, Some(PolicyRequest::Normalized(file)))
         } else {
-            (fetched, Some(PolicyRequest::Normalized(web)))
+            (fetched, Some(web))
         })
+    }
+
+    fn web_fetch_evaluation(
+        &self,
+        request: &Request,
+        fetch: &crate::http_client::Fetch<'_>,
+        context: &Context,
+    ) -> Result<(CandidateEvaluation, PolicyRequest), Error> {
+        let web = Input::Web {
+            action: "fetch".into(),
+            query: None,
+            url: Some(fetch.url.as_ref().into()),
+            method: Some(fetch.method.into()),
+            conditions: json!({"client":"shell","redirects":fetch.redirects}),
+            original_input: json!(request),
+        };
+        let fetched = self
+            .evaluator
+            .evaluate_resource(request, &web, context, self.checkpoint)?;
+        Ok((fetched, PolicyRequest::Normalized(web)))
+    }
+
+    fn container_evaluation(
+        &self,
+        request: &Request,
+        approved_runtime: bool,
+    ) -> Result<Evaluated, Error> {
+        let mut argv = if approved_runtime {
+            self.evaluator
+                .evaluate_container_argv(request, self.checkpoint)?
+        } else {
+            self.evaluator
+                .evaluate_context(request, self.checkpoint, false)?
+        };
+        let stock_review = approved_runtime && argv.stock_fetch_review();
+        if stock_review && crate::http_client::help(&request.executable, &request.arguments) {
+            argv.allow_container_client_help();
+            return Ok((argv, None));
+        }
+        let arguments: Vec<_> = request.arguments.iter().map(String::as_str).collect();
+        let Some(fetches) = crate::http_client::fetches(&request.executable, &arguments) else {
+            return Ok((argv, None));
+        };
+        let context = Context {
+            cwd: request.cwd.clone(),
+            environment: None,
+            working_files: None,
+        };
+        let mut replace_fallback = stock_review;
+        let mut strictest: Option<(CandidateEvaluation, PolicyRequest)> = None;
+        for fetch in &fetches {
+            replace_fallback &= fetch.skips_config
+                && !fetch.reads_netrc
+                && fetch.output.is_none()
+                && fetch.redirects == "none";
+            let web = self.web_fetch_evaluation(request, fetch, &context)?;
+            if strictest.as_ref().is_none_or(|(previous, _)| {
+                web.0.decision > previous.decision
+                    || previous.unmatched_ask()
+                        && web.0.decision == previous.decision
+                        && !web.0.unmatched_ask()
+            }) {
+                strictest = Some(web);
+            }
+        }
+        if let Some((mut web, input)) = strictest
+            && (replace_fallback || web.decision > argv.decision && !web.unmatched_ask())
+        {
+            if replace_fallback {
+                web.retain_container_fetch_review(argv);
+            }
+            return Ok((web, Some(input)));
+        }
+        Ok((argv, None))
     }
 
     fn eval_script(
@@ -1438,6 +1500,7 @@ impl Analysis<'_> {
         span: structure::Span,
         state: &State,
         depth: usize,
+        outer_evaluation: Option<&CandidateEvaluation>,
     ) -> Result<Decision, Error> {
         (self.checkpoint)()?;
         if depth > 32 {
@@ -1456,20 +1519,18 @@ impl Analysis<'_> {
             launch.variables.clear();
             launch.positionals = None;
             launch.arg0 = None;
-            // The argv of these kinds is exactly the program that runs where the
-            // outer command runs, such as `docker exec <container> curl …`; it is
-            // evaluated below as its own request and takes that decision. Shell
-            // source, launchers, words an image's own entrypoint receives and
-            // commands run in other repositories (`git for-each-repo`) stay uninspected.
-            let explicit = matches!(
-                nested.kind,
-                "container-exec" | "container-command" | "git-bisect-run" | "git-command-alias"
-            );
+            // These forms identify the actual program. Shell source, launchers,
+            // image entrypoint arguments and `git for-each-repo` require review.
+            let container_program = matches!(nested.kind, "container-exec" | "container-command");
+            let explicit =
+                container_program || matches!(nested.kind, "git-bisect-run" | "git-command-alias");
             let launcher = nested.argv.first().is_some_and(|program| {
                 let name = program.rsplit('/').next().unwrap_or(program);
                 name == "sudo" || LAUNCHERS.contains(&name)
             });
-            if !explicit || nested.source.is_some() || nested.argv.is_empty() || launcher {
+            let indirect =
+                !explicit || nested.source.is_some() || nested.argv.is_empty() || launcher;
+            if indirect {
                 self.record(
                     Operation::new(
                         Coverage::IndirectExecution,
@@ -1495,52 +1556,88 @@ impl Analysis<'_> {
                     self.dialect = previous;
                     decision = decision.max(result?);
                 }
-            } else if let Some(executable) = nested.argv.first() {
-                let request = Request {
-                    executable: executable.clone(),
-                    arguments: nested.argv[1..].to_vec(),
-                    ..self.context.clone()
-                };
-                let evaluation =
-                    self.evaluator
-                        .evaluate_context(&request, self.checkpoint, false)?;
-                budget::measure(
-                    &evaluation,
-                    budget::MAX_EVIDENCE_BYTES.saturating_sub(self.evidence_bytes),
-                    self.checkpoint,
-                )?;
-                let effects = crate::effects::classify(&request).map(Rc::new);
-                decision = decision.max(evaluation.decision);
-                self.record(
-                    Operation::new(
-                        Coverage::Partial,
-                        evaluation.decision,
-                        Data::Invocation {
-                            request,
-                            evaluation: Box::new(evaluation),
-                            detail: Box::new(Invocation::Foreign {
-                                effects: effects.clone(),
-                                evaluation_model: "cwd-independent-restriction-bound",
-                                context: ReportFacts::cwd(false)
-                                    .environment(false)
-                                    .namespace(nested.namespace),
-                            }),
-                        },
-                    )
-                    .at(span),
-                )?;
-                decision =
-                    decision.max(self.tool_nested(effects.as_deref(), span, &launch, depth + 1)?);
-                decision = decision.max(self.shell_script(
-                    &nested.argv,
+            } else {
+                decision = decision.max(self.foreign_argv(
+                    nested,
                     span,
                     &launch,
-                    depth + 1,
-                    "container-shell-script",
+                    depth,
+                    container_program && !indirect,
+                    outer_evaluation,
                 )?);
             }
         }
         Ok(decision)
+    }
+
+    fn foreign_argv(
+        &mut self,
+        nested: &crate::effects::NestedExecution,
+        span: structure::Span,
+        launch: &State,
+        depth: usize,
+        direct_container: bool,
+        outer_evaluation: Option<&CandidateEvaluation>,
+    ) -> Result<Decision, Error> {
+        let Some((executable, arguments)) = nested.argv.split_first() else {
+            return Ok(Decision::Allow);
+        };
+        let request = Request {
+            executable: executable.clone(),
+            arguments: arguments.to_vec(),
+            ..self.context.clone()
+        };
+        let direct_container = direct_container && !opaque_executable(executable);
+        let approved_runtime = direct_container
+            && outer_evaluation.is_some_and(CandidateEvaluation::allows_docker_context_runtime);
+        let (evaluation, policy_request) = if direct_container {
+            self.container_evaluation(&request, approved_runtime)?
+        } else {
+            (
+                self.evaluator
+                    .evaluate_context(&request, self.checkpoint, false)?,
+                None,
+            )
+        };
+        budget::measure(
+            &evaluation,
+            budget::MAX_EVIDENCE_BYTES.saturating_sub(self.evidence_bytes),
+            self.checkpoint,
+        )?;
+        let effects = crate::effects::classify(&request).map(Rc::new);
+        let decision = evaluation.decision;
+        self.record(
+            Operation::new(
+                Coverage::Partial,
+                decision,
+                Data::Invocation {
+                    request,
+                    evaluation: Box::new(evaluation),
+                    detail: Box::new(Invocation::Foreign {
+                        effects: effects.clone(),
+                        evaluation_model: if approved_runtime {
+                            "checked-docker-context"
+                        } else {
+                            "cwd-independent-restriction-bound"
+                        },
+                        context: ReportFacts::cwd(false)
+                            .environment(false)
+                            .namespace(nested.namespace),
+                        policy_request: policy_request.map(Box::new),
+                    }),
+                },
+            )
+            .at(span),
+        )?;
+        let indirect = self.tool_nested(effects.as_deref(), span, launch, depth + 1, None)?;
+        let script = self.shell_script(
+            &nested.argv,
+            span,
+            launch,
+            depth + 1,
+            "container-shell-script",
+        )?;
+        Ok(decision.max(indirect).max(script))
     }
 
     fn wrapper(

@@ -430,6 +430,7 @@ impl Plan {
             known_cwd,
             known_arguments,
             locations: Some(&crate::policy::rules::resources::Unavailable),
+            container_read: None,
             effects: None,
         };
         self.evaluate_input(request, &facts, checkpoint)

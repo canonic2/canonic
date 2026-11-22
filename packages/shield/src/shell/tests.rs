@@ -3855,6 +3855,393 @@ fn explicit_container_programs_take_their_own_policy_decision() {
     }
 }
 
+fn same_named_pack_fixture(id: &str, capabilities: &Value, rules: &Value) -> String {
+    json!({
+        "schema_version": 1, "kind": "pack", "id": id, "version": "1.0.0",
+        "description": "Container policy fixture", "license": "MIT",
+        "maintainers": ["Acme"], "engines": {"shield": env!("CARGO_PKG_VERSION")},
+        "capabilities": capabilities, "rules": rules,
+    })
+    .to_string()
+}
+
+#[test]
+fn same_named_docker_pack_cannot_apply_container_defaults() {
+    use crate::{configuration::Candidate, policy::Scope};
+    let baseline = same_named_pack_fixture(
+        "canonic/baseline",
+        &json!([
+            "argument-rules-v1",
+            "structured-rules-v1",
+            "location-v1",
+            "fallback-rules-v1",
+            "requirements-v1"
+        ]),
+        &json!([
+            {"id":"read-ls", "decision":"allow",
+             "conditions":{"domain":"argv","executable":"ls"},
+             "requirements":{
+                 "arguments":{"kind":"options","prefix":[],"flags":["-l"],"values":[],"operands":true},
+                 "targets":{"action":"read","all":{"within":{"root":"project"}}}},
+             "on_unmet":{"decision":"deny"}},
+            {"id":"shared-review-curl","decision":"ask","fallback":true,
+             "conditions":{"domain":"argv","executable":{"one_of":["curl","wget"]},"arguments":{"kind":"any"}}},
+        ]),
+    );
+    let docker = same_named_pack_fixture(
+        "canonic/docker",
+        &json!(["argument-rules-v1", "structured-rules-v1"]),
+        &json!([
+            {"id":"exec-context","decision":{"loose":"allow","recommended":"allow","strict":"ask"},
+             "conditions":{"domain":"argv","executable":"docker","arguments":{"kind":"prefix","values":["--context","acme","exec","app"]}}},
+            {"id":"run-context","decision":{"loose":"allow","recommended":"allow","strict":"ask"},
+             "conditions":{"domain":"argv","executable":"docker","arguments":{"kind":"prefix","values":["--context","acme","run","--rm","--entrypoint","wget"]}}},
+            {"id":"host-review","decision":"ask",
+             "conditions":{"domain":"argv","executable":"docker","arguments":{"kind":"risk_tokens","prefix":[],"any_of":["--privileged"]}}},
+        ]),
+    );
+    let rules = crate::policy::rules::document(&[
+        json!({"id":"no-upload","decision":"deny","reason":"Protect the workspace.",
+               "conditions":{"domain":"argv","executable":"curl","arguments":{"kind":"prefix","values":["--upload-file"]}}}),
+        json!({"id":"blocked-web","decision":"deny","reason":"Block this origin.",
+               "conditions":{"domain":"web","action":"fetch","url":{"schemes":["https"],"hosts":["blocked.example.com"]}}}),
+    ])
+    .unwrap()
+    .to_string();
+    let candidate = Candidate::from_yaml(
+        "schema_version: 1\nrules: rules.json\npacks:\n  - id: canonic/baseline\n    version: 1.0.0\n    profile: recommended\n    path: baseline.json\n    registry_identity: example\n  - id: canonic/docker\n    version: 1.0.0\n    profile: recommended\n    path: docker.json\n    registry_identity: example\n",
+    )
+    .unwrap();
+    let evaluator = Evaluator::new(vec![(
+        Scope::Project,
+        candidate
+            .capture(&[baseline, docker], Some(&rules))
+            .unwrap(),
+    )])
+    .unwrap();
+    for (source, expected) in [
+        ("docker --context acme exec app ls /bin /usr/bin", "deny"),
+        (
+            "docker --context acme exec app curl http://localhost:3200/ready",
+            "ask",
+        ),
+        (
+            "docker --context acme run --rm --entrypoint wget image --help",
+            "ask",
+        ),
+        (
+            "docker --context acme exec app curl -q https://blocked.example.com",
+            "deny",
+        ),
+        ("docker --context acme exec app ls --unknown /bin", "deny"),
+        (
+            "docker --context acme exec app curl --upload-file data http://localhost",
+            "deny",
+        ),
+        ("docker --context acme exec app sh -c 'ls /bin'", "deny"),
+        (
+            "docker --context acme exec app env curl http://localhost",
+            "ask",
+        ),
+        (
+            "docker --context acme exec --privileged app curl http://localhost",
+            "ask",
+        ),
+        (
+            "docker --context other exec app curl http://localhost",
+            "ask",
+        ),
+        ("docker exec app curl http://localhost", "ask"),
+        ("docker --context acme exec app ls /bin; ls /bin", "deny"),
+        ("ls /bin", "deny"),
+        ("wget --help", "ask"),
+    ] {
+        let result = analyze(source, Dialect::Posix, "/acme", "/acme", &evaluator).unwrap();
+        assert_eq!(result["decision"], expected, "{source}");
+    }
+}
+
+#[test]
+#[ignore = "requires the published artifacts in SHIELD_DOCKER_TEST_REGISTRY"]
+fn published_docker_and_baseline_packs_preserve_container_policy() {
+    use crate::{configuration::Candidate, policy::Scope};
+    let registry = std::path::PathBuf::from(
+        std::env::var_os("SHIELD_DOCKER_TEST_REGISTRY").expect("path to registry public directory"),
+    );
+    let docker =
+        std::fs::read_to_string(registry.join("packs/canonic/docker/0.1.0/pack.yml")).unwrap();
+    let project = assert_fs::TempDir::new().unwrap();
+    let project_path = project.path().canonicalize().unwrap();
+    let cwd = project_path.to_str().unwrap();
+    let rules = crate::policy::rules::document(&[
+        json!({"id":"blocked-web","decision":"deny","reason":"Block this origin.",
+               "conditions":{"domain":"web","action":"fetch","url":{"schemes":["https"],"hosts":["blocked.example.com"]}}}),
+        json!({"id":"ask-web","decision":"ask","reason":"Review this origin.",
+               "conditions":{"domain":"web","action":"fetch","url":{"schemes":["https"],"hosts":["review.example.com"]}}}),
+        json!({"id":"allow-fetch-argv","decision":"allow","reason":"Test typed restrictions on a previously allowed client.",
+               "conditions":{"domain":"argv","executable":"curl","arguments":{"kind":"prefix","values":["-q","https://first.example.com"]}}}),
+    ])
+    .unwrap()
+    .to_string();
+    for version in ["0.16.0", "0.17.0"] {
+        let baseline = std::fs::read_to_string(
+            registry.join(format!("packs/canonic/baseline/{version}/pack.yml")),
+        )
+        .unwrap();
+        let evaluator = |profile, baseline_override, docker_override| {
+            let candidate = Candidate::from_yaml(&format!(
+                "schema_version: 1\nrules: rules.json\npacks:\n  - id: canonic/baseline\n    version: {version}\n    profile: {profile}\n    path: baseline.yml\n    registry_identity: main\n    overrides: {baseline_override}\n  - id: canonic/docker\n    version: 0.1.0\n    profile: {profile}\n    path: docker.yml\n    registry_identity: main\n    overrides: {docker_override}\n    variables:\n      docker_contexts: [acme]\n",
+            ))
+            .unwrap();
+            Evaluator::new(vec![(
+                Scope::Project,
+                candidate
+                    .capture(&[baseline.clone(), docker.clone()], Some(&rules))
+                    .unwrap(),
+            )])
+            .unwrap()
+        };
+        let recommended = evaluator("recommended", "{}", "{}");
+        let loopback = if version == "0.17.0" { "allow" } else { "ask" };
+        assert_published_container_cases(&recommended, cwd, version);
+        assert_published_container_fetches(&recommended, cwd, version, loopback);
+        assert_container_yield_evidence(&recommended, cwd);
+        if version == "0.17.0" {
+            let strict = evaluator("strict", "{}", "{}");
+            let result = analyze(
+                "docker --context acme exec app wget --help",
+                Dialect::Posix,
+                cwd,
+                cwd,
+                &strict,
+            )
+            .unwrap();
+            assert_eq!(result["decision"], "ask");
+            let operations = result["operations"].as_array().unwrap();
+            for program in ["docker", "wget"] {
+                assert!(
+                    operations.iter().any(|operation| {
+                        operation["request"]["executable"] == program
+                            && operation["decision"] == "ask"
+                    }),
+                    "{program} should still ask in Strict"
+                );
+            }
+            for (baseline, docker, source) in [
+                (
+                    "{read-cat: {on_unmet: ask}}",
+                    "{}",
+                    "docker --context acme exec app cat /bin/acme.txt",
+                ),
+                (
+                    "{}",
+                    "{exec-context: allow}",
+                    "docker --context acme exec app wget --help",
+                ),
+                (
+                    "{shared-review-curl: ask}",
+                    "{}",
+                    "docker --context acme exec app wget --help",
+                ),
+            ] {
+                let overridden = evaluator("recommended", baseline, docker);
+                let result = analyze(source, Dialect::Posix, cwd, cwd, &overridden).unwrap();
+                assert_eq!(result["decision"], "ask", "{source}");
+            }
+        }
+    }
+}
+
+fn assert_published_container_cases(evaluator: &Evaluator, cwd: &str, version: &str) {
+    for payload in [
+        "python3 -c 'print(1)'",
+        "node -e 'console.log(1)'",
+        "bash script.sh",
+        "ssh acme.example.com true",
+        "terraform plan",
+        "aws s3 ls",
+        "rsync --dry-run source destination",
+        "gh status",
+    ] {
+        let source = format!("docker --context acme exec app {payload}");
+        let result = analyze(&source, Dialect::Posix, cwd, cwd, evaluator).unwrap();
+        assert_eq!(result["decision"], "ask", "{version}: {source}");
+    }
+    let cases = [
+        (
+            "docker --context acme exec app ls /bin /usr/bin",
+            "allow",
+            Some("read-ls"),
+        ),
+        (
+            "docker --context acme exec app cat /bin/acme.txt",
+            "allow",
+            Some("read-cat"),
+        ),
+        (
+            "docker --context acme exec app find /bin -name acme -print",
+            "allow",
+            Some("read-find"),
+        ),
+        (
+            "docker --context acme exec app find /bin -acme-unknown",
+            "deny",
+            Some("read-find"),
+        ),
+        (
+            "docker --context acme exec app ls --unknown /bin",
+            "deny",
+            Some("read-ls"),
+        ),
+        (
+            "docker --context acme container exec app cat /bin/acme.txt",
+            "allow",
+            Some("container-exec-context"),
+        ),
+        (
+            "docker --context acme create --entrypoint wget image --help",
+            "allow",
+            Some("create-context"),
+        ),
+        (
+            "docker --context acme run --rm --entrypoint wget image --help",
+            "allow",
+            Some("run-context"),
+        ),
+        (
+            "docker --context acme exec app ls /bin; ls /bin",
+            "deny",
+            None,
+        ),
+    ];
+    assert_container_rule_decisions(evaluator, cwd, version, &cases);
+}
+
+fn assert_published_container_fetches(
+    evaluator: &Evaluator,
+    cwd: &str,
+    version: &str,
+    loopback: &str,
+) {
+    let cases = [
+        (
+            "docker --context acme exec app curl -q http://localhost:3200/ready",
+            loopback,
+            None,
+        ),
+        (
+            "docker --context acme exec app curl http://localhost:3200/ready",
+            "ask",
+            None,
+        ),
+        (
+            "docker --context acme exec app curl -q -L http://localhost:3200/ready",
+            "ask",
+            None,
+        ),
+        (
+            "docker --context acme exec app curl -q -o output http://localhost:3200/ready",
+            "ask",
+            None,
+        ),
+        (
+            "docker --context acme exec app curl -q http://localhost https://blocked.example.com",
+            "deny",
+            Some("blocked-web"),
+        ),
+        (
+            "docker --context acme exec app curl -q https://review.example.com",
+            "ask",
+            Some("ask-web"),
+        ),
+        (
+            "docker --context acme exec app curl -q https://first.example.com https://review.example.com",
+            "ask",
+            Some("ask-web"),
+        ),
+        (
+            "docker --context acme exec app wget --no-hsts -O - https://blocked.example.com",
+            "deny",
+            Some("blocked-web"),
+        ),
+        (
+            "docker --context acme exec app wget --no-config --no-netrc --no-hsts --max-redirect=0 -O - http://localhost:3200/ready",
+            loopback,
+            None,
+        ),
+        (
+            "docker --context other exec app curl -q http://localhost",
+            "ask",
+            None,
+        ),
+    ];
+    assert_container_rule_decisions(evaluator, cwd, version, &cases);
+}
+
+fn assert_container_rule_decisions(
+    evaluator: &Evaluator,
+    cwd: &str,
+    version: &str,
+    cases: &[(&str, &str, Option<&str>)],
+) {
+    for &(source, expected, decisive_rule) in cases {
+        let result = analyze(source, Dialect::Posix, cwd, cwd, evaluator).unwrap();
+        assert_eq!(result["decision"], expected, "{version}: {source}");
+        if let Some(rule) = decisive_rule {
+            assert!(
+                result["operations"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|operation| {
+                        operation["decision"] == expected
+                            && operation["evaluation"]["evaluation"]["matches"]
+                                .as_array()
+                                .is_some_and(|matches| {
+                                    matches.iter().any(|matched| {
+                                        matched["rule_id"] == rule && matched["applied"] == true
+                                    })
+                                })
+                    }),
+                "{version}: {source} should apply {rule}"
+            );
+        }
+    }
+}
+
+fn assert_container_yield_evidence(evaluator: &Evaluator, cwd: &str) {
+    for (source, reason) in [
+        (
+            "docker --context acme exec app wget --help",
+            "container-client-help",
+        ),
+        (
+            "docker --context acme exec app curl -q http://localhost",
+            "container-web-policy",
+        ),
+    ] {
+        let result = analyze(source, Dialect::Posix, cwd, cwd, evaluator).unwrap();
+        assert!(
+            result["operations"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|operation| {
+                    operation["evaluation"]["evaluation"]["matches"]
+                        .as_array()
+                        .is_some_and(|matches| {
+                            matches.iter().any(|matched| {
+                                matched["rule_id"] == "shared-review-curl"
+                                    && matched["applied"] == false
+                                    && matched["yielded_reason"] == reason
+                            })
+                        })
+                }),
+            "{source} should report its yielded client review"
+        );
+    }
+}
+
 #[test]
 fn preserves_literal_boundaries_and_quote_concatenation() {
     assert_eq!(

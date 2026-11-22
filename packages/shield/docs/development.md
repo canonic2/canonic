@@ -33,6 +33,14 @@ SHIELD_PACK_PROFILE_ARTIFACT=/path/to/pack.yml cargo nextest run --locked --lib 
 Keep `target/` between iterations to reuse Cargo's cache. Use release builds
 for performance measurements.
 
+To check container shell policy against the published Docker and baseline
+artifacts, pass the registry checkout's `public/` directory to the focused
+fixture. It reads pack files and previews policy decisions without running Docker.
+
+```sh
+SHIELD_DOCKER_TEST_REGISTRY=/path/to/shield-registry/public cargo nextest run --locked --lib --run-ignored ignored-only published_docker_and_baseline_packs_preserve_container_policy
+```
+
 To check the in-place upgrade of a pre-continuity checkpoint written by a
 separately retained executable:
 

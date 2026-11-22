@@ -767,6 +767,7 @@ fn graphql_host_selection_uses_supplied_context_and_explicit_host_precedence() {
             known_cwd: true,
             known_arguments: true,
             locations: None,
+            container_read: None,
             effects: None,
         };
         assert_eq!(

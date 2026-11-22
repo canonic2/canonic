@@ -91,6 +91,7 @@ impl Serialize for Operation {
                         effects,
                         evaluation_model,
                         context,
+                        policy_request,
                     } => {
                         fields.serialize_entry(
                             "effects",
@@ -98,6 +99,10 @@ impl Serialize for Operation {
                         )?;
                         fields.serialize_entry("evaluation_model", evaluation_model)?;
                         fields.serialize_entry("context", context)?;
+                        if let Some(request) = policy_request {
+                            fields
+                                .serialize_entry("policy_request", &Policy { request, private })?;
+                        }
                     }
                 }
             }

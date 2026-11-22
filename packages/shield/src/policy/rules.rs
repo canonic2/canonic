@@ -724,6 +724,7 @@ pub(crate) struct Facts<'a> {
     pub(crate) known_cwd: bool,
     pub(crate) known_arguments: bool,
     pub(crate) locations: Option<&'a dyn super::resources::Resources>,
+    pub(crate) container_read: Option<&'a dyn Fn(&str) -> bool>,
     pub(crate) effects: Option<&'a crate::effects::Hints>,
 }
 
@@ -795,6 +796,7 @@ impl Rule {
                     reason: self.reason.clone().unwrap_or_default(),
                     specificity,
                     applied: false,
+                    yielded_reason: None,
                     tier,
                     branch: "met",
                     requirement_checks: Vec::new(),
@@ -912,6 +914,7 @@ impl Rule {
             reason: self.reason.clone().unwrap_or_default(),
             specificity: rank,
             applied: false,
+            yielded_reason: None,
             tier,
             legacy: self.legacy.is_some(),
             branch,

@@ -62,3 +62,25 @@ pub(crate) trait Resources {
 // Pure source/argv evaluation cannot manufacture mutable filesystem observations.
 pub(in crate::policy) struct Unavailable;
 impl Resources for Unavailable {}
+
+/// A parsed read in an approved container namespace. Used only for reviewed
+/// stock reader rules. No host path or executable identity is established.
+pub(in crate::policy) struct ContainerRead;
+impl Resources for ContainerRead {
+    fn predicate_evidence(&self, key: &str) -> Option<Value> {
+        (key == "targets").then(|| serde_json::json!({"namespace": "container"}))
+    }
+
+    fn predicate(
+        &self,
+        key: &str,
+        predicate: &Value,
+        _patterns: &dyn Provider,
+    ) -> Result<Option<&'static str>, Error> {
+        Ok((key != "targets" || predicate["action"] != "read").then_some("evidence_unavailable"))
+    }
+
+    fn coverage(&self, _predicates: &[&Value]) -> bool {
+        true
+    }
+}

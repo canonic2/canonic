@@ -100,6 +100,7 @@ fn check_read(
         known_cwd: true,
         known_arguments: true,
         locations: Some(&resources::Unavailable),
+        container_read: None,
         effects: None,
     };
     let selections: Vec<_> = packs
@@ -266,6 +267,7 @@ fn historical_partial_facts_preserve_original_abstention_for_all_decisions() {
                     known_cwd,
                     known_arguments,
                     locations: Some(&resources::Unavailable),
+                    container_read: None,
                     effects: None,
                 };
                 let packs = if kind == "pack" {
@@ -377,6 +379,7 @@ fn historical_exact_mcp_requests_ignore_resolved_connection_only() {
                     known_cwd: true,
                     known_arguments: true,
                     locations: Some(&resources::Unavailable),
+                    container_read: None,
                     effects: None,
                 };
                 let reference = evaluate_facts(
@@ -477,6 +480,7 @@ fn historical_exact_requests_keep_current_and_compiled_parity_with_working_files
                     known_cwd: true,
                     known_arguments: true,
                     locations: Some(&resources::Unavailable),
+                    container_read: None,
                     effects: None,
                 };
                 let reference = evaluate_facts(

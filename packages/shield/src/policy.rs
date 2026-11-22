@@ -377,6 +377,7 @@ pub struct Match {
     pub(crate) reason: String,
     specificity: u8,
     pub(crate) applied: bool,
+    yielded_reason: Option<&'static str>,
     tier: u8,
     branch: &'static str,
     requirement_checks: Vec<rules::Check>,
@@ -391,6 +392,17 @@ pub struct Match {
     pub(crate) executable: diagnostics::TextField,
     rule_ref: Option<diagnostics::RuleReference>,
     private_input: bool,
+}
+
+impl Match {
+    fn pack_default(&self, approved: &impl Fn(&str) -> bool) -> bool {
+        self.tier == 1
+            && approved(&self.source)
+            && self
+                .decision_provenance
+                .as_ref()
+                .is_some_and(provenance::Evidence::unchanged_default)
+    }
 }
 
 /// A read-only preview result, never an execution or activation grant.
@@ -488,6 +500,62 @@ impl Evaluation {
                 .matches
                 .iter()
                 .all(|matched| matched.fallback && !matched.precondition)
+    }
+
+    pub(crate) fn allows_docker_context_runtime(&self, approved: impl Fn(&str) -> bool) -> bool {
+        self.decision == Decision::Allow
+            && self.matches.iter().any(|matched| {
+                matched.applied
+                    && matched.branch == "met"
+                    && matched.decision == Decision::Allow
+                    && matched.pack_default(&approved)
+                    && matches!(
+                        matched.rule_id.as_str(),
+                        "exec-context"
+                            | "container-exec-context"
+                            | "run-context"
+                            | "container-run-context"
+                            | "create-context"
+                            | "container-create-context"
+                    )
+            })
+    }
+
+    pub(crate) fn stock_fetch_review(&self, approved: impl Fn(&str) -> bool) -> bool {
+        self.semantic_coverage.is_none()
+            && !self.matches.is_empty()
+            && self.fallback_only_ask()
+            && self.matches.iter().all(|matched| {
+                matched.rule_id == "shared-review-curl"
+                    && matched.decision == Decision::Ask
+                    && matched.pack_default(&approved)
+            })
+    }
+
+    pub(crate) fn allow_container_client_help(&mut self) {
+        self.decision = Decision::Allow;
+        self.reason = "checked-docker-client-help";
+        self.yield_matches("container-client-help");
+        self.requirement_checks.clear();
+        self.guidance.clear();
+    }
+
+    pub(crate) fn retain_container_fetch_review(&mut self, mut argv: Self) {
+        argv.yield_matches("container-web-policy");
+        self.matches.extend(argv.matches);
+        if self.decision == Decision::Allow {
+            self.reason = "container-web-policy";
+        }
+    }
+
+    fn yield_matches(&mut self, reason: &'static str) {
+        for matched in &mut self.matches {
+            matched.applied = false;
+            matched.yielded_reason = Some(reason);
+            for check in &mut matched.requirement_checks {
+                check.applied = false;
+            }
+        }
     }
 }
 
@@ -1104,6 +1172,7 @@ impl CustomRules {
             known_cwd: true,
             known_arguments: true,
             locations: Some(&observer),
+            container_read: None,
             effects: None,
         };
         evaluate_facts(&[], &[self], request, &facts, true, &|| Ok(()), None, None)
@@ -1335,6 +1404,7 @@ fn evaluate_evidence(
         known_cwd: known.cwd,
         known_arguments: known.arguments,
         locations: Some(&resources::Unavailable),
+        container_read: None,
         effects: None,
     };
     evaluate_facts(
@@ -1539,9 +1609,24 @@ fn collect_pack_matches(
                     matches.push(matched);
                 }
             }
-        } else if let Some(mut matched) =
-            rule.matching(request, facts, provider, pack.id(), profile, 1)?
+            continue;
+        }
+        let read;
+        let facts = if rule.id.starts_with("read-")
+            && !pack.origins.contains_key(&rule.id)
+            && facts
+                .container_read
+                .is_some_and(|approved| approved(pack.id()))
         {
+            read = rules::Facts {
+                locations: Some(&rules::resources::ContainerRead),
+                ..*facts
+            };
+            &read
+        } else {
+            facts
+        };
+        if let Some(mut matched) = rule.matching(request, facts, provider, pack.id(), profile, 1)? {
             matched.decision_provenance = Some(provenance::evidence(
                 pack.origins.get(&rule.id),
                 profile,

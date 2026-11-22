@@ -81,6 +81,7 @@ impl Serialize for Match {
         let fields = 8
             + usize::from(self.fallback)
             + usize::from(self.precondition)
+            + usize::from(self.yielded_reason.is_some())
             + usize::from(self.decision_provenance.is_some())
             + usize::from(self.operation_ref.is_some())
             + usize::from(self.executable.is_present())
@@ -92,6 +93,9 @@ impl Serialize for Match {
         value.serialize_field("reason", &self.reason)?;
         value.serialize_field("specificity", &self.specificity)?;
         value.serialize_field("applied", &self.applied)?;
+        if let Some(reason) = self.yielded_reason {
+            value.serialize_field("yielded_reason", reason)?;
+        }
         value.serialize_field("branch", &self.branch)?;
         value.serialize_field("requirement_checks", &self.requirement_checks)?;
         if self.fallback {

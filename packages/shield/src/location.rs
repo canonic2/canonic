@@ -18,6 +18,7 @@ mod git;
 pub(crate) use git::noop_editor as git_noop_editor;
 mod node;
 mod targets;
+pub(crate) use targets::container_read;
 pub(crate) use targets::{grep_parse, rg_auxiliary_reads};
 mod text;
 pub(crate) mod touch;

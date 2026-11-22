@@ -75,6 +75,30 @@ impl CandidateEvaluation {
     pub(crate) fn fallback_only_ask(&self) -> bool {
         self.evaluation.fallback_only_ask()
     }
+
+    pub(crate) fn allows_docker_context_runtime(&self) -> bool {
+        self.evaluation.allows_docker_context_runtime(|source| {
+            self.effective
+                .has_pack_artifact(source, &[super::composition::DOCKER_RUNTIME])
+        })
+    }
+
+    pub(crate) fn stock_fetch_review(&self) -> bool {
+        self.evaluation.stock_fetch_review(|source| {
+            self.effective
+                .has_pack_artifact(source, &super::composition::CONTAINER_BASELINES)
+        })
+    }
+
+    pub(crate) fn allow_container_client_help(&mut self) {
+        self.evaluation.allow_container_client_help();
+        self.decision = Decision::Allow;
+    }
+
+    pub(crate) fn retain_container_fetch_review(&mut self, argv: Self) {
+        self.evaluation
+            .retain_container_fetch_review(argv.evaluation);
+    }
 }
 
 /// Prepared, immutable candidate evidence for repeated read-only evaluation.
@@ -125,6 +149,7 @@ impl Evaluator {
             known_cwd: true,
             known_arguments: true,
             locations: Some(&observer),
+            container_read: None,
             effects: None,
         };
         let mut evaluation = self
@@ -317,6 +342,7 @@ impl Evaluator {
             known_cwd: true,
             known_arguments: true,
             locations: Some(&observer),
+            container_read: None,
             effects: None,
         };
         let mut evaluation = self
@@ -519,6 +545,15 @@ impl Evaluator {
         self.evaluate_known(request, checkpoint, known_cwd, true, root)
     }
 
+    pub(crate) fn evaluate_container_argv(
+        &self,
+        request: &Request,
+        checkpoint: &dyn Fn() -> Result<(), Error>,
+    ) -> Result<CandidateEvaluation, Error> {
+        let read = crate::location::container_read(&request.executable, &request.arguments);
+        self.evaluate_written(request, checkpoint, false, true, None, read)
+    }
+
     pub(crate) fn evaluate_unknown_arguments(
         &self,
         request: &Request,
@@ -546,6 +581,7 @@ impl Evaluator {
             known_cwd,
             known_arguments,
             working_files,
+            false,
         )?;
         if known_cwd
             && written.fallback_only_ask()
@@ -558,6 +594,7 @@ impl Evaluator {
                 known_cwd,
                 known_arguments,
                 working_files,
+                false,
             )?;
             result.directory_request = Some(normalized);
             return Ok(result);
@@ -572,6 +609,7 @@ impl Evaluator {
         known_cwd: bool,
         known_arguments: bool,
         working_files: Option<&crate::location::WorkingFiles>,
+        container_read: bool,
     ) -> Result<CandidateEvaluation, Error> {
         checkpoint()?;
         let input = policy::resolution::normalized::Input::Argv {
@@ -588,6 +626,10 @@ impl Evaluator {
         let observer = crate::location::Observer::new(&input, &request.project, &request.cwd, None)
             .with_access_paths(self.effective.access_paths())
             .with_working_files(working_files);
+        let approved = |source: &str| {
+            self.effective
+                .has_pack_artifact(source, &super::composition::CONTAINER_BASELINES)
+        };
         let facts = policy::rules::Facts {
             input: &input,
             context: &context,
@@ -596,6 +638,7 @@ impl Evaluator {
             known_cwd,
             known_arguments,
             locations: known_cwd.then_some(&observer as &dyn policy::rules::resources::Resources),
+            container_read: container_read.then_some(&approved as &dyn Fn(&str) -> bool),
             effects: None,
         };
         let evaluation = self.plan.evaluate_input(request, &facts, checkpoint)?;

@@ -21,7 +21,7 @@ pub(crate) struct Fetch<'a> {
     pub(crate) redirects: &'static str,
     /// The file written with the response body; stdout and `/dev/null` are none.
     pub(crate) output: Option<&'a str>,
-    /// curl's leading `-q`, which skips its configuration file.
+    /// curl's leading `-q` or wget's `--no-config`.
     pub(crate) skips_config: bool,
     /// Whether the client looks up `~/.netrc` credentials when a server asks
     /// for them: wget does unless `--no-netrc`; curl only with `-n`.
@@ -38,9 +38,20 @@ pub(crate) fn fetch<'a>(executable: &str, arguments: &[&'a str]) -> Option<Fetch
 /// Every transfer in a supported command. curl batches share request options;
 /// its single output option applies to the first transfer only.
 pub(crate) fn fetches<'a>(executable: &str, arguments: &[&'a str]) -> Option<Vec<Fetch<'a>>> {
+    match client(executable)? {
+        Client::Curl => curl(arguments),
+        Client::Wget => wget(arguments).map(|fetch| vec![fetch]),
+    }
+}
+
+pub(crate) fn help(executable: &str, arguments: &[String]) -> bool {
+    arguments == ["--help"] && client(executable).is_some()
+}
+
+fn client(executable: &str) -> Option<Client> {
     match executable {
-        "curl" | "/bin/curl" | "/usr/bin/curl" => curl(arguments),
-        "wget" | "/bin/wget" | "/usr/bin/wget" => wget(arguments).map(|fetch| vec![fetch]),
+        "curl" | "/bin/curl" | "/usr/bin/curl" => Some(Client::Curl),
+        "wget" | "/bin/wget" | "/usr/bin/wget" => Some(Client::Wget),
         _ => None,
     }
 }
@@ -244,6 +255,7 @@ fn wget<'a>(arguments: &[&'a str]) -> Option<Fetch<'a>> {
     let mut follow = true;
     let mut no_hsts = false;
     let mut no_netrc = false;
+    let mut skips_config = false;
     let mut options = true;
     let mut position = 0;
     while position < arguments.len() {
@@ -263,6 +275,7 @@ fn wget<'a>(arguments: &[&'a str]) -> Option<Fetch<'a>> {
                 ("spider", None) => spider = true,
                 ("no-hsts", None) => no_hsts = true,
                 ("no-netrc", None) => no_netrc = true,
+                ("no-config", None) => skips_config = true,
                 _ => {
                     let value = if let Some(value) = attached {
                         value
@@ -315,7 +328,7 @@ fn wget<'a>(arguments: &[&'a str]) -> Option<Fetch<'a>> {
         method: "GET",
         redirects: if follow { "follow" } else { "none" },
         output: output.filter(|path| !["-", "/dev/null"].contains(path)),
-        skips_config: false,
+        skips_config,
         reads_netrc: !no_netrc,
     })
 }
@@ -606,6 +619,9 @@ mod tests {
             (pinned.redirects, pinned.output, pinned.reads_netrc),
             ("none", None, false)
         );
+        assert!(!pinned.skips_config);
+        let no_config = format!("wget --no-config --no-hsts --no-netrc -O - {URL}");
+        assert!(recognized(&no_config).unwrap().skips_config);
         let spider = recognized(
             "/usr/bin/wget --no-hsts -nv --spider --tries 2 -T 5 https://registry.example.com/",
         )
@@ -629,6 +645,7 @@ mod tests {
             "wget --no-hsts --header=X:y -O - https://registry.example.com/",
             "wget --no-hsts --user=acme -O - https://registry.example.com/",
             "wget --no-hsts --hsts-file=hsts -O - https://registry.example.com/",
+            "wget --no-config --config=config --no-hsts -O - https://registry.example.com/",
             "wget --no-hsts -e robots=off -O - https://registry.example.com/",
             "wget --no-hsts -i urls.txt -O -",
             "wget --no-hsts -P downloads -O - https://registry.example.com/",
