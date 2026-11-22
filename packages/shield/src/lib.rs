@@ -6,6 +6,7 @@ mod application;
 pub mod cli;
 pub mod configuration;
 mod diagnostics;
+mod docker;
 pub mod effects;
 pub mod enforcement;
 mod evidence;

@@ -130,6 +130,22 @@ fn dispatch(input: &Cli) -> Result<Output, Error> {
         PublicCommand::Docs(docs) => {
             return diagnostics::docs(&docs.command).map(Output::independent);
         }
+        PublicCommand::Docker(crate::cli::public::Docker {
+            command:
+                crate::cli::public::DockerCommand::Inspect {
+                    container,
+                    socket,
+                    paths,
+                },
+        }) => {
+            let mut observation = crate::docker::inspect(socket, container, paths)?;
+            if let Some(root) = &input.project {
+                observation.preview_policy(root)?;
+            }
+            return Ok(Output::independent(
+                json!({"mode":"preview", "docker": observation}),
+            ));
+        }
         PublicCommand::Init {
             agents,
             no_setup,

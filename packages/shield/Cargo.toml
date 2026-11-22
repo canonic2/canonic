@@ -1,6 +1,6 @@
 [package]
 name = "canonic-shield"
-version = "0.50.2"
+version = "0.51.0"
 edition = "2024"
 rust-version = "1.102"
 publish = false
@@ -72,7 +72,7 @@ canonic-mcp-kit = { version = "0.27.0", path = "../mcp-kit", features = ["docs-b
 
 [target.'cfg(unix)'.dependencies]
 signal-hook = "0.3"
-rustix = { version = "1.1.6", features = ["process", "termios", "fs", "time"] }
+rustix = { version = "1.1.6", features = ["process", "termios", "fs", "time", "net", "event"] }
 nix = { version = "0.31", features = ["fs", "signal", "process"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]

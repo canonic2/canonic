@@ -55,6 +55,9 @@ pub(super) fn classify(hints: &mut Hints) {
             | "compose"
     ) {
         at += 1;
+        if first == "compose" {
+            at = compose_subcommand_at(args, at, &mut hints.unresolved, &mut hints.nested);
+        }
         if let Some(operation) = args.get(at).filter(|arg| !arg.starts_with('-')) {
             hints.command_path.push(operation.clone());
             command = match (first.as_str(), operation.as_str()) {
@@ -76,7 +79,9 @@ pub(super) fn classify(hints: &mut Hints) {
         },
     );
     let builder_inspection = first == "buildx" && command == "inspect";
-    if (hints.command_path.len() == 1 || first == "container")
+    if first == "compose" && command == "exec" {
+        compose_exec(hints, at + 1);
+    } else if (hints.command_path.len() == 1 || first == "container")
         && matches!(command, "run" | "create" | "exec")
     {
         docker_runtime(hints, at + 1, command == "exec");
@@ -89,6 +94,100 @@ pub(super) fn classify(hints: &mut Hints) {
         "daemon-and-context",
         "nested-program-or-build-definition",
     ]);
+}
+
+fn compose_subcommand_at(
+    args: &[String],
+    start: usize,
+    unresolved: &mut Vec<&'static str>,
+    nested: &mut Vec<NestedExecution>,
+) -> usize {
+    let options = arguments::parse(
+        &args[start..],
+        &[
+            "--ansi",
+            "--env-file",
+            "--file",
+            "-f",
+            "--parallel",
+            "--profile",
+            "--progress",
+            "--project-directory",
+            "--workdir",
+            "--project-name",
+            "-p",
+        ],
+        &[
+            "--all-resources",
+            "--compatibility",
+            "--dry-run",
+            "--verbose",
+            "--no-ansi",
+            "--help",
+            "-h",
+            "--version",
+            "-v",
+        ],
+        arguments::Syntax::DockerRuntime,
+    );
+    let at = start + options.command_at;
+    if options.unresolved.is_some() {
+        unresolved.push("compose-subcommand");
+        nested.push(NestedExecution {
+            kind: "compose-subcommand",
+            source: None,
+            argv: vec![],
+            argument_index: at,
+            namespace: "container",
+        });
+        start
+    } else {
+        at
+    }
+}
+
+fn compose_exec(hints: &mut Hints, start: usize) {
+    let args = &hints.request.arguments;
+    let options = arguments::parse(
+        &args[start..],
+        &["--env", "-e", "--index", "--user", "-u", "--workdir", "-w"],
+        &[
+            "--detach",
+            "-d",
+            "--interactive",
+            "-i",
+            "--no-tty",
+            "--no-TTY",
+            "-T",
+            "--privileged",
+            "--tty",
+            "-t",
+        ],
+        arguments::Syntax::DockerRuntime,
+    );
+    runtime_effects(&mut hints.effects, &options.options);
+    let operand = start + options.command_at;
+    if options.unresolved.is_some()
+        && args
+            .get(operand)
+            .is_some_and(|arg| matches!(arg.as_str(), "--help" | "-h"))
+    {
+        return;
+    }
+    // Compose stops parsing exec flags at SERVICE. Everything after it is
+    // literal argv, including options using the same spelling as Compose.
+    let program = if options.unresolved.is_none() {
+        args.get(operand + 1..).unwrap_or_default()
+    } else {
+        &[]
+    };
+    hints.nested.push(NestedExecution {
+        kind: "container-exec",
+        source: None,
+        argv: program.to_vec(),
+        argument_index: (operand + 1).min(args.len()),
+        namespace: "container",
+    });
 }
 
 fn docker_builder_inspection(hints: &mut Hints, start: usize) {
@@ -259,6 +358,7 @@ fn docker_runtime(hints: &mut Hints, start: usize, exec: bool) {
             "--cpus",
             "--platform",
             "--restart",
+            "--pull",
         ],
         &[
             "--privileged",
@@ -317,6 +417,86 @@ fn docker_runtime(hints: &mut Hints, start: usize, exec: bool) {
             namespace: "container",
         });
     }
+}
+
+/// Extract the only host operand from a tightly bounded Docker run.
+pub(crate) fn isolated_bind_source<'a>(
+    executable: &str,
+    args: &'a [String],
+    profile: &serde_json::Value,
+) -> Option<&'a str> {
+    let [context_flag, context, run, tail @ ..] = args else {
+        return None;
+    };
+    if executable != "docker"
+        || context_flag != "--context"
+        || *context != profile["context"]
+        || run != "run"
+    {
+        return None;
+    }
+    let options = arguments::parse(
+        tail,
+        &["--pull", "--network", "--mount", "--env"],
+        &["--rm"],
+        arguments::Syntax::DockerRuntime,
+    );
+    if options.unresolved.is_some() {
+        return None;
+    }
+    let mut required = BTreeSet::from(["--rm", "--pull", "--network"]);
+    let mut environment = BTreeSet::new();
+    let mut mount = None;
+    for option in &options.options {
+        match (option.name.as_str(), option.value.as_deref()) {
+            ("--rm", None | Some("true"))
+            | ("--pull", Some("never"))
+            | ("--network", Some("none"))
+                if required.remove(option.name.as_str()) => {}
+            ("--env", Some(value))
+                if profile["environment"].as_array().is_some_and(|allowed| {
+                    allowed.iter().any(|entry| entry.as_str() == Some(value))
+                }) && value
+                    .split_once('=')
+                    .is_some_and(|(name, _)| environment.insert(name)) => {}
+            ("--mount", Some(_)) if mount.is_none() => {
+                mount = Some(
+                    tail[option.index]
+                        .strip_prefix("--mount=")
+                        .or_else(|| tail.get(option.index + 1).map(String::as_str))?,
+                );
+            }
+            _ => return None,
+        }
+    }
+    if !required.is_empty() {
+        return None;
+    }
+    let [image, command @ ..] = &tail[options.command_at..] else {
+        return None;
+    };
+    if *image != profile["image"]
+        || !profile["command"].as_array().is_some_and(|expected| {
+            command
+                .iter()
+                .map(String::as_str)
+                .eq(expected.iter().filter_map(serde_json::Value::as_str))
+        })
+    {
+        return None;
+    }
+    let (source, target) = mount?
+        .strip_prefix("type=bind,source=")?
+        .strip_suffix(",readonly")?
+        .split_once(",target=")?;
+    if source.is_empty()
+        || source.contains([',', '"', '\\', '\0'])
+        || source.split('/').any(|part| part == "..")
+        || Some(target) != profile["target"].as_str()
+    {
+        return None;
+    }
+    Some(source)
 }
 
 fn runtime_effects(effects: &mut BTreeSet<Effect>, options: &[arguments::OptionValue]) {

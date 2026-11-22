@@ -14,6 +14,11 @@ pub(in crate::shell) fn mark(node: &mut Node) {
     walk(
         node,
         &mut |words| {
+            let mut credentials = Vec::new();
+            curl_words(words, |index, _| credentials.push(index));
+            for index in credentials {
+                words[index].private_evidence = true;
+            }
             let mut next = false;
             for word in words {
                 let consumed = next;
@@ -31,6 +36,39 @@ pub(in crate::shell) fn mark(node: &mut Node) {
         &mut |_| {},
     );
 }
+
+fn curl_words(words: &[Word], mut found: impl FnMut(usize, &str)) {
+    use crate::http_client::local;
+    fn value(word: &Word) -> &str {
+        word.literal.as_deref().unwrap_or(&word.raw)
+    }
+    if let Some(at) = words.iter().position(|word| local::is_curl(value(word))) {
+        local::curl_credentials(words[at + 1..].iter().map(value), |index, secret| {
+            found(at + 1 + index, secret);
+        });
+    }
+}
+
+pub(in crate::shell) fn http_history_secrets(
+    node: &mut Node,
+    mut found: impl FnMut(Span, &str, &str, &str),
+) {
+    walk(
+        node,
+        &mut |words| {
+            curl_words(words, |index, secret| {
+                let word = &words[index];
+                found(
+                    word.span,
+                    &word.raw,
+                    word.literal.as_deref().unwrap_or(&word.raw),
+                    secret,
+                );
+            });
+        },
+        &mut |_| {},
+    );
+}
 pub(in crate::shell) fn mark_span(node: &mut Node, span: Span) {
     walk(
         node,
@@ -42,6 +80,26 @@ pub(in crate::shell) fn mark_span(node: &mut Node, span: Span) {
         &mut |body| {
             body.private_evidence |= overlaps(body.span, span);
         },
+    );
+}
+
+pub(in crate::shell) fn embedded_http_sources(
+    node: &mut Node,
+    mut found: impl FnMut(Span, &str, &str),
+) {
+    walk(
+        node,
+        &mut |words| {
+            for word in words {
+                if let Some(source) = word.literal.as_deref()
+                    && source.contains("curl")
+                    && source.contains(char::is_whitespace)
+                {
+                    found(word.span, &word.raw, source);
+                }
+            }
+        },
+        &mut |_| {},
     );
 }
 pub(in crate::shell) fn mark_word(word: &mut Word, span: Span) {

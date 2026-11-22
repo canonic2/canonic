@@ -381,7 +381,8 @@ impl Rule {
             }
             if domain == "web"
                 && ((self.conditions["action"] == "search" && !has("query"))
-                    || (self.conditions["action"] == "fetch" && !has("url")))
+                    || (self.conditions["action"] == "fetch" && !has("url"))
+                    || (self.conditions["action"] == "request" && (!has("url") || !has("method"))))
             {
                 return Err(Error::Contract("web action selector required"));
             }
@@ -653,8 +654,10 @@ pub(super) fn capabilities(value: &Value, domain: &str, result: &mut BTreeSet<St
                     continue;
                 }
                 let capability = match key.as_str() {
+                    "action" if domain == "web" && v == "request" => Some("local-http-requests-v1"),
                     "connection" if domain == "mcp" => Some("mcp-connection-facts-v1"),
                     "argument_paths" => Some("argument-paths-v1"),
+                    "docker_isolated_bind" => Some("docker-isolated-bind-v1"),
                     "field_paths" => Some("field-paths-v1"),
                     "glob" => Some("glob-v1"),
                     "regex" => Some("regex-v1"),
@@ -1036,6 +1039,7 @@ fn rank(value: &Value) -> u8 {
         "environment",
         "targets",
         "argument_paths",
+        "docker_isolated_bind",
         "graphql",
         "field_paths",
         "sources",

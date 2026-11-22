@@ -510,12 +510,13 @@ impl State {
         let mut value = json!({"schema_version":1,"event_id":self.id("event"),"kind":kind,"recorded_at":now(),"occurred_at":context.occurred_at,
             "provenance":context.provenance(),"links":all_links,"reasons":all_reasons,"operator":null});
         value["details"] = details;
+        let shell_credentials = crate::shell::redact_http_history(&mut value["details"]);
         let changed = if kind == "decision" {
             crate::evidence::redact_with_receipts(&mut value, &["/details/authorization".into()])
         } else {
             redact(&mut value)
         };
-        value["redacted"] = json!(changed);
+        value["redacted"] = json!(changed || shell_credentials);
         value
     }
     pub(crate) fn record(&mut self, event: Value) {

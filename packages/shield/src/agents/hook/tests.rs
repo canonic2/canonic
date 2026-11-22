@@ -3608,6 +3608,33 @@ fn shell_history_redacts_named_secrets_without_retaining_analyzer_syntax_trees()
 }
 
 #[test]
+fn shell_history_redacts_curl_credentials_in_decisions_and_completions() {
+    let (_fixture, context) = fixture();
+    let root = Path::new(&context.project_root);
+    let source = "docker exec app curl -q --noproxy '*' -su'alice:ACME_BASIC_VALUE' --header='X-API-Key: ACME_API_VALUE' -H 'Mcp-Session-Id: ACME_SESSION_VALUE' http://127.0.0.1/ready";
+    call(root, "claude", source);
+    let post = json!({"hook_event_name":"PostToolUse", "tool_name":"Bash",
+        "tool_use_id":"acme-call", "session_id":"acme-session", "cwd":root,
+        "tool_input":{"command":source}});
+    translate_for(
+        root,
+        "claude",
+        Event::Completed,
+        &serde_json::to_vec(&post).unwrap(),
+    );
+    let history = journal(root);
+    for secret in ["ACME_BASIC_VALUE", "ACME_API_VALUE", "ACME_SESSION_VALUE"] {
+        assert!(
+            !history.contains(secret),
+            "dummy credential remained in history"
+        );
+    }
+    assert!(history.contains("http://127.0.0.1/ready"));
+    assert!(history.contains("\"kind\":\"decision\""));
+    assert!(history.contains("\"kind\":\"completion\""));
+}
+
+#[test]
 fn powershell_tool_uses_its_own_grammar_and_preserves_claude_policy_decisions() {
     let (root, _) = fixture();
     assert_permitted(

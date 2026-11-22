@@ -118,6 +118,9 @@ fn predicate_codes(
             _ => codes.push("evidence_unavailable"),
         },
         "argument_paths" => codes.extend(argument_paths(predicate, facts, patterns)?),
+        "docker_isolated_bind" => {
+            codes.extend(docker_isolated_bind(predicate, facts, patterns)?);
+        }
         "graphql" => codes.extend(graphql(predicate, facts, patterns)?.map(|f| f.code)),
         "field_paths" => codes.extend(field_paths(predicate, facts, patterns)?),
         "targets" | "sources" | "destination" if !facts.known_arguments => {
@@ -147,6 +150,32 @@ fn predicate_codes(
         _ => return typed_codes(key, predicate, facts, patterns),
     }
     Ok(codes)
+}
+
+fn docker_isolated_bind(
+    predicate: &Value,
+    facts: &Facts<'_>,
+    patterns: &dyn Provider,
+) -> Result<Option<&'static str>, Error> {
+    let Input::Argv {
+        executable,
+        arguments,
+        ..
+    } = facts.input
+    else {
+        return Ok(Some("evidence_unavailable"));
+    };
+    let Some(locations) = facts
+        .locations
+        .filter(|_| facts.known_arguments && facts.known_cwd)
+    else {
+        return Ok(Some("evidence_unavailable"));
+    };
+    let Some(source) = crate::effects::isolated_bind_source(executable, arguments, predicate)
+    else {
+        return Ok(Some("predicate_mismatch"));
+    };
+    locations.project_file(source, &predicate["source"], patterns)
 }
 
 pub(super) fn graphql(

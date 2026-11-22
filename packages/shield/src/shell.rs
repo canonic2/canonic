@@ -9,6 +9,7 @@ mod control;
 mod cwd;
 mod expansion;
 mod flow;
+mod history;
 mod native;
 mod powershell;
 mod provenance;
@@ -26,6 +27,7 @@ use crate::{
         resolution::normalized::{Context, Input},
     },
 };
+pub(crate) use history::redact_http_history;
 #[cfg(test)]
 use report::ReportCoverage;
 pub(crate) use report::{Coverage, Operation, PolicyRequest, Report, SourceUnit};
@@ -1141,59 +1143,59 @@ impl Analysis<'_> {
             };
             return Ok((evaluation, Some(typed)));
         }
-        if !state.cwd_unknown
-            && !self.clients.node_preload
-            && evaluation.fallback_only_ask()
-            && let Some(file) = crate::location::node_check_file(
-                &request.executable,
-                &request
-                    .arguments
-                    .iter()
-                    .map(String::as_str)
-                    .collect::<Vec<_>>(),
-            )
+        if state.cwd_unknown || !evaluation.fallback_only_ask() {
+            return Ok((evaluation, None));
+        }
+        let arguments: Vec<_> = request.arguments.iter().map(String::as_str).collect();
+        if !self.clients.node_preload
+            && let Some(file) = crate::location::node_check_file(&request.executable, &arguments)
         {
             return self.read_evaluation(request, vec![file.into()]);
         }
-        if !state.cwd_unknown
-            && !state.environment_unknown
-            && !self.clients.http_configuration
-            && evaluation.fallback_only_ask()
-            && let Some(fetches) = crate::http_client::fetches(
-                &request.executable,
-                &request
-                    .arguments
+        if !state.environment_unknown && !self.clients.http_configuration {
+            if let Some(requests) =
+                crate::http_client::local::requests(&request.executable, &arguments)
+                && requests
                     .iter()
-                    .map(String::as_str)
-                    .collect::<Vec<_>>(),
-            )
-            && let Some(first) = fetches.first()
-            && !self.http_client_config(first)
-        {
-            // The batch takes its strictest fetch's decision.
-            let mut selected: Option<Evaluated> = None;
-            for fetch in &fetches {
-                let evaluated = self.http_fetch_evaluation(request, fetch)?;
-                if selected
-                    .as_ref()
-                    .is_none_or(|(previous, _)| evaluated.0.decision > previous.decision)
-                {
-                    selected = Some(evaluated);
+                    .all(|local| !self.http_client_config(&local.transfer))
+                && let Some(resolved) = self.local_http_evaluation(
+                    request,
+                    requests,
+                    &Context {
+                        cwd: request.cwd.clone(),
+                        environment: None,
+                        working_files: self.working_files.cloned(),
+                    },
+                )?
+            {
+                return Ok(resolved);
+            }
+            if let Some(fetches) = crate::http_client::fetches(&request.executable, &arguments)
+                && let Some(first) = fetches.first()
+                && !self.http_client_config(first)
+            {
+                // The batch takes its strictest fetch's decision.
+                let mut selected: Option<Evaluated> = None;
+                for fetch in &fetches {
+                    let evaluated = self.http_fetch_evaluation(request, fetch)?;
+                    if selected
+                        .as_ref()
+                        .is_none_or(|(previous, _)| evaluated.0.decision > previous.decision)
+                    {
+                        selected = Some(evaluated);
+                    }
+                }
+                if let Some(selected) = selected {
+                    return Ok(selected);
                 }
             }
-            if let Some(selected) = selected {
-                return Ok(selected);
-            }
         }
-        if !state.cwd_unknown && evaluation.fallback_only_ask() {
-            let arguments: Vec<_> = request.arguments.iter().map(String::as_str).collect();
-            if crate::location::text_read_only(&request.executable, &arguments)
-                && let Some(files) = crate::location::text_files(&request.executable, &arguments)
-                && !files.is_empty()
-            {
-                let sources = files.into_iter().map(|(_, path)| path).collect();
-                return self.read_evaluation(request, sources);
-            }
+        if crate::location::text_read_only(&request.executable, &arguments)
+            && let Some(files) = crate::location::text_files(&request.executable, &arguments)
+            && !files.is_empty()
+        {
+            let sources = files.into_iter().map(|(_, path)| path).collect();
+            return self.read_evaluation(request, sources);
         }
         Ok((evaluation, None))
     }
@@ -1249,7 +1251,7 @@ impl Analysis<'_> {
             environment: None,
             working_files: self.working_files.cloned(),
         };
-        let (fetched, web) = self.web_fetch_evaluation(request, fetch, &context)?;
+        let (fetched, web) = self.web_evaluation(request, fetch, None, &context)?;
         let Some(output) = fetch.output else {
             return Ok((fetched, Some(web)));
         };
@@ -1270,24 +1272,54 @@ impl Analysis<'_> {
         })
     }
 
-    fn web_fetch_evaluation(
+    fn web_evaluation(
         &self,
         request: &Request,
         fetch: &crate::http_client::Fetch<'_>,
+        local_request_fields: Option<Value>,
         context: &Context,
     ) -> Result<(CandidateEvaluation, PolicyRequest), Error> {
+        let (action, conditions) = match local_request_fields {
+            Some(fields) => ("request", fields),
+            None => (
+                "fetch",
+                json!({"client":"shell","redirects":fetch.redirects}),
+            ),
+        };
         let web = Input::Web {
-            action: "fetch".into(),
+            action: action.into(),
             query: None,
             url: Some(fetch.url.as_ref().into()),
             method: Some(fetch.method.into()),
-            conditions: json!({"client":"shell","redirects":fetch.redirects}),
+            conditions,
             original_input: json!(request),
         };
         let fetched = self
             .evaluator
             .evaluate_resource(request, &web, context, self.checkpoint)?;
         Ok((fetched, PolicyRequest::Normalized(web)))
+    }
+
+    fn local_http_evaluation(
+        &self,
+        request: &Request,
+        requests: Vec<crate::http_client::local::Request<'_>>,
+        context: &Context,
+    ) -> Result<Option<Evaluated>, Error> {
+        let mut selected: Option<Evaluated> = None;
+        for local in requests {
+            let (evaluated, web) =
+                self.web_evaluation(request, &local.transfer, Some(local.fields), context)?;
+            if selected.as_ref().is_none_or(|(previous, _)| {
+                evaluated.decision > previous.decision
+                    || previous.unmatched_ask()
+                        && evaluated.decision == previous.decision
+                        && !evaluated.unmatched_ask()
+            }) {
+                selected = Some((evaluated, Some(web)));
+            }
+        }
+        Ok(selected)
     }
 
     fn container_evaluation(
@@ -1308,13 +1340,29 @@ impl Analysis<'_> {
             return Ok((argv, None));
         }
         let arguments: Vec<_> = request.arguments.iter().map(String::as_str).collect();
-        let Some(fetches) = crate::http_client::fetches(&request.executable, &arguments) else {
-            return Ok((argv, None));
-        };
         let context = Context {
             cwd: request.cwd.clone(),
             environment: None,
             working_files: None,
+        };
+        if let Some(requests) = crate::http_client::local::requests(&request.executable, &arguments)
+        {
+            let replace_fallback = stock_review
+                && requests
+                    .iter()
+                    .all(|request| request.transfer.skips_config && request.proxy_disabled);
+            if let Some((mut web, input)) =
+                self.local_http_evaluation(request, requests, &context)?
+                && (replace_fallback || web.decision > argv.decision && !web.unmatched_ask())
+            {
+                if replace_fallback {
+                    web.retain_container_fetch_review(argv);
+                }
+                return Ok((web, input));
+            }
+        }
+        let Some(fetches) = crate::http_client::fetches(&request.executable, &arguments) else {
+            return Ok((argv, None));
         };
         let mut replace_fallback = stock_review;
         let mut strictest: Option<(CandidateEvaluation, PolicyRequest)> = None;
@@ -1323,7 +1371,7 @@ impl Analysis<'_> {
                 && !fetch.reads_netrc
                 && fetch.output.is_none()
                 && fetch.redirects == "none";
-            let web = self.web_fetch_evaluation(request, fetch, &context)?;
+            let web = self.web_evaluation(request, fetch, None, &context)?;
             if strictest.as_ref().is_none_or(|(previous, _)| {
                 web.0.decision > previous.decision
                     || previous.unmatched_ask()

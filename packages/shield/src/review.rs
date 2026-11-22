@@ -52,6 +52,8 @@ use storage::Store;
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum Error {
+    #[error(transparent)]
+    Docker(#[from] crate::docker::Error),
     #[error("cancelled; no change confirmed")]
     Cancelled,
     #[error("review storage I/O failed: {0}")]
@@ -213,6 +215,7 @@ impl CapacityKind {
 impl Error {
     pub(crate) fn code(&self) -> &'static str {
         match self {
+            Self::Docker(_) => "docker-observation",
             Self::Cancelled => "cancelled",
             Self::RegistryRevoked { .. } => "revoked-policy",
             Self::Io(_) => "io",

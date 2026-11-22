@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 mod arguments;
 mod docker;
+pub(crate) use docker::isolated_bind_source;
 mod evidence;
 mod git;
 #[cfg(test)]

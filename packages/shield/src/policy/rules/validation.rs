@@ -37,6 +37,9 @@ pub(super) fn validate_predicates(
     };
     let mut allowed = vec!["cwd", "environment"];
     allowed.extend_from_slice(predicates);
+    if requirements && domain == "argv" {
+        allowed.push("docker_isolated_bind");
+    }
     if !requirements {
         allowed.push("domain");
         allowed.extend_from_slice(identities);
@@ -71,7 +74,7 @@ pub(super) fn validate_predicates(
                 if domain == "file" {
                     &["read", "write", "copy", "move", "remove"]
                 } else {
-                    &["search", "fetch"]
+                    &["search", "fetch", "request"]
                 },
             )?,
             "arguments" if domain == "argv" => {
@@ -91,6 +94,7 @@ pub(super) fn validate_predicates(
             "sources" => quantified(operand, allow)?,
             "targets" => targets(operand, allow)?,
             "argument_paths" => argument_paths(operand)?,
+            "docker_isolated_bind" => docker_isolated_bind(operand)?,
             "graphql" => crate::graphql::validate(operand)?,
             "field_paths" => field_paths(operand)?,
             "recursive" => {
@@ -202,6 +206,76 @@ fn argument_paths(value: &Value) -> Result<(), Error> {
     }
     if let Some(selection) = value.get("operands") {
         argument_path(selection)?;
+    }
+    Ok(())
+}
+
+fn docker_isolated_bind(value: &Value) -> Result<(), Error> {
+    selectors::fields(
+        value,
+        &[
+            "context",
+            "image",
+            "command",
+            "source",
+            "target",
+            "environment",
+        ],
+    )?;
+    for key in ["context", "image", "target"] {
+        if !value[key].as_str().is_some_and(|name| {
+            !name.is_empty()
+                && !name.starts_with('-')
+                && name
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b"/_.-:@".contains(&b))
+        }) {
+            return Err(Error::Contract(
+                "isolated Docker run requires literal operands",
+            ));
+        }
+    }
+    if !value["target"].as_str().is_some_and(|path| {
+        path.starts_with('/')
+            && path
+                .split('/')
+                .skip(1)
+                .all(|part| !matches!(part, "" | "." | ".."))
+    }) {
+        return Err(Error::Contract(
+            "isolated Docker mount requires an absolute target",
+        ));
+    }
+    let command = value["command"].as_array().ok_or(Error::Syntax)?;
+    if command.is_empty() || command.len() > 256 {
+        return Err(Error::Contract(
+            "isolated Docker run requires literal entrypoint arguments",
+        ));
+    }
+    for argument in command {
+        if !argument.is_string() {
+            return Err(Error::Syntax);
+        }
+        selectors::text(argument, false)?;
+    }
+    path_predicate(&value["source"])?;
+    if let Some(environment) = value.get("environment") {
+        selectors::strings(environment, true, true)?;
+        if environment.as_array().is_some_and(|entries| {
+            entries.iter().any(|entry| {
+                !entry
+                    .as_str()
+                    .and_then(|value| value.split_once('='))
+                    .is_some_and(|(name, _)| {
+                        !name.is_empty()
+                            && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+                    })
+            })
+        }) {
+            return Err(Error::Contract(
+                "isolated Docker run requires literal environment assignments",
+            ));
+        }
     }
     Ok(())
 }

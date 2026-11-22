@@ -122,3 +122,25 @@ them, or establish live enforcement. Native hooks evaluate the submitted command
 and available context; they do not attest to every effect of execution.
 
 For unexpected results, follow [troubleshooting](troubleshooting.md#the-request-was-allowed-or-blocked-unexpectedly).
+
+### Inspect a Docker environment
+
+In a shell request, Shield checks the inner program of `docker exec` and
+`docker compose exec` as well as the outer Docker invocation. The more
+restrictive decision applies to the combined request.
+
+Use a full container ID to preview the running container and its mount table.
+On a Unix host, start with the socket for your local Docker Engine. The default
+socket is `/var/run/docker.sock`. Pass `--socket` for a different local socket.
+
+```sh
+shield docker inspect CONTAINER_ID --path /work/config.yml
+shield --project . --json docker inspect CONTAINER_ID --path /work/config.yml
+```
+
+Repeat `--path` to look up several absolute container paths. An explicit
+`--project` adds the project's read and write policy decisions for each candidate
+host path. The preview uses the deepest reported mount and reports its write
+mode separately from host policy. The path mapping is lexical. Container symlinks and
+submounts can affect what a process actually opens. Inspection is read-only and
+supplies diagnostic evidence for review.

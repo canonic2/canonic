@@ -4,6 +4,8 @@
 //! argv policy.
 use std::{borrow::Cow, collections::BTreeMap};
 
+pub(crate) mod local;
+
 /// The HTTP client a recognized command runs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Client {

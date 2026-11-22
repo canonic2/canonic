@@ -112,6 +112,11 @@ fn invalid_policy_files(problem: &str) -> Report {
 
 fn classify(command: &PublicCommand, error: &Error) -> Report {
     match error {
+        Error::Docker(_) => Report::detailed(
+            "Docker inspection unavailable",
+            "Shield could not inspect this Docker environment.",
+            &[],
+        ),
         Error::Cancelled => Report::new("Cancelled", "The pending change was not confirmed.", &[]),
         Error::Invalid(reason) => invalid(command, reason),
         Error::WebReviewOffered => Report::new(

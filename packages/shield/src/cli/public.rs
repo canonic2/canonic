@@ -84,6 +84,8 @@ pub enum PublicCommand {
     Request(Request),
     /// Inspect or revoke temporary conversation grants, or approve a retained candidate.
     SessionGrant(SessionGrant),
+    /// Inspect standalone Docker development environments.
+    Docker(Docker),
     /// List or inspect agent request decisions and outcomes.
     History(History),
     /// Inspect recorded review suggestions.
@@ -95,6 +97,28 @@ pub enum PublicCommand {
     /// Registered integration transports; not an operator workflow.
     #[command(name = "__internal", hide = true, subcommand)]
     Internal(Box<super::Command>),
+}
+
+/// Read-only observations from an explicitly selected local Docker Engine.
+#[derive(Args)]
+pub struct Docker {
+    #[command(subcommand)]
+    pub command: DockerCommand,
+}
+
+#[derive(Subcommand)]
+pub enum DockerCommand {
+    /// Inspect an exact running container and preview its mount mappings.
+    Inspect {
+        /// Full lowercase container ID, from Docker or Compose.
+        container: String,
+        /// Absolute path to the local Docker Engine Unix socket.
+        #[arg(long, default_value = "/var/run/docker.sock")]
+        socket: PathBuf,
+        /// Absolute container path to compare with the mount table; repeat to inspect several.
+        #[arg(long = "path", value_name = "PATH")]
+        paths: Vec<String>,
+    },
 }
 
 impl PublicCommand {

@@ -676,6 +676,47 @@ impl crate::policy::rules::resources::Resources for Observer {
     fn executable(&self, reference: &Value) -> Option<&'static str> {
         Self::executable(self, reference)
     }
+    fn project_file(
+        &self,
+        raw: &str,
+        predicate: &Value,
+        patterns: &dyn Provider,
+    ) -> Result<Option<&'static str>, Error> {
+        let raw = Path::new(raw);
+        let absolute = if raw.is_absolute() {
+            raw.to_path_buf()
+        } else {
+            let Some(cwd) = self.observed(&self.cwd, true) else {
+                return Ok(Some("evidence_unavailable"));
+            };
+            cwd.join(raw)
+        };
+        let lexical = absolute.components().collect::<PathBuf>();
+        let Some(path) = self.observed(&lexical, true) else {
+            return Ok(Some("evidence_unavailable"));
+        };
+        let Some(project) = self.observed(&self.project, true) else {
+            return Ok(Some("evidence_unavailable"));
+        };
+        if !path.starts_with(project) || lexical != path {
+            return Ok(Some("location_outside"));
+        }
+        if !fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.file_type().is_file()) {
+            return Ok(Some("evidence_unavailable"));
+        }
+        self.path(
+            predicate,
+            &Target {
+                action: "read",
+                role: "argument",
+                path,
+                recursive: false,
+                descendants: Descendants::All,
+                follow: true,
+            },
+            patterns,
+        )
+    }
     fn cwd(
         &self,
         predicate: &Value,

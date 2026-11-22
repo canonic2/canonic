@@ -159,8 +159,9 @@ instead of making the entire rule miss.
 ## Locations and domains
 
 An `argv` rule can match the executable, arguments, and cwd. File rules match
-typed file operations. Shell rules match shell input; web rules match searches
-and fetches; MCP rules match MCP requests. `exact_request` binds the complete
+typed file operations. Shell rules match shell input. Web rules match searches,
+fetches and supported loopback HTTP requests. MCP rules match MCP requests.
+`exact_request` binds the complete
 normalized input and context rather than just the command arguments. The guided
 CLI defaults to that exact-request form; explicitly choosing `argv` broadens the
 vendor/environment binding.
@@ -186,6 +187,98 @@ when the server's path base is unknown, `relative_to: cwd` only when it shares
 the request context's working folder, or
 `relative_to: project` when a verified launcher starts the server at the
 enrolled project root.
+
+### Local HTTP requests
+
+Use action `request` to review a shell HTTP operation by method and endpoint.
+Declare `local-http-requests-v1` and specify both `method` and `url`. The
+following rule permits a POST to one development endpoint on the loopback
+interface.
+
+```yaml
+id: reload-local-service
+decision: allow
+conditions:
+  domain: web
+  action: request
+  method: POST
+  url:
+    schemes: [http]
+    hosts: [127.0.0.1]
+    ports: [8080]
+    path: {exact: /-/reload}
+  request_fields:
+    /body: {exact: false}
+```
+
+The command can use `curl --request POST http://127.0.0.1:8080/-/reload`.
+For a `localhost` or `.localhost` hostname, curl requires `-q` as its
+first option, `--noproxy '*'` and a matching loopback pin such as
+`--resolve api.localhost:8080:127.0.0.1`. The rule must match the hostname
+and port used in the URL. Wget uses the literal `127.0.0.1` address.
+Use literal paths with percent escapes and dot segments omitted.
+
+`request_fields` uses JSON Pointer selectors. `/client` is `shell` and
+`/redirects` is `none`. `/body` and `/basic_auth` are booleans.
+`/headers` is an array of lowercased header names. For a recognized JSON-RPC
+body, `/rpc_method` contains the method and `/rpc_tool` contains the tool
+name for `tools/call`. Header values and credentials are absent from these
+fields. A fetch rule covers its own separate action.
+
+### Isolated Docker validators
+
+The `docker_isolated_bind` requirement checks a `docker --context NAME run`
+invocation. Declare `docker-isolated-bind-v1`, `argument-rules-v1`,
+`requirements-v1` and `location-v1` alongside `structured-rules-v1`.
+
+```yaml
+id: validate-local-config
+decision: allow
+conditions:
+  domain: argv
+  executable: docker
+  arguments:
+    kind: options
+    prefix: [--context, dev, run]
+    flags: [--rm]
+    values: [--pull, --network, --mount, --env]
+    require_all: [--rm, --pull, --network, --mount]
+    parse: stop_at_operand
+    operands:
+      match: {one_of: ["acme/validator:1", check, /etc/acme/config.yml]}
+      min: 3
+      max: 3
+  cwd: {exact: {root: project}}
+requirements:
+  docker_isolated_bind:
+    context: dev
+    image: "acme/validator:1"
+    command: [check, /etc/acme/config.yml]
+    source: {exact: {root: project, path: config.yml}}
+    target: /etc/acme/config.yml
+    environment: [MODE=validate]
+on_unmet:
+  decision: ask
+```
+
+`context` selects the operator's Docker context. `image` and `command`
+match the literal image reference and its entrypoint arguments. Use a digest
+if the image identity must be immutable. `source` selects an existing
+regular project file and `target` names its absolute container path.
+The optional `environment` lists permitted literal `NAME=value`
+assignments for `--env`.
+
+The run requires `--rm`, `--pull never`, `--network none` and a single
+`--mount type=bind,source=…,target=…,readonly`. The source check covers the
+CLI host file. Shield still asks about the image entrypoint because the
+Docker daemon resolves the mounted file on its own host.
+For the rule above, the command is:
+
+```sh
+docker --context dev run --rm --pull never --network none \
+  --mount type=bind,source=./config.yml,target=/etc/acme/config.yml,readonly \
+  --env MODE=validate acme/validator:1 check /etc/acme/config.yml
+```
 
 ## GraphQL requests
 
@@ -353,6 +446,8 @@ Declare exactly the capabilities used anywhere in the document, once each.
 | `structured-rules-v1` | Every document. |
 | `argument-rules-v1` | Argument selectors in argv rules. |
 | `argument-paths-v1` | Explicit argument-path checks. |
+| `docker-isolated-bind-v1` | A `docker_isolated_bind` requirement checks a Docker image invocation and its single read-only project file bind. |
+| `local-http-requests-v1` | The web `request` action selects a method and URL for a supported loopback HTTP request. |
 | `graphql-v1` | Parsed inline GitHub GraphQL query predicates and finite selection models. |
 | `graphql-mutations-v1` | GraphQL predicates with `operation: mutation`. |
 | `graphql-subtree-v1` | Query-root fields with unrestricted descendant selections. |

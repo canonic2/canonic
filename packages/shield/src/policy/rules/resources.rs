@@ -36,6 +36,14 @@ pub(crate) trait Resources {
     fn executable(&self, _reference: &Value) -> Option<&'static str> {
         Some("evidence_unavailable")
     }
+    fn project_file(
+        &self,
+        _path: &str,
+        _predicate: &Value,
+        _patterns: &dyn Provider,
+    ) -> Result<Option<&'static str>, Error> {
+        Ok(Some("evidence_unavailable"))
+    }
     fn cwd(
         &self,
         _predicate: &Value,

@@ -221,7 +221,7 @@ fn domains() -> Value {
         (
             "web",
             web,
-            json!({"action":{"enum":["search","fetch"]}}),
+            json!({"action":{"enum":["search","fetch","request"]}}),
             vec!["domain", "action"],
         ),
         (
@@ -237,6 +237,12 @@ fn domains() -> Value {
             .expect("schema object")
             .extend(predicates.as_object().expect("schema object").clone());
         let mut req = object(fields.clone(), &[]);
+        if domain == "argv" {
+            req["properties"]["docker_isolated_bind"] = object(
+                json!({"context":nonempty(128),"image":nonempty(4096),"command":list(nonempty(4096),1),"source":reference("path"),"target":nonempty(4096),"environment":list(nonempty(4096),1)}),
+                &["context", "image", "command", "source", "target"],
+            );
+        }
         req["minProperties"] = json!(1);
         requirements.push(req);
         fields
@@ -346,7 +352,7 @@ fn historical_input() -> Value {
         ),
         (
             "web",
-            json!({"action":{"enum":["search","fetch"]},"query":nullable(string(1_048_576)),"url":nullable(string(1_048_576)),"method":nullable(string(1_048_576)),"conditions":{"type":"object"}}),
+            json!({"action":{"enum":["search","fetch","request"]},"query":nullable(string(1_048_576)),"url":nullable(string(1_048_576)),"method":nullable(string(1_048_576)),"conditions":{"type":"object"}}),
             vec!["action", "conditions"],
         ),
         (
@@ -395,7 +401,7 @@ fn historical_conditions() -> Value {
         ),
         (
             "web",
-            json!({"action":{"enum":["fetch","search"]},"url":nullable(string(1_048_576)),"query":nullable(string(1_048_576)),"method":nullable(string(1_048_576)),"conditions":{"type":"object"}}),
+            json!({"action":{"enum":["fetch","search","request"]},"url":nullable(string(1_048_576)),"query":nullable(string(1_048_576)),"method":nullable(string(1_048_576)),"conditions":{"type":"object"}}),
             vec!["domain", "action"],
         ),
         (

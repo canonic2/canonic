@@ -22,6 +22,7 @@ Commands:
   rule           List, add, edit or remove project custom rules
   request        List, inspect, approve or deny stored agent requests
   session-grant  Inspect or revoke temporary conversation grants, or approve a retained candidate
+  docker         Inspect standalone Docker development environments
   history        List or inspect agent request decisions and outcomes
   suggestion     Inspect recorded review suggestions
   policy-draft   Inspect retained policy drafts

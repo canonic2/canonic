@@ -264,7 +264,17 @@ fn node_syntax_checks_use_file_policy_without_overriding_explicit_refusals() {
 fn http_client_evaluator(fetch: &Value, explicit: Option<&str>) -> Evaluator {
     use crate::{configuration::Candidate, policy::Scope};
     let clients = json!({"one_of":["curl","wget","/usr/bin/curl","/usr/bin/wget"]});
-    let pack = json!({"schema_version":1,"kind":"pack","id":"acme/baseline","version":"1.0.0","description":"Acme download fixture","license":"MIT","maintainers":["Acme"],"engines":{"shield":env!("CARGO_PKG_VERSION")},"capabilities":["argument-rules-v1","fallback-rules-v1","location-v1","requirements-v1","structured-rules-v1"],"rules":[
+    let mut capabilities = vec![
+        "argument-rules-v1",
+        "fallback-rules-v1",
+        "location-v1",
+        "requirements-v1",
+        "structured-rules-v1",
+    ];
+    if fetch["action"] == "request" {
+        capabilities.push("local-http-requests-v1");
+    }
+    let pack = json!({"schema_version":1,"kind":"pack","id":"acme/baseline","version":"1.0.0","description":"Acme download fixture","license":"MIT","maintainers":["Acme"],"engines":{"shield":env!("CARGO_PKG_VERSION")},"capabilities":capabilities,"rules":[
         {"id":"client-fallback","decision":"ask","fallback":true,"conditions":{"domain":"argv","executable":clients,"arguments":{"kind":"any"}}},
         {"id":"registry","decision":"allow","conditions":fetch},
         {"id":"blocked","decision":"deny","conditions":{"domain":"web","action":"fetch","url":{"schemes":["https"],"hosts":["blocked.example.com"]}}},
@@ -283,6 +293,220 @@ fn http_client_evaluator(fetch: &Value, explicit: Option<&str>) -> Evaluator {
 }
 
 const REGISTRY_FETCH: &str = r#"{"domain":"web","action":"fetch","url":{"schemes":["https"],"hosts":["registry.example.com"]}}"#;
+
+#[test]
+fn local_http_requests_require_the_reviewed_method_route_and_rpc_tool() {
+    let root = assert_fs::TempDir::new().unwrap();
+    let cwd = root.path().to_str().unwrap();
+    let rule = json!({"domain":"web","action":"request","method":"POST",
+        "url":{"schemes":["http"],"hosts":["api.localhost"],"ports":[3333],"path":{"exact":"/mcp"}},
+        "request_fields":{"/rpc_method":{"exact":"tools/call"},"/rpc_tool":{"exact":"list_items"}}});
+    let engine = http_client_evaluator(&rule, None);
+    let body = r#"{"jsonrpc":"2.0","method":"tools/call","params":{"name":"list_items"}}"#;
+    let source = |flags: &str, body: &str, url: &str| {
+        format!(
+            "curl -q --noproxy '*' --resolve api.localhost:3333:127.0.0.1 -sS -X POST {flags} --data-raw '{body}' {url}"
+        )
+    };
+    let url = "http://api.localhost:3333/mcp";
+    for (command, want) in [
+        (
+            source("-H 'Content-Type: application/json'", body, url),
+            "allow",
+        ),
+        (source("-L", body, url), "ask"),
+        (source("", body, "http://api.localhost:3334/mcp"), "ask"),
+        (
+            source("", body, url).replace("--resolve api.localhost:3333:127.0.0.1 ", ""),
+            "ask",
+        ),
+        (source("", body, url).replace("--noproxy '*' ", ""), "ask"),
+        (
+            source("", body, url).replace(
+                "--resolve api.localhost:3333:",
+                "--resolve api.localhost:3334:",
+            ),
+            "ask",
+        ),
+        (
+            source("", body, url).replace(":3333:127.0.0.1", ":3333:192.0.2.1"),
+            "ask",
+        ),
+        (source("-", body, url), "ask"),
+        (source("-H 'Host: other.example'", body, url), "ask"),
+        (source("--proxy http://proxy.localhost", body, url), "ask"),
+        (source("", "@secrets.json", url), "ask"),
+        (source("", body, "http://api.localhost:3333/other"), "ask"),
+        (
+            source("", body, "http://api.localhost:3333/prefix/%2e%2e/mcp"),
+            "ask",
+        ),
+        (
+            source("", body, "http://api.localhost:3333/prefix/../mcp"),
+            "ask",
+        ),
+        (
+            source("", body, "http://api.localhost.evil.test:3333/mcp"),
+            "ask",
+        ),
+        (
+            source("", &body.replace("list_items", "delete_item"), url),
+            "ask",
+        ),
+        (
+            source(
+                "",
+                &body.replace("\"method\":", "\"method\":\"initialize\",\"method\":"),
+                url,
+            ),
+            "ask",
+        ),
+    ] {
+        let result = analyze(&command, Dialect::Posix, cwd, cwd, &engine).unwrap();
+        assert_eq!(result["decision"], want, "{command}");
+    }
+    let legacy_read = http_client_evaluator(
+        &json!({"domain":"web","action":"fetch","url":{"schemes":["http"],"hosts":["api.localhost"]}}),
+        None,
+    );
+    assert_eq!(
+        analyze(
+            &source("", body, url),
+            Dialect::Posix,
+            cwd,
+            cwd,
+            &legacy_read
+        )
+        .unwrap()["decision"],
+        "ask"
+    );
+}
+
+#[test]
+fn local_wget_requests_distinguish_output_syntax_and_require_a_numeric_host() {
+    let root = assert_fs::TempDir::new().unwrap();
+    let cwd = root.path().to_str().unwrap();
+    let engine = http_client_evaluator(
+        &json!({"domain":"web","action":"request","method":"POST",
+        "url":{"schemes":["http"],"hosts":["127.0.0.1","api.localhost","localhost"],"path":{"exact":"/mcp"}}}),
+        None,
+    );
+    for (output, host, expected) in [
+        ("-O -", "127.0.0.1", "allow"),
+        ("-O-", "127.0.0.1", "allow"),
+        ("--output-document=-", "127.0.0.1", "allow"),
+        ("-O=-", "127.0.0.1", "ask"),
+        ("-O=/dev/null", "127.0.0.1", "ask"),
+        ("-O -", "api.localhost", "ask"),
+        ("-O -", "localhost", "ask"),
+    ] {
+        let source = format!(
+            "wget --no-config --no-hsts --no-netrc --no-proxy --max-redirect=0 --post-data '{{}}' {output} http://{host}/mcp"
+        );
+        let result = analyze(&source, Dialect::Posix, cwd, cwd, &engine).unwrap();
+        assert_eq!(result["decision"], expected, "{source}");
+    }
+}
+
+#[test]
+fn docker_isolated_bind_requires_a_reviewed_image_and_regular_project_file() {
+    use crate::{configuration::Candidate, policy::Scope};
+    let root = assert_fs::TempDir::new().unwrap();
+    let path = root.path().canonicalize().unwrap();
+    let cwd = path.to_str().unwrap();
+    std::fs::write(path.join("app.conf"), "configuration").unwrap();
+    std::fs::create_dir(path.join("directory")).unwrap();
+    let rules = json!({"schema_version":1,"kind":"custom","capabilities":[
+    "structured-rules-v1","argument-rules-v1","location-v1","requirements-v1","docker-isolated-bind-v1"],
+    "rules":[{
+        "id":"isolated-validation","decision":"allow",
+        "conditions":{"domain":"argv","executable":"docker",
+            "arguments":{"kind":"prefix","values":["--context","dev","run"]}},
+        "requirements":{"docker_isolated_bind":{"context":"dev","image":"acme/validator:1",
+            "command":["check","/app.conf"],"target":"/app.conf",
+            "source":{"within":{"root":"project"},"match":{"one_of":["app.conf","directory","absent"]}},
+            "environment":["MODE=test","PORT=1234"]}},
+        "on_unmet":{"decision":"ask"}
+    }]});
+    let candidate =
+        Candidate::from_yaml(r#"{"schema_version":1,"packs":[],"rules":"rules.yml"}"#).unwrap();
+    let capture = candidate.capture(&[], Some(&rules.to_string())).unwrap();
+    let engine = Evaluator::new(vec![(Scope::Project, capture)]).unwrap();
+    let mount = "--mount type=bind,source=./app.conf,target=/app.conf,readonly";
+    let command = format!(
+        "docker --context dev run --rm --pull never --network none {mount} acme/validator:1 check /app.conf"
+    );
+    for (source, expected) in [
+        (command.clone(), "allow"),
+        (
+            command.replace("./app.conf", &format!("{cwd}/app.conf")),
+            "allow",
+        ),
+        (command.replace("none", "host"), "ask"),
+        (command.replace("never", "missing"), "ask"),
+        (command.replace("--rm", "--rm --rm"), "ask"),
+        (command.replace(mount, &format!("{mount} {mount}")), "ask"),
+        (command.replace(",readonly", ""), "ask"),
+        (command.replace("--rm", "--rm --privileged"), "ask"),
+        (command.replace("--rm", "--rm --env HOME"), "ask"),
+        (
+            command.replace("--rm", "--rm --env MODE=test --env PORT=1234"),
+            "allow",
+        ),
+        (command.replace("--rm", "--rm --env MODE=production"), "ask"),
+        (
+            command.replace("--rm", "--rm --env MODE=test --env MODE=test"),
+            "ask",
+        ),
+        (command.replace("./app.conf", "./directory"), "ask"),
+        (command.replace("./app.conf", "./absent"), "ask"),
+        (
+            command.replace("acme/validator:1", "acme/validator:2"),
+            "ask",
+        ),
+        (command.replace(" check ", " run "), "ask"),
+        (format!("DOCKER_CONFIG=./client-config {command}"), "allow"),
+    ] {
+        let result = analyze(&source, Dialect::Posix, cwd, cwd, &engine).unwrap();
+        assert_eq!(result["decision"], "ask", "{source}");
+        let outer = result["operations"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|operation| operation["request"]["executable"] == "docker")
+            .unwrap();
+        assert_eq!(outer["decision"], expected, "{source}");
+    }
+    #[cfg(unix)]
+    {
+        let alias = path.join("alias");
+        std::os::unix::fs::symlink(&path, &alias).unwrap();
+        let alias = alias.to_str().unwrap();
+        let result = analyze(&command, Dialect::Posix, alias, cwd, &engine).unwrap();
+        assert_eq!(result["decision"], "ask");
+        assert!(
+            result["operations"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|operation| {
+                    operation["request"]["executable"] == "docker"
+                        && operation["decision"] == "allow"
+                })
+        );
+        let through_alias = command.replace("./app.conf", "./alias/app.conf");
+        let result = analyze(&through_alias, Dialect::Posix, cwd, cwd, &engine).unwrap();
+        assert!(
+            result["operations"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|operation| {
+                    operation["request"]["executable"] == "docker" && operation["decision"] == "ask"
+                })
+        );
+    }
+}
 
 #[test]
 fn curl_batches_check_every_host_and_the_output_before_allowing() {
@@ -3803,7 +4027,10 @@ fn explicit_container_programs_take_their_own_policy_decision() {
     let rules = crate::policy::rules::document(&[
         allow("exec", "docker", "prefix", &["exec"]),
         allow("run", "docker", "prefix", &["run"]),
+        allow("compose", "docker", "prefix", &["compose"]),
         allow("read", "acme", "exact", &["read"]),
+        json!({"id":"blocked","decision":"deny","reason":"Acme restricted","conditions":{"domain":"argv",
+            "executable":"acme","arguments":{"kind":"exact","values":["blocked"]}}}),
         json!({"id":"env","decision":"allow","reason":"Acme routine","conditions":{"domain":"argv",
             "executable":"env","arguments":{"kind":"any"}}}),
         json!({"id":"git","decision":"allow","reason":"Acme routine","conditions":{"domain":"argv",
@@ -3826,6 +4053,26 @@ fn explicit_container_programs_take_their_own_policy_decision() {
     for (source, decision, uninspected) in [
         ("docker exec acme-container acme read", "allow", false),
         ("docker exec acme-container acme write", "ask", false),
+        ("docker compose exec -T api acme read", "allow", false),
+        (
+            "docker compose -f compose.yml exec --index=2 api acme blocked",
+            "deny",
+            false,
+        ),
+        (
+            "docker compose --workdir . exec api acme blocked",
+            "deny",
+            false,
+        ),
+        (
+            "docker compose --verbose exec api acme blocked",
+            "deny",
+            false,
+        ),
+        ("docker compose --unknown exec api acme read", "ask", true),
+        ("docker compose exec api acme write", "ask", false),
+        ("docker compose exec --unknown api acme read", "ask", true),
+        ("docker compose exec --help", "allow", false),
         ("docker exec acme-container env acme write", "ask", true),
         (
             "docker exec acme-container sh -c 'acme write'",
@@ -3853,6 +4100,43 @@ fn explicit_container_programs_take_their_own_policy_decision() {
         assert_eq!(result["decision"], decision, "{source}");
         assert_eq!(indirect(&result), uninspected, "{source}");
     }
+}
+
+#[test]
+fn container_local_web_restrictions_apply_to_explicit_argv_permissions() {
+    use crate::{configuration::Candidate, policy::Scope};
+    let rules = crate::policy::rules::document(&[
+        json!({"id":"docker","decision":"allow","conditions":{"domain":"argv","executable":"docker","arguments":{"kind":"prefix","values":["exec"]}}}),
+        json!({"id":"client","decision":"allow","conditions":{"domain":"argv","executable":"curl","arguments":{"kind":"prefix","values":["-q"]}}}),
+        json!({"id":"blocked","decision":"deny","conditions":{"domain":"web","action":"request","method":"POST","url":{"schemes":["http"],"hosts":["127.0.0.1"],"path":{"exact":"/blocked"}}}}),
+        json!({"id":"review","decision":"ask","conditions":{"domain":"web","action":"request","method":"POST","url":{"schemes":["http"],"hosts":["127.0.0.1"],"path":{"exact":"/review"}}}}),
+        json!({"id":"review-read","decision":"ask","conditions":{"domain":"web","action":"request","method":"GET","url":{"schemes":["http"],"hosts":["127.0.0.1"],"path":{"exact":"/review"}}}}),
+        json!({"id":"permitted","decision":"allow","conditions":{"domain":"web","action":"request","method":"POST","url":{"schemes":["http"],"hosts":["127.0.0.1"],"path":{"exact":"/allowed"}}}}),
+    ]).unwrap().to_string();
+    let candidate =
+        Candidate::from_yaml("schema_version: 1\npacks: []\nrules: rules.json\n").unwrap();
+    let evaluator = Evaluator::new(vec![(
+        Scope::Project,
+        candidate.capture(&[], Some(&rules)).unwrap(),
+    )])
+    .unwrap();
+    let cwd = crate::test_support::absolute("/acme");
+    for (flags, path, expected) in [
+        ("-q --noproxy '*'", "blocked", "deny"),
+        ("-q", "blocked", "deny"),
+        ("-q --noproxy '*'", "review", "ask"),
+        ("-q --noproxy '*'", "unlisted", "allow"),
+        ("--noproxy '*'", "allowed", "ask"),
+    ] {
+        let source = format!("docker exec app curl {flags} -X POST http://127.0.0.1/{path}");
+        let result = analyze(&source, Dialect::Posix, &cwd, &cwd, &evaluator).unwrap();
+        assert_eq!(result["decision"], expected, "{source}");
+    }
+    let result = analyze(
+        "docker exec app curl -q --noproxy '*' -H 'Accept: application/json' http://127.0.0.1/unlisted http://127.0.0.1/review",
+        Dialect::Posix, &cwd, &cwd, &evaluator,
+    ).unwrap();
+    assert_eq!(result["decision"], "ask");
 }
 
 fn same_named_pack_fixture(id: &str, capabilities: &Value, rules: &Value) -> String {

@@ -523,6 +523,10 @@ fn primary_result(command: &PublicCommand, value: &Value) -> String {
             output
         }
         PublicCommand::SessionGrant(_) => session_grant(value),
+        PublicCommand::Docker(_) => format!(
+            "Docker environment preview\n{}",
+            serde_json::to_string_pretty(&value["docker"]).expect("Docker preview")
+        ),
         PublicCommand::Status(args) | PublicCommand::Doctor(args) if args.section.is_some() => format!("{}\n",serde_json::to_string_pretty(value).expect("JSON page")),
         PublicCommand::Status(_) => activity::status(value, false),
         PublicCommand::Doctor(_) => activity::status(value, true),

@@ -134,11 +134,20 @@ impl Input {
                 action,
                 query,
                 url,
+                method,
                 conditions,
                 ..
             } if conditions.is_object()
                 && ((action == "fetch" && url.is_some())
-                    || (action == "search" && query.is_some())) =>
+                    || (action == "search" && query.is_some())
+                    || (action == "request"
+                        && url
+                            .as_deref()
+                            .and_then(crate::http_client::local::local_url)
+                            .is_some()
+                        && method.as_deref().is_some_and(|method| {
+                            crate::http_client::local::METHODS.contains(&method)
+                        }))) =>
             {
                 Ok(())
             }

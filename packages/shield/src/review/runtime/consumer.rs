@@ -53,6 +53,7 @@ pub enum RuntimeError {
 impl From<Error> for RuntimeError {
     fn from(error: Error) -> Self {
         match error {
+            Error::Docker(_) => Self::Invalid("Docker Engine observation failed"),
             Error::RegistryRevoked {
                 source_identity,
                 pack,
