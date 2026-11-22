@@ -413,9 +413,26 @@ fn tool_permissions(output: &mut String, value: &Value) {
             }
         );
         let _ = writeln!(output, "  Policy changes still require your confirmation.");
+        let selected = |id: &str| {
+            value["agents"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .any(|agent| agent["agent"] == id)
+        };
         let _ = writeln!(
             output,
-            "  Agents can read/write their skill folders and system temporary folders. Session files use each agent's supported mappings."
+            "  Agents can read/write their skill folders and system temporary folders.{}{} Session files use each agent's supported mappings.",
+            if selected("claude") {
+                " Claude can also read/write its memory folder for this project."
+            } else {
+                ""
+            },
+            if selected("codex") {
+                " Codex can also read its installed plugin files."
+            } else {
+                ""
+            },
         );
     }
 }

@@ -10,7 +10,7 @@ Agent integrations
   Hooks and MCP run [SHIELD] for this project.
   51 of 52 Shield MCP tools run without asking; ask each time: policy_apply.
   Policy changes still require your confirmation.
-  Agents can read/write their skill folders and system temporary folders. Session files use each agent's supported mappings.
+  Agents can read/write their skill folders and system temporary folders. Claude can also read/write its memory folder for this project. Session files use each agent's supported mappings.
 
   Files
     .mcp.json                    created    Claude Code MCP server

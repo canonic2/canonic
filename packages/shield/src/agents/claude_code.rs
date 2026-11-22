@@ -103,7 +103,7 @@ impl AgentAdapter for ClaudeCode {
         &ClaudeCode
     }
     fn working_file_categories(&self) -> &'static [&'static str] {
-        &["temporary", "session_tool_results", "skills"]
+        &["temporary", "session_tool_results", "skills", "memory"]
     }
     /// Claude gives hooks the folder whose settings it loaded; the hook
     /// input's `cwd` instead follows the agent's `cd`.
@@ -124,10 +124,9 @@ impl AgentAdapter for ClaudeCode {
         scope
             .skills
             .extend(super::working_files::skill_directories(candidates));
-        if let Some(config) = config
-            && let Some(root) = artifacts::root(host, project, &config)
-        {
-            scope.read.push(root);
+        if let Some(config) = config {
+            scope.skills.extend(artifacts::memory(project, &config));
+            scope.read.extend(artifacts::root(host, project, &config));
         }
         scope
     }

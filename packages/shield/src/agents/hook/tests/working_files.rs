@@ -206,6 +206,8 @@ fn default_temporary_access_fixture() {
     );
     assert!(!temp.path().join("new-unowned-name").exists());
     check_skill_access(root);
+    check_claude_memory_access(root);
+    check_codex_plugin_and_memory_access(root);
     check_google_skill_access(root);
     check_google_session_access(root);
 }
@@ -419,6 +421,118 @@ fn check_skill_access(project: &Path) {
     ] {
         check_agent_skills(project, agent, own, foreign, local, &shared);
     }
+}
+
+/// Claude keeps this project's memory beside its sessions; it may be created
+/// on first use, while other projects' memory and the configuration stay shut.
+fn check_claude_memory_access(project: &Path) {
+    let claude =
+        crate::agents::working_files::configuration("CLAUDE_CONFIG_DIR", ".claude").unwrap();
+    let key: String = project
+        .canonicalize()
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect();
+    let memory = claude.join("projects").join(&key).join("memory");
+    let other = claude.join("projects/-acme-other-project/memory");
+    fs::create_dir_all(&other).unwrap();
+    fs::write(other.join("MEMORY.md"), "Other memory").unwrap();
+    let write = |file: &Path| {
+        tool(
+            project,
+            "claude",
+            "Write",
+            &json!({"file_path":file,"content":"Acme memory"}),
+        )
+    };
+    let read = |file: &Path| tool(project, "claude", "Read", &json!({"file_path":file}));
+    assert!(
+        find("claude")
+            .unwrap()
+            .working_file_categories()
+            .contains(&"memory")
+    );
+    // Neither the project folder nor the memory folder exists yet.
+    assert!(!memory.parent().unwrap().exists());
+    assert_permitted(&write(&memory.join("acme-note.md")), "claude");
+    fs::create_dir_all(&memory).unwrap();
+    fs::write(memory.join("MEMORY.md"), "Acme memory").unwrap();
+    assert_permitted(&read(&memory.join("MEMORY.md")), "claude");
+    assert_permitted(&write(&memory.join("MEMORY.md")), "claude");
+    if !cfg!(windows) {
+        let value = call(
+            project,
+            "claude",
+            &format!("cat '{}'", memory.join("MEMORY.md").display()),
+        );
+        assert_permitted(&value, "claude");
+    }
+    for path in [
+        other.join("MEMORY.md"),
+        claude
+            .join("projects")
+            .join(&key)
+            .join("acme-session.jsonl"),
+        claude.join("credentials.json"),
+    ] {
+        let value = write(&path);
+        assert!(!reason(&value).is_empty(), "{path:?}: {value}");
+    }
+    let value = read(&other.join("MEMORY.md"));
+    assert!(!reason(&value).is_empty(), "{value}");
+    #[cfg(unix)]
+    {
+        // A memory link cannot redirect the scope to another project's notes.
+        fs::remove_dir_all(&memory).unwrap();
+        std::os::unix::fs::symlink(&other, &memory).unwrap();
+        let value = write(&memory.join("MEMORY.md"));
+        assert!(!reason(&value).is_empty(), "{value}");
+        fs::remove_file(&memory).unwrap();
+    }
+}
+
+/// Codex reads its installed plugins' skills without changing them; the plugin
+/// staging folder and its machine-wide memory store, shared by every project
+/// and written by Codex itself, stay shut.
+fn check_codex_plugin_and_memory_access(project: &Path) {
+    let codex = crate::agents::working_files::configuration("CODEX_HOME", ".codex").unwrap();
+    let categories = find("codex").unwrap().working_file_categories();
+    assert!(categories.contains(&"runtime_assets") && !categories.contains(&"memory"));
+    let plugin = codex.join("plugins/cache/acme-market/acme/1.0.0/skills/acme");
+    let staging = codex.join("plugins/.remote-plugin-install-staging/acme");
+    for folder in [&plugin, &staging] {
+        fs::create_dir_all(folder).unwrap();
+        fs::write(folder.join("SKILL.md"), "Acme plugin skill").unwrap();
+    }
+    let skill = plugin.join("SKILL.md");
+    assert_permitted(&read_skill(project, "codex", &skill), "codex");
+    if !cfg!(windows) {
+        let value = call(project, "codex", &format!("cat '{}'", skill.display()));
+        assert_permitted(&value, "codex");
+    }
+    for path in [skill.clone(), plugin.join("new.md")] {
+        let value = write_skill(project, "codex", &path);
+        assert!(!reason(&value).is_empty(), "{path:?}: {value}");
+    }
+    let value = read_skill(project, "codex", &staging.join("SKILL.md"));
+    assert!(!reason(&value).is_empty(), "{value}");
+    for store in ["memories", "memories_v2"] {
+        let note = codex.join(store).join("MEMORY.md");
+        fs::create_dir_all(note.parent().unwrap()).unwrap();
+        fs::write(&note, "Other project's memory").unwrap();
+        for value in [
+            read_skill(project, "codex", &note),
+            write_skill(project, "codex", &note),
+        ] {
+            assert!(!reason(&value).is_empty(), "{store}: {value}");
+        }
+    }
+    // Claude gets neither Codex scope.
+    let value = read_skill(project, "claude", &skill);
+    assert!(!reason(&value).is_empty(), "{value}");
 }
 
 fn read_skill(project: &Path, agent: &str, file: &Path) -> Value {

@@ -364,16 +364,33 @@ scratch under home follows ordinary project access or an explicitly reviewed
 `access_paths` grant.
 
 For Claude native hooks, the read union also includes the current session's
-`tool-results` directory when its transcript path matches the registered project,
-session ID and configured Claude directory. This allows inspection of persisted
-tool output through Read or supported text filters. Outside temporary folders,
-other sessions, settings, credentials and writes receive no extra access through
-this session scope. Directory or operand symlinks
-cannot redirect this scope outside the verified artifact directory. The scope is
+output folder, `projects/<encoded-project>/<session>/`, when the transcript path
+matches the registered project, session ID and configured Claude directory. It
+holds persisted tool results and subagent and workflow output, which the agent
+can inspect through Read or supported text filters. The session transcript beside
+that folder, other sessions, settings, credentials and writes receive no extra
+access through this session scope. Directory or operand symlinks
+cannot redirect this scope outside the verified session folder. The scope is
 observed afresh for each callback and is unavailable to MCP diagnostic input.
 
-Status lists `skills` among the supported working-file categories. Other runtime
-assets and scratch folders outside temporary roots are not automatically discovered.
+Claude's auto-memory folder for the registered project,
+`projects/<encoded-repository>/memory` under the configured Claude directory, is
+readable and writable, including creating it, so Claude can keep its memory
+notes. As in Claude, the folder belongs to the Git repository holding the
+project, so its subfolders and linked worktrees share it; outside a repository
+it belongs to the project folder. Other memory folders and the rest of the
+Claude directory get no extra access. A folder chosen with Claude's
+`autoMemoryDirectory` setting follows ordinary policy.
+
+For Codex native hooks, installed plugins under `plugins/cache/` in
+`CODEX_HOME` are readable but not writable, so Codex can open its plugins'
+skills. Plugin staging folders, Codex's memory store, which Codex shares across
+projects and updates itself, and the rest of the Codex home get no extra access.
+
+Status lists `skills` among the supported working-file categories, `memory` for
+Claude and `runtime_assets` for Codex. Setup's review names the memory and
+plugin access of the agents it configures. Other runtime assets and scratch folders outside
+temporary roots are not automatically discovered.
 
 ### Shell analysis
 

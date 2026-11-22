@@ -10,16 +10,16 @@ pub(super) fn configuration(override_name: &str, default: &str) -> Option<PathBu
         .or_else(|| std::env::home_dir().map(|home| home.join(default)))
 }
 
-/// Skill roots may be created by the agent. Verify each existing component
-/// below the trusted base; a project marker or skills link cannot redirect it.
-pub(super) fn skill_directories(
-    candidates: impl IntoIterator<Item = (PathBuf, &'static str)>,
+/// Skill and memory roots may be created by the agent. Verify each existing
+/// component below the trusted base; a project marker or link cannot redirect it.
+pub(super) fn skill_directories<S: AsRef<Path>>(
+    candidates: impl IntoIterator<Item = (PathBuf, S)>,
 ) -> Vec<PathBuf> {
     let mut roots = candidates
         .into_iter()
         .filter_map(|(base, suffix)| {
             let mut path = base.canonicalize().ok()?;
-            for part in Path::new(suffix).components() {
+            for part in suffix.as_ref().components() {
                 if !matches!(part, std::path::Component::Normal(_)) {
                     return None;
                 }

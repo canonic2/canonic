@@ -5,7 +5,8 @@ use std::path::PathBuf;
 pub(crate) struct WorkingFiles {
     pub read: Vec<PathBuf>,
     pub write: Vec<PathBuf>,
-    /// Adapter-selected skill libraries, editable without opening configuration.
+    /// Adapter-selected skill libraries and agent memory folders, editable
+    /// without opening the configuration folder around them.
     pub skills: Vec<PathBuf>,
     /// Adapter-selected configuration folders; temporary access never opens them.
     pub protected: Vec<PathBuf>,

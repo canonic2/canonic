@@ -81,7 +81,7 @@ impl AgentAdapter for Codex {
         &Codex
     }
     fn working_file_categories(&self) -> &'static [&'static str] {
-        &["temporary", "skills"]
+        &["temporary", "skills", "runtime_assets"]
     }
     /// Codex's hook `cwd` is the session folder, never a command's workdir.
     fn session_dir(
@@ -101,7 +101,15 @@ impl AgentAdapter for Codex {
             (project.to_path_buf(), ".codex/skills"),
             (project.to_path_buf(), ".agents/skills"),
         ];
-        candidates.extend(config.map(|config| (config, "skills")));
+        if let Some(config) = config {
+            candidates.push((config.clone(), "skills"));
+            // Installed plugins' skills and files are readable, never writable.
+            scope.read.extend(
+                super::working_files::skill_directories([(config, "plugins/cache")])
+                    .into_iter()
+                    .filter(|path| path.is_dir()),
+            );
+        }
         candidates.extend(
             scope
                 .home
