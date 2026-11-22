@@ -3980,6 +3980,10 @@ fn published_docker_and_baseline_packs_preserve_container_policy() {
                "conditions":{"domain":"web","action":"fetch","url":{"schemes":["https"],"hosts":["review.example.com"]}}}),
         json!({"id":"allow-fetch-argv","decision":"allow","reason":"Test typed restrictions on a previously allowed client.",
                "conditions":{"domain":"argv","executable":"curl","arguments":{"kind":"prefix","values":["-q","https://first.example.com"]}}}),
+        json!({"id":"require-long-listing","decision":"allow","reason":"Require detailed output for this listing.",
+               "conditions":{"domain":"argv","executable":"ls","arguments":{"kind":"options","prefix":[],"flags":["-l"],"values":[],"operands":{"match":{"exact":"/acme/review"},"min":1,"max":1}}},
+               "requirements":{"arguments":{"kind":"exact","values":["-l","/acme/review"]}},
+               "on_unmet":{"decision":"deny"}}),
     ])
     .unwrap()
     .to_string();
@@ -4006,6 +4010,7 @@ fn published_docker_and_baseline_packs_preserve_container_policy() {
         assert_published_container_cases(&recommended, cwd, version);
         assert_published_container_fetches(&recommended, cwd, version, loopback);
         assert_container_yield_evidence(&recommended, cwd);
+        assert_container_read_argument_requirement(&recommended, cwd);
         if version == "0.17.0" {
             let strict = evaluator("strict", "{}", "{}");
             let result = analyze(
@@ -4210,6 +4215,7 @@ fn assert_container_rule_decisions(
 }
 
 fn assert_container_yield_evidence(evaluator: &Evaluator, cwd: &str) {
+    use crate::policy::resolution::normalized::{Context, Input};
     for (source, reason) in [
         (
             "docker --context acme exec app wget --help",
@@ -4220,26 +4226,96 @@ fn assert_container_yield_evidence(evaluator: &Evaluator, cwd: &str) {
             "container-web-policy",
         ),
     ] {
-        let result = analyze(source, Dialect::Posix, cwd, cwd, evaluator).unwrap();
+        let result = evaluator
+            .evaluate_normalized(
+                &Input::Shell {
+                    source: source.into(),
+                    dialect: "posix".into(),
+                    dialect_version: None,
+                    original_input: json!({"command":source}),
+                },
+                &Context {
+                    cwd: cwd.into(),
+                    environment: None,
+                    working_files: None,
+                },
+                cwd,
+                None,
+                "2026-11-22T00:00:00Z",
+                &|| Ok(()),
+            )
+            .unwrap();
+        let yielded = |matched: &Value| {
+            matched["rule_id"] == "shared-review-curl"
+                && matched["applied"] == false
+                && matched["yielded_reason"] == reason
+        };
         assert!(
-            result["operations"]
+            result["analysis_coverage"]["operations"]
                 .as_array()
                 .unwrap()
                 .iter()
                 .any(|operation| {
                     operation["evaluation"]["evaluation"]["matches"]
                         .as_array()
-                        .is_some_and(|matches| {
-                            matches.iter().any(|matched| {
-                                matched["rule_id"] == "shared-review-curl"
-                                    && matched["applied"] == false
-                                    && matched["yielded_reason"] == reason
-                            })
-                        })
+                        .is_some_and(|matches| matches.iter().any(yielded))
                 }),
             "{source} should report its yielded client review"
         );
+        assert!(
+            result["explanation"]["matches"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|matched| yielded(matched) && matched["operation_ref"].is_string()),
+            "{source} should retain its yielded client review in the history explanation"
+        );
     }
+}
+
+fn assert_container_read_argument_requirement(evaluator: &Evaluator, cwd: &str) {
+    let result = analyze(
+        "docker --context acme exec app ls /acme/review",
+        Dialect::Posix,
+        cwd,
+        cwd,
+        evaluator,
+    )
+    .unwrap();
+    assert_eq!(result["decision"], "deny");
+    let operations = result["operations"].as_array().unwrap();
+    let contained_read = operations
+        .iter()
+        .find(|operation| operation["request"]["executable"] == "ls")
+        .unwrap();
+    let matches = contained_read["evaluation"]["evaluation"]["matches"]
+        .as_array()
+        .unwrap();
+    assert!(matches.iter().any(|matched| {
+        matched["rule_id"] == "read-ls"
+            && matched["branch"] == "met"
+            && matched["requirement_checks"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|check| {
+                    check["predicate_path"] == "/requirements/targets"
+                        && check["evidence"]["namespace"] == "container"
+                })
+    }));
+    assert!(matches.iter().any(|matched| {
+        matched["rule_id"] == "require-long-listing"
+            && matched["applied"] == true
+            && matched["branch"] == "unmet"
+            && matched["requirement_checks"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|check| {
+                    check["predicate_path"] == "/requirements/arguments"
+                        && check["status"] == "failed"
+                })
+    }));
 }
 
 #[test]

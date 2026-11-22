@@ -110,7 +110,11 @@ impl Evaluation {
                 continue;
             };
             let reference = reference(operation);
-            for matched in evaluation.matches.iter().filter(|matched| matched.applied) {
+            for matched in evaluation
+                .matches
+                .iter()
+                .filter(|matched| matched.applied || matched.yielded_reason.is_some())
+            {
                 if !self.explanation.matches.iter().any(|existing| {
                     existing.source == matched.source
                         && existing.rule_id == matched.rule_id
@@ -124,7 +128,7 @@ impl Evaluation {
                         .into();
                     self.explanation.matches.push(annotated);
                 }
-                if self.explanation.reason == "unmatched-normalized-request" {
+                if matched.applied && self.explanation.reason == "unmatched-normalized-request" {
                     self.explanation.reason = "matched-policy";
                 }
             }

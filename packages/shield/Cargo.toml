@@ -1,6 +1,6 @@
 [package]
 name = "canonic-shield"
-version = "0.50.1"
+version = "0.50.2"
 edition = "2024"
 rust-version = "1.102"
 publish = false

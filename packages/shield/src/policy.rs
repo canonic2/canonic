@@ -377,7 +377,7 @@ pub struct Match {
     pub(crate) reason: String,
     specificity: u8,
     pub(crate) applied: bool,
-    yielded_reason: Option<&'static str>,
+    pub(crate) yielded_reason: Option<&'static str>,
     tier: u8,
     branch: &'static str,
     requirement_checks: Vec<rules::Check>,
