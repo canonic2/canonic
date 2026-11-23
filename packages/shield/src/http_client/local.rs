@@ -1,6 +1,9 @@
 //! Closed grammar for requests to explicitly reviewed local development routes.
 
-use super::{Client, Fetch, inspection_write_out, literal_url, positive, set_once};
+use super::{
+    Client, Fetch, curl_value_option, header_parts, inspection_write_out, literal_url, positive,
+    set_once,
+};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
@@ -12,11 +15,46 @@ pub(crate) struct Request<'a> {
 }
 
 pub(crate) const METHODS: [&str; 5] = ["GET", "HEAD", "POST", "OPTIONS", "DELETE"];
+pub(crate) const HOSTNAME_RESOLUTION: &str = "/hostname_resolution";
+pub(crate) const SYSTEM_RESOLUTION: &str = "system";
+pub(crate) const HOSTNAME_RESOLUTION_CAPABILITY: &str = "local-http-hostname-resolution-v1";
 
-pub(crate) fn requests<'a>(executable: &str, args: &[&'a str]) -> Option<Vec<Request<'a>>> {
+pub(crate) fn uses_hostname_resolution(fields: &Value) -> bool {
+    fields.pointer(HOSTNAME_RESOLUTION).and_then(Value::as_str) == Some(SYSTEM_RESOLUTION)
+}
+
+pub(crate) fn requests<'a>(executable: &str, args: &[&'a str]) -> Option<Vec<Option<Request<'a>>>> {
     match super::client(executable)? {
         Client::Curl => curl(args),
-        Client::Wget => wget(args).map(|request| vec![request]),
+        Client::Wget => wget(args).map(|request| vec![Some(request)]),
+    }
+}
+
+#[derive(Default)]
+enum CurlMethod {
+    #[default]
+    Automatic,
+    Head,
+    Explicit(&'static str),
+}
+
+impl CurlMethod {
+    fn set_explicit(&mut self, value: &str) -> Option<()> {
+        let method = METHODS.into_iter().find(|known| *known == value)?;
+        if matches!(self, Self::Explicit(_)) || matches!(self, Self::Head) && method != "HEAD" {
+            return None;
+        }
+        *self = Self::Explicit(method);
+        Some(())
+    }
+
+    fn set_head(&mut self) -> Option<()> {
+        match self {
+            Self::Automatic => *self = Self::Head,
+            Self::Head | Self::Explicit("HEAD") => {}
+            Self::Explicit(_) => return None,
+        }
+        Some(())
     }
 }
 
@@ -24,7 +62,7 @@ pub(crate) fn requests<'a>(executable: &str, args: &[&'a str]) -> Option<Vec<Req
 struct Curl<'a> {
     urls: Vec<&'a str>,
     resolve: BTreeSet<(&'a str, u16)>,
-    method: Option<&'a str>,
+    method: CurlMethod,
     body: Option<&'a str>,
     headers: BTreeSet<String>,
     skips_config: bool,
@@ -35,7 +73,7 @@ struct Curl<'a> {
 impl<'a> Curl<'a> {
     fn value(&mut self, flag: &str, value: &'a str) -> Option<()> {
         match flag {
-            "request" => set_once(&mut self.method, value),
+            "request" => self.method.set_explicit(value),
             "data-raw" => set_once(&mut self.body, value),
             "header" => self.header(value),
             "user"
@@ -71,12 +109,8 @@ impl<'a> Curl<'a> {
     }
 
     fn header(&mut self, value: &str) -> Option<()> {
-        let (name, content) = value.split_once(':')?;
+        let (name, content) = header_parts(value)?;
         let name = name.to_ascii_lowercase();
-        let content = content.trim();
-        if !plain(value) || content.is_empty() {
-            return None;
-        }
         let safe = match name.as_str() {
             "content-type" => content == "application/json",
             "origin" => local_url(content).is_some_and(|url| url.path() == "/"),
@@ -90,11 +124,13 @@ impl<'a> Curl<'a> {
         (safe && self.headers.insert(name)).then_some(())
     }
 
-    fn finish(self) -> Option<Vec<Request<'a>>> {
-        let method = self
-            .method
-            .unwrap_or(if self.body.is_some() { "POST" } else { "GET" });
-        let method = METHODS.into_iter().find(|known| *known == method)?;
+    fn finish(self) -> Option<Vec<Option<Request<'a>>>> {
+        let method = match self.method {
+            CurlMethod::Automatic if self.body.is_some() => "POST",
+            CurlMethod::Automatic => "GET",
+            CurlMethod::Head => "HEAD",
+            CurlMethod::Explicit(method) => method,
+        };
         if self.urls.is_empty()
             || self.urls.len() > 64
             || (method != "POST" && self.body.is_some())
@@ -104,32 +140,37 @@ impl<'a> Curl<'a> {
             return None;
         }
         let fields = fields(self.body, self.basic_auth, &self.headers)?;
-        self.urls
-            .into_iter()
-            .map(|url| {
-                let target = local_url(url)?;
-                let host = literal_host(url)?;
-                if host != "127.0.0.1"
-                    && !(self.skips_config
-                        && self.proxy_disabled
-                        && Some(host) == target.host_str()
-                        && self
-                            .resolve
-                            .contains(&(host, target.port_or_known_default()?)))
-                {
-                    return None;
-                }
-                Some(Request {
-                    transfer: transfer(Client::Curl, url, method, self.skips_config),
-                    proxy_disabled: self.proxy_disabled,
-                    fields: fields.clone(),
+        Some(
+            self.urls
+                .into_iter()
+                .map(|url| {
+                    let target = local_url(url)?;
+                    let mut fields = fields.clone();
+                    match literal_host(url)? {
+                        "127.0.0.1" => {}
+                        host if Some(host) != target.host_str() => return None,
+                        _ if self.resolve.is_empty() => {
+                            fields["hostname_resolution"] = json!(SYSTEM_RESOLUTION);
+                        }
+                        host if self.skips_config
+                            && self.proxy_disabled
+                            && self
+                                .resolve
+                                .contains(&(host, target.port_or_known_default()?)) => {}
+                        _ => return None,
+                    }
+                    Some(Request {
+                        transfer: transfer(Client::Curl, url, method, self.skips_config),
+                        proxy_disabled: self.proxy_disabled,
+                        fields,
+                    })
                 })
-            })
-            .collect()
+                .collect(),
+        )
     }
 }
 
-fn curl<'a>(args: &[&'a str]) -> Option<Vec<Request<'a>>> {
+fn curl<'a>(args: &[&'a str]) -> Option<Vec<Option<Request<'a>>>> {
     let mut parsed = Curl::default();
     let mut args = args.iter().copied().peekable();
     if args.next_if_eq(&"-q").is_some() {
@@ -149,6 +190,7 @@ fn curl<'a>(args: &[&'a str]) -> Option<Vec<Request<'a>>> {
                     "silent" | "show-error" | "fail" | "fail-with-body" | "include" | "globoff",
                     None,
                 ) => (),
+                ("head", None) => parsed.method.set_head()?,
                 _ => parsed.value(flag, attached.or_else(|| args.next())?)?,
             }
         } else if let Some(short) = arg.strip_prefix('-') {
@@ -158,6 +200,10 @@ fn curl<'a>(args: &[&'a str]) -> Option<Vec<Request<'a>>> {
             for (index, flag) in short.char_indices() {
                 let name = match flag {
                     's' | 'S' | 'f' | 'i' | 'g' => continue,
+                    'I' => {
+                        parsed.method.set_head()?;
+                        continue;
+                    }
                     flag => curl_value_option(flag)?,
                 };
                 let attached = &short[index + 1..];
@@ -176,18 +222,6 @@ fn curl<'a>(args: &[&'a str]) -> Option<Vec<Request<'a>>> {
         }
     }
     parsed.finish()
-}
-
-fn curl_value_option(flag: char) -> Option<&'static str> {
-    Some(match flag {
-        'X' => "request",
-        'H' => "header",
-        'm' => "max-time",
-        'w' => "write-out",
-        'u' => "user",
-        'o' => "output",
-        _ => return None,
-    })
 }
 
 /// Report credential operands by argument index. Evidence scanning also
@@ -345,7 +379,7 @@ pub(crate) fn local_url(value: &str) -> Option<url::Url> {
     .then_some(url)
 }
 
-fn local_name(host: &str) -> bool {
+pub(crate) fn local_name(host: &str) -> bool {
     host == "localhost" || host.ends_with(".localhost")
 }
 
@@ -398,4 +432,26 @@ fn identifier(value: &str) -> bool {
 
 fn plain(value: &str) -> bool {
     !value.chars().any(char::is_control)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn curl_head_options_accept_head_in_either_order_and_reject_conflicts() {
+        for (options, expected) in [
+            (&["-I"][..], Some("HEAD")),
+            (&["-I", "--head", "-X", "HEAD"], Some("HEAD")),
+            (&["-X", "HEAD", "-I", "--head"], Some("HEAD")),
+            (&["-I", "-X", "GET"], None),
+            (&["-X", "GET", "-I"], None),
+            (&["-X", "HEAD", "-I", "-X", "HEAD"], None),
+        ] {
+            let mut arguments = options.to_vec();
+            arguments.extend(["-H", "Accept: application/json", "http://127.0.0.1/"]);
+            let method = super::curl(&arguments)
+                .and_then(|requests| requests.into_iter().next().flatten())
+                .map(|request| request.transfer.method);
+            assert_eq!(method, expected, "{options:?}");
+        }
+    }
 }

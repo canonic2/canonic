@@ -1135,6 +1135,39 @@ fn web_rules_parse_url_authority_and_typed_fields() {
 }
 
 #[test]
+fn local_http_hostname_resolution_allow_requires_one_endpoint() {
+    let rule = json!({"id":"metrics","decision":"allow","conditions":{
+        "domain":"web","action":"request","method":"POST",
+        "url":{"schemes":["http"],"hosts":["metrics.workspace.localhost"],"ports":[8080],"path":{"exact":"/mcp"}},
+        "request_fields":{"/hostname_resolution":{"exact":"system"},"/rpc_method":{"exact":"tools/list"}}
+    }});
+    let policy = document(std::slice::from_ref(&rule)).unwrap();
+    assert!(policy["capabilities"].as_array().unwrap().contains(&json!(
+        crate::http_client::local::HOSTNAME_RESOLUTION_CAPABILITY
+    )));
+    for (field, invalid) in [
+        ("schemes", json!(["http", "https"])),
+        ("hosts", json!(["metrics.workspace.localhost", "localhost"])),
+        ("hosts", json!(["localhost.example.com"])),
+        ("subdomains", json!(true)),
+        ("ports", json!([8080, 8081])),
+        ("path", json!({"prefix":"/mcp"})),
+    ] {
+        let mut row = rule.clone();
+        row["conditions"]["url"][field] = invalid;
+        assert!(document(&[row]).is_err(), "invalid {field} scope");
+    }
+    for field in ["ports", "path"] {
+        let mut row = rule.clone();
+        row["conditions"]["url"]
+            .as_object_mut()
+            .unwrap()
+            .remove(field);
+        assert!(document(&[row]).is_err(), "missing {field}");
+    }
+}
+
+#[test]
 fn web_subdomains_require_a_declared_capability_and_a_dns_label_boundary() {
     let rule = json!({"id":"site","decision":"allow","conditions":{"domain":"web","action":"fetch",
         "url":{"schemes":["https"],"hosts":["example.com","127.0.0.1"],"subdomains":true}}});

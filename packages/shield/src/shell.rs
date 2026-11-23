@@ -41,6 +41,10 @@ pub(crate) const LAUNCHERS: [&str; 12] = [
 
 /// One evaluated invocation and the normalized request it was decided as, if any.
 type Evaluated = (CandidateEvaluation, Option<PolicyRequest>);
+struct HttpDecision {
+    evaluated: Evaluated,
+    can_replace_container_review: bool,
+}
 use report::{Data, Facts as ReportFacts, Invocation, Parent as SourceParent, Transition};
 use serde_json::{Value, json};
 use state::{FunctionBinding, State, state_effect, taint};
@@ -1152,43 +1156,11 @@ impl Analysis<'_> {
         {
             return self.read_evaluation(request, vec![file.into()]);
         }
-        if !state.environment_unknown && !self.clients.http_configuration {
-            if let Some(requests) =
-                crate::http_client::local::requests(&request.executable, &arguments)
-                && requests
-                    .iter()
-                    .all(|local| !self.http_client_config(&local.transfer))
-                && let Some(resolved) = self.local_http_evaluation(
-                    request,
-                    requests,
-                    &Context {
-                        cwd: request.cwd.clone(),
-                        environment: None,
-                        working_files: self.working_files.cloned(),
-                    },
-                )?
-            {
-                return Ok(resolved);
-            }
-            if let Some(fetches) = crate::http_client::fetches(&request.executable, &arguments)
-                && let Some(first) = fetches.first()
-                && !self.http_client_config(first)
-            {
-                // The batch takes its strictest fetch's decision.
-                let mut selected: Option<Evaluated> = None;
-                for fetch in &fetches {
-                    let evaluated = self.http_fetch_evaluation(request, fetch)?;
-                    if selected
-                        .as_ref()
-                        .is_none_or(|(previous, _)| evaluated.0.decision > previous.decision)
-                    {
-                        selected = Some(evaluated);
-                    }
-                }
-                if let Some(selected) = selected {
-                    return Ok(selected);
-                }
-            }
+        if !state.environment_unknown
+            && !self.clients.http_configuration
+            && let Some(web) = self.http_evaluation(request, &arguments, false)?
+        {
+            return Ok(web.evaluated);
         }
         if crate::location::text_read_only(&request.executable, &arguments)
             && let Some(files) = crate::location::text_files(&request.executable, &arguments)
@@ -1245,13 +1217,9 @@ impl Analysis<'_> {
         &self,
         request: &Request,
         fetch: &crate::http_client::Fetch<'_>,
+        context: &Context,
     ) -> Result<Evaluated, Error> {
-        let context = Context {
-            cwd: request.cwd.clone(),
-            environment: None,
-            working_files: self.working_files.cloned(),
-        };
-        let (fetched, web) = self.web_evaluation(request, fetch, None, &context)?;
+        let (fetched, web) = self.web_evaluation(request, fetch, None, context)?;
         let Some(output) = fetch.output else {
             return Ok((fetched, Some(web)));
         };
@@ -1262,9 +1230,9 @@ impl Analysis<'_> {
             recursive: false,
             original_input: json!(request),
         };
-        let written =
-            self.evaluator
-                .evaluate_resource(request, &file, &context, self.checkpoint)?;
+        let written = self
+            .evaluator
+            .evaluate_resource(request, &file, context, self.checkpoint)?;
         Ok(if written.decision > fetched.decision {
             (written, Some(PolicyRequest::Normalized(file)))
         } else {
@@ -1300,26 +1268,131 @@ impl Analysis<'_> {
         Ok((fetched, PolicyRequest::Normalized(web)))
     }
 
-    fn local_http_evaluation(
+    fn http_evaluation(
         &self,
         request: &Request,
-        requests: Vec<crate::http_client::local::Request<'_>>,
-        context: &Context,
-    ) -> Result<Option<Evaluated>, Error> {
+        arguments: &[&str],
+        container: bool,
+    ) -> Result<Option<HttpDecision>, Error> {
+        let transfers = crate::http_client::transfers(&request.executable, arguments);
+        let Some(first) = transfers.iter().find_map(|transfer| {
+            transfer
+                .local
+                .as_ref()
+                .map(|local| &local.transfer)
+                .or(transfer.fetch.as_ref())
+        }) else {
+            return Ok(None);
+        };
+        // Request-wide client options are shared by every transfer.
+        if !container && self.http_client_config(first) {
+            return Ok(None);
+        }
+        let context = Context {
+            cwd: request.cwd.clone(),
+            environment: None,
+            working_files: if container {
+                None
+            } else {
+                self.working_files.cloned()
+            },
+        };
+        let prefer_matched = container
+            || transfers
+                .iter()
+                .any(|transfer| transfer.local.is_some() || transfer.fetch.is_none());
         let mut selected: Option<Evaluated> = None;
-        for local in requests {
-            let (evaluated, web) =
-                self.web_evaluation(request, &local.transfer, Some(local.fields), context)?;
+        let mut complete = true;
+        let mut can_replace_review = true;
+        for transfer in transfers {
+            let Some(HttpDecision {
+                evaluated,
+                can_replace_container_review,
+            }) = self.http_transfer_evaluation(request, transfer, &context, container)?
+            else {
+                complete = false;
+                continue;
+            };
+            can_replace_review &= can_replace_container_review;
             if selected.as_ref().is_none_or(|(previous, _)| {
-                evaluated.decision > previous.decision
-                    || previous.unmatched_ask()
-                        && evaluated.decision == previous.decision
-                        && !evaluated.unmatched_ask()
+                evaluated.0.decision > previous.decision
+                    || prefer_matched
+                        && evaluated.0.decision == previous.decision
+                        && previous.unmatched_ask()
+                        && !evaluated.0.unmatched_ask()
             }) {
-                selected = Some((evaluated, Some(web)));
+                selected = Some(evaluated);
             }
         }
-        Ok(selected)
+        // An unmodeled transfer retains argv review. Still carry any matched
+        // restriction from the transfers whose effects we could establish.
+        Ok(selected
+            .filter(|(evaluation, _)| {
+                complete || evaluation.decision >= Decision::Ask && !evaluation.unmatched_ask()
+            })
+            .map(|evaluated| HttpDecision {
+                evaluated,
+                can_replace_container_review: complete && can_replace_review,
+            }))
+    }
+
+    fn http_transfer_evaluation(
+        &self,
+        request: &Request,
+        transfer: crate::http_client::Transfer<'_>,
+        context: &Context,
+        container: bool,
+    ) -> Result<Option<HttpDecision>, Error> {
+        let hostname_resolution = transfer.local.as_ref().is_some_and(|local| {
+            crate::http_client::local::uses_hostname_resolution(&local.fields)
+        });
+        let local = transfer
+            .local
+            .map(|local| {
+                let (evaluation, web) =
+                    self.web_evaluation(request, &local.transfer, Some(local.fields), context)?;
+                Ok::<_, Error>(HttpDecision {
+                    evaluated: (evaluation, Some(web)),
+                    can_replace_container_review: local.transfer.skips_config
+                        && local.proxy_disabled,
+                })
+            })
+            .transpose()?;
+        let fetch = transfer
+            .fetch
+            .map(|fetch| {
+                let evaluated = if container {
+                    let (evaluation, web) = self.web_evaluation(request, &fetch, None, context)?;
+                    (evaluation, Some(web))
+                } else {
+                    self.http_fetch_evaluation(request, &fetch, context)?
+                };
+                Ok::<_, Error>(HttpDecision {
+                    evaluated,
+                    can_replace_container_review: fetch.skips_config
+                        && !fetch.reads_netrc
+                        && fetch.output.is_none()
+                        && fetch.redirects == "none",
+                })
+            })
+            .transpose()?;
+        // An unmatched local request can use fetch policy. When both actions
+        // match, keep the stricter result for this transfer.
+        let selected = match (local, fetch) {
+            (Some(local), Some(fetch))
+                if local.evaluated.0.unmatched_ask()
+                    || !fetch.evaluated.0.unmatched_ask()
+                        && fetch.evaluated.0.decision > local.evaluated.0.decision =>
+            {
+                Some(fetch)
+            }
+            (Some(local), _) => Some(local),
+            (None, fetch) => fetch,
+        };
+        Ok(selected.map(|mut decision| {
+            decision.can_replace_container_review &= !hostname_resolution;
+            decision
+        }))
     }
 
     fn container_evaluation(
@@ -1340,54 +1413,15 @@ impl Analysis<'_> {
             return Ok((argv, None));
         }
         let arguments: Vec<_> = request.arguments.iter().map(String::as_str).collect();
-        let context = Context {
-            cwd: request.cwd.clone(),
-            environment: None,
-            working_files: None,
-        };
-        if let Some(requests) = crate::http_client::local::requests(&request.executable, &arguments)
-        {
-            let replace_fallback = stock_review
-                && requests
-                    .iter()
-                    .all(|request| request.transfer.skips_config && request.proxy_disabled);
-            if let Some((mut web, input)) =
-                self.local_http_evaluation(request, requests, &context)?
-                && (replace_fallback || web.decision > argv.decision && !web.unmatched_ask())
-            {
-                if replace_fallback {
-                    web.retain_container_fetch_review(argv);
-                }
+        if let Some(http) = self.http_evaluation(request, &arguments, true)? {
+            let (mut web, input) = http.evaluated;
+            if stock_review && http.can_replace_container_review {
+                web.retain_container_fetch_review(argv);
                 return Ok((web, input));
             }
-        }
-        let Some(fetches) = crate::http_client::fetches(&request.executable, &arguments) else {
-            return Ok((argv, None));
-        };
-        let mut replace_fallback = stock_review;
-        let mut strictest: Option<(CandidateEvaluation, PolicyRequest)> = None;
-        for fetch in &fetches {
-            replace_fallback &= fetch.skips_config
-                && !fetch.reads_netrc
-                && fetch.output.is_none()
-                && fetch.redirects == "none";
-            let web = self.web_evaluation(request, fetch, None, &context)?;
-            if strictest.as_ref().is_none_or(|(previous, _)| {
-                web.0.decision > previous.decision
-                    || previous.unmatched_ask()
-                        && web.0.decision == previous.decision
-                        && !web.0.unmatched_ask()
-            }) {
-                strictest = Some(web);
+            if web.decision > argv.decision && !web.unmatched_ask() {
+                return Ok((web, input));
             }
-        }
-        if let Some((mut web, input)) = strictest
-            && (replace_fallback || web.decision > argv.decision && !web.unmatched_ask())
-        {
-            if replace_fallback {
-                web.retain_container_fetch_review(argv);
-            }
-            return Ok((web, Some(input)));
         }
         Ok((argv, None))
     }

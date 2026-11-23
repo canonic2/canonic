@@ -30,6 +30,28 @@ pub(crate) struct Fetch<'a> {
     pub(crate) reads_netrc: bool,
 }
 
+pub(crate) struct Transfer<'a> {
+    pub(crate) fetch: Option<Fetch<'a>>,
+    pub(crate) local: Option<local::Request<'a>>,
+}
+
+/// Both grammars preserve one slot per URL in operand order. A missing
+/// classification for one URL must not erase evidence for the other URLs.
+pub(crate) fn transfers<'a>(executable: &str, arguments: &[&'a str]) -> Vec<Transfer<'a>> {
+    let mut fetches = fetch_slots(executable, arguments)
+        .unwrap_or_default()
+        .into_iter();
+    let mut locals = local::requests(executable, arguments)
+        .unwrap_or_default()
+        .into_iter();
+    (0..fetches.len().max(locals.len()))
+        .map(|_| Transfer {
+            fetch: fetches.next().flatten(),
+            local: locals.next().flatten(),
+        })
+        .collect()
+}
+
 /// The recognized fetch for a literal command, or None when any part of it is
 /// outside the read-only subset.
 pub(crate) fn fetch<'a>(executable: &str, arguments: &[&'a str]) -> Option<Fetch<'a>> {
@@ -38,11 +60,15 @@ pub(crate) fn fetch<'a>(executable: &str, arguments: &[&'a str]) -> Option<Fetch
 }
 
 /// Every transfer in a supported command. curl batches share request options;
-/// its single output option applies to the first transfer only.
+/// output options describe transfers in order.
 pub(crate) fn fetches<'a>(executable: &str, arguments: &[&'a str]) -> Option<Vec<Fetch<'a>>> {
+    fetch_slots(executable, arguments)?.into_iter().collect()
+}
+
+fn fetch_slots<'a>(executable: &str, arguments: &[&'a str]) -> Option<Vec<Option<Fetch<'a>>>> {
     match client(executable)? {
         Client::Curl => curl(arguments),
-        Client::Wget => wget(arguments).map(|fetch| vec![fetch]),
+        Client::Wget => wget(arguments).map(|fetch| vec![Some(fetch)]),
     }
 }
 
@@ -82,10 +108,10 @@ pub(crate) fn environment_entry_changes_request(name: &str, nonempty: bool) -> b
         .contains(&name)
 }
 
-fn curl<'a>(arguments: &[&'a str]) -> Option<Vec<Fetch<'a>>> {
+fn curl<'a>(arguments: &[&'a str]) -> Option<Vec<Option<Fetch<'a>>>> {
     let mut url = None;
     let mut urls = Vec::new();
-    let mut output = None;
+    let mut outputs = (None, 0);
     let mut head = false;
     let mut request = None;
     let mut follow = false;
@@ -119,7 +145,7 @@ fn curl<'a>(arguments: &[&'a str]) -> Option<Vec<Fetch<'a>>> {
                 _ => {
                     let value = *arguments.get(position)?;
                     position += 1;
-                    curl_value(name, value, &mut url, &mut output, &mut request)?;
+                    curl_value(name, value, &mut url, &mut outputs, &mut request)?;
                 }
             }
         } else {
@@ -130,7 +156,8 @@ fn curl<'a>(arguments: &[&'a str]) -> Option<Vec<Fetch<'a>>> {
                     'I' => head = true,
                     'G' => get = true,
                     'L' => follow = true,
-                    'm' | 'X' | 'w' | 'o' => {
+                    flag => {
+                        let name = curl_value_option(flag)?;
                         let attached = &flags[index + 1..];
                         let value = if attached.is_empty() {
                             position += 1;
@@ -138,16 +165,9 @@ fn curl<'a>(arguments: &[&'a str]) -> Option<Vec<Fetch<'a>>> {
                         } else {
                             attached
                         };
-                        let name = match flag {
-                            'm' => "max-time",
-                            'X' => "request",
-                            'w' => "write-out",
-                            _ => "output",
-                        };
-                        curl_value(name, value, &mut url, &mut output, &mut request)?;
+                        curl_value(name, value, &mut url, &mut outputs, &mut request)?;
                         break;
                     }
-                    _ => return None,
                 }
             }
         }
@@ -163,7 +183,8 @@ fn curl<'a>(arguments: &[&'a str]) -> Option<Vec<Fetch<'a>>> {
         }
         urls.push(url);
     }
-    if urls.is_empty() || urls.len() > 64 {
+    let (file, output_count) = outputs;
+    if urls.is_empty() || urls.len() > 64 || output_count > urls.len() {
         return None;
     }
     let method = match (head, request) {
@@ -171,20 +192,22 @@ fn curl<'a>(arguments: &[&'a str]) -> Option<Vec<Fetch<'a>>> {
         (true, _) | (false, Some("HEAD")) => "HEAD",
         (false, _) => "GET",
     };
-    urls.into_iter()
-        .enumerate()
-        .map(|(index, url)| {
-            Some(Fetch {
-                client: Client::Curl,
-                url: query_url(literal_url(url)?, &query)?,
-                method,
-                redirects: if follow { "follow" } else { "none" },
-                output: output.filter(|path| index == 0 && !["-", "/dev/null"].contains(path)),
-                skips_config,
-                reads_netrc: false,
+    Some(
+        urls.into_iter()
+            .enumerate()
+            .map(|(index, url)| {
+                Some(Fetch {
+                    client: Client::Curl,
+                    url: query_url(literal_url(url)?, &query)?,
+                    method,
+                    redirects: if follow { "follow" } else { "none" },
+                    output: file.filter(|_| index == 0),
+                    skips_config,
+                    reads_netrc: false,
+                })
             })
-        })
-        .collect()
+            .collect(),
+    )
 }
 
 /// Inline data-urlencode forms only. Before `=`, names are already encoded;
@@ -230,11 +253,23 @@ fn query_url<'a>(url: &'a str, query: &[String]) -> Option<Cow<'a, str>> {
     Some(Cow::Owned(effective))
 }
 
+fn curl_value_option(flag: char) -> Option<&'static str> {
+    Some(match flag {
+        'X' => "request",
+        'H' => "header",
+        'm' => "max-time",
+        'w' => "write-out",
+        'u' => "user",
+        'o' => "output",
+        _ => return None,
+    })
+}
+
 fn curl_value<'a>(
     name: &str,
     value: &'a str,
     url: &mut Option<&'a str>,
-    output: &mut Option<&'a str>,
+    outputs: &mut (Option<&'a str>, usize),
     request: &mut Option<&'a str>,
 ) -> Option<()> {
     match name {
@@ -244,10 +279,29 @@ fn curl_value<'a>(
         }
         "request" if ["GET", "HEAD"].contains(&value) => set_once(request, value),
         "write-out" if inspection_write_out(value) => Some(()),
-        "output" if !value.is_empty() => set_once(output, value),
+        "header" => {
+            let (name, _) = header_parts(value)?;
+            name.eq_ignore_ascii_case("accept").then_some(())
+        }
+        "output" if !value.is_empty() => {
+            let (file, count) = outputs;
+            let named_file = !matches!(value, "-" | "/dev/null");
+            if *count == 64 || file.is_some() || (named_file && *count != 0) {
+                return None;
+            }
+            *file = named_file.then_some(value);
+            *count += 1;
+            Some(())
+        }
         "url" => set_once(url, value),
         _ => None,
     }
+}
+
+fn header_parts(value: &str) -> Option<(&str, &str)> {
+    let (name, content) = value.split_once(':')?;
+    let content = content.trim();
+    (!content.is_empty() && !value.chars().any(char::is_control)).then_some((name, content))
 }
 
 fn wget<'a>(arguments: &[&'a str]) -> Option<Fetch<'a>> {

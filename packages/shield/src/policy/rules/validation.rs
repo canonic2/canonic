@@ -125,6 +125,23 @@ pub(super) fn validate_predicates(
     Ok(())
 }
 
+pub(super) fn validate_hostname_request(conditions: &Value) -> Result<(), Error> {
+    let url = &conditions["url"];
+    let single = |key: &str| url[key].as_array().filter(|values| values.len() == 1);
+    let host = single("hosts").and_then(|hosts| hosts[0].as_str());
+    if !host.is_some_and(crate::http_client::local::local_name)
+        || url["subdomains"] == true
+        || single("schemes").is_none()
+        || single("ports").is_none()
+        || selectors::exact(&url["path"]).is_none()
+    {
+        return Err(Error::Contract(
+            "hostname resolution requires a single literal localhost URL with scheme, host, port and exact path in conditions",
+        ));
+    }
+    Ok(())
+}
+
 fn field_paths(operand: &Value) -> Result<(), Error> {
     let fields = operand.as_object().ok_or(Error::Syntax)?;
     if fields.is_empty() || fields.len() > 256 {

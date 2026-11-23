@@ -54,6 +54,7 @@ pub(crate) const CAPABILITIES: &[&str] = &[
     "structured-rules-v1",
     "url-subdomains-v1",
     "local-http-requests-v1",
+    crate::http_client::local::HOSTNAME_RESOLUTION_CAPABILITY,
     "docker-isolated-bind-v1",
     "historical-matchers-v1",
     "historical-normalized-v1",

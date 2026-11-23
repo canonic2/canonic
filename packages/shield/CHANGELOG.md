@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Recognize curl GET and HEAD probes with an `Accept` header or multiple
+  stdout or `/dev/null` outputs. Every destination still receives a web check.
+- Let a reviewed local HTTP rule opt into hostname resolution for one local
+  development endpoint, with method and JSON-RPC selectors for workspace MCP
+  diagnostics.
+
 - Add `variable-list-branches-v1`: a precondition's `requires_any` branch that
   splits a list variable or uses it as a joined prefix part is repeated once per
   item, so a setting such as several `OWNER/REPO` values keeps each value's

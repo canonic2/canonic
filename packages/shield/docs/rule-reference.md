@@ -212,11 +212,43 @@ conditions:
 ```
 
 The command can use `curl --request POST http://127.0.0.1:8080/-/reload`.
-For a `localhost` or `.localhost` hostname, curl requires `-q` as its
-first option, `--noproxy '*'` and a matching loopback pin such as
-`--resolve api.localhost:8080:127.0.0.1`. The rule must match the hostname
-and port used in the URL. Wget uses the literal `127.0.0.1` address.
+Curl can also pin a `localhost` or `.localhost` hostname to loopback.
+Put `-q` first, pass `--noproxy '*'`, and use a matching pin such as
+`--resolve api.localhost:8080:127.0.0.1`. The rule matches the URL's
+hostname and port. Wget uses the literal `127.0.0.1` address.
 Use literal paths with percent escapes and dot segments omitted.
+
+For an endpoint you trust through ordinary hostname resolution, declare
+`local-http-hostname-resolution-v1` and add `/hostname_resolution: {exact: system}`.
+This requires one scheme, one exact `localhost` or `.localhost` hostname, one
+port and one exact path in `conditions.url`. It covers host curl commands
+without a `--resolve` pin. Shield checks command options, client configuration
+and proxy settings. Use a pinned request when the connection must stay on IPv4
+loopback regardless of hostname resolution.
+
+For example, allow one reviewed read-only MCP tool on a workspace endpoint:
+
+```yaml
+id: query-workspace-metrics
+decision: allow
+conditions:
+  domain: web
+  action: request
+  method: POST
+  url:
+    schemes: [http]
+    hosts: [metrics.workspace.localhost]
+    ports: [8080]
+    path: {exact: /mcp}
+  request_fields:
+    /hostname_resolution: {exact: system}
+    /rpc_method: {exact: tools/call}
+    /rpc_tool: {exact: query_metrics}
+```
+
+Put related endpoint rules into one `policy_propose` review. Select handshake
+operations by `/rpc_method`, and tool calls by both `/rpc_method` and `/rpc_tool`.
+Review the effect of each tool at the endpoint before allowing it.
 
 `request_fields` uses JSON Pointer selectors. `/client` is `shell` and
 `/redirects` is `none`. `/body` and `/basic_auth` are booleans.
@@ -448,6 +480,7 @@ Declare exactly the capabilities used anywhere in the document, once each.
 | `argument-paths-v1` | Explicit argument-path checks. |
 | `docker-isolated-bind-v1` | A `docker_isolated_bind` requirement checks a Docker image invocation and its single read-only project file bind. |
 | `local-http-requests-v1` | The web `request` action selects a method and URL for a supported loopback HTTP request. |
+| `local-http-hostname-resolution-v1` | A web `request` rule explicitly accepts hostname resolution for one local curl endpoint. |
 | `graphql-v1` | Parsed inline GitHub GraphQL query predicates and finite selection models. |
 | `graphql-mutations-v1` | GraphQL predicates with `operation: mutation`. |
 | `graphql-subtree-v1` | Query-root fields with unrestricted descendant selections. |

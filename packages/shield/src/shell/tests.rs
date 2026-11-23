@@ -274,6 +274,12 @@ fn http_client_evaluator(fetch: &Value, explicit: Option<&str>) -> Evaluator {
     if fetch["action"] == "request" {
         capabilities.push("local-http-requests-v1");
     }
+    if fetch["url"]["subdomains"] == true {
+        capabilities.push("url-subdomains-v1");
+    }
+    if fetch["request_fields"]["/hostname_resolution"]["exact"] == "system" {
+        capabilities.push(crate::http_client::local::HOSTNAME_RESOLUTION_CAPABILITY);
+    }
     let pack = json!({"schema_version":1,"kind":"pack","id":"acme/baseline","version":"1.0.0","description":"Acme download fixture","license":"MIT","maintainers":["Acme"],"engines":{"shield":env!("CARGO_PKG_VERSION")},"capabilities":capabilities,"rules":[
         {"id":"client-fallback","decision":"ask","fallback":true,"conditions":{"domain":"argv","executable":clients,"arguments":{"kind":"any"}}},
         {"id":"registry","decision":"allow","conditions":fetch},
@@ -378,6 +384,117 @@ fn local_http_requests_require_the_reviewed_method_route_and_rpc_tool() {
             &legacy_read
         )
         .unwrap()["decision"],
+        "ask"
+    );
+}
+
+#[test]
+fn local_curl_session_probes_use_fetch_policy_and_check_every_host() {
+    let root = assert_fs::TempDir::new().unwrap();
+    let cwd = root.path().to_str().unwrap();
+    let fetch = json!({"domain":"web","action":"fetch",
+        "url":{"schemes":["http"],"hosts":["localhost"],"subdomains":true},
+        "request_fields":{"/client":{"exact":"shell"},"/redirects":{"exact":"none"}}});
+    let engine = http_client_evaluator(&fetch, None);
+    let probes = "http://docker-dev.workspace.localhost:5100/__hub/ready -o /dev/null http://metrics.workspace.localhost:5200/api/health";
+    for (source, expected) in [
+        (format!("curl -s -m 5 -o /dev/null -w '%{{http_code}}\\n' {probes}"), "allow"),
+        (format!("curl -s -m 5 -L -o /dev/null {probes}"), "ask"),
+        (format!("curl -s -m 5 -o /dev/null {}", probes.replace("metrics.workspace.localhost", "example.com")), "ask"),
+        (format!("curl -s -m 5 -o /dev/null {}", probes.replace("http://metrics.workspace.localhost:5200/api/health", "https://blocked.example.com/")), "deny"),
+        (format!("curl -s -m 5 -o .shield/rules.yml {probes}"), "ask"),
+        ("curl -s -m 5 -H 'Accept: text/event-stream' http://docker-dev.workspace.localhost:5100/__mcp/metrics".into(), "allow"),
+        ("curl -s -m 5 -u 'user:fixture' http://metrics.workspace.localhost:5200/api/health".into(), "ask"),
+        ("curl -s -m 5 -H 'Host: example.com' http://docker-dev.workspace.localhost:5100/__mcp/metrics".into(), "ask"),
+    ] {
+        let result = analyze(&source, Dialect::Bash, cwd, cwd, &engine).unwrap();
+        assert_eq!(result["decision"], expected, "{source}: {result}");
+    }
+}
+
+#[test]
+fn local_curl_session_rpc_requires_an_explicitly_reviewed_endpoint() {
+    let root = assert_fs::TempDir::new().unwrap();
+    let cwd = root.path().to_str().unwrap();
+    let url = "http://docker-dev.workspace.localhost:5100/mcp";
+    let body = r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"query_metrics","arguments":{"query":"up"}}}"#;
+    let command = |body: &str, url: &str| {
+        format!(
+            "curl -s -m 5 -w '\\nHTTP %{{http_code}}\\n' -X POST -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' -H 'Mcp-Session-Id: fixture-session' --data-raw '{body}' {url}"
+        )
+    };
+    let baseline = json!({"domain":"web","action":"request","method":"POST",
+        "url":{"schemes":["http"],"hosts":["docker-dev.workspace.localhost"],"ports":[5100],"path":{"exact":"/mcp"}},
+        "request_fields":{"/rpc_method":{"exact":"tools/call"},"/rpc_tool":{"exact":"query_metrics"}}});
+    let prior = http_client_evaluator(&baseline, None);
+    let evaluate = |engine: &Evaluator, source: &str| {
+        analyze(source, Dialect::Bash, cwd, cwd, engine).unwrap()["decision"].clone()
+    };
+    let probe = command(body, url);
+    assert_eq!(evaluate(&prior, &probe), "ask");
+    let pinned = probe.replacen(
+        "curl ",
+        "curl -q --noproxy '*' --resolve docker-dev.workspace.localhost:5100:127.0.0.1 ",
+        1,
+    );
+    assert_eq!(evaluate(&prior, &pinned), "allow");
+
+    let mut scoped = baseline;
+    scoped["request_fields"]["/hostname_resolution"] = json!({"exact":"system"});
+    let engine = http_client_evaluator(&scoped, None);
+    for (source, expected) in [
+        (probe.clone(), "allow"),
+        (command(&body.replace("query_metrics", "delete_dashboard"), url), "ask"),
+        (command(body, &url.replace("5100", "5101")), "ask"),
+        (command(body, &url.replace("/mcp", "/-/reload")), "ask"),
+        (command(body, &url.replace(".localhost", ".localhost.example.com")), "ask"),
+        (probe.replacen("curl ", "curl -L ", 1), "ask"),
+        (probe.replacen("curl ", "curl --proxy http://proxy.example.com ", 1), "ask"),
+        (format!("http_proxy=http://proxy.example.com {probe}"), "ask"),
+        (probe.replacen("curl ", "curl -H 'Host: example.com' ", 1), "ask"),
+        (probe.replace("--data-raw", "--data"), "ask"),
+        ("curl -s -X DELETE -H 'Mcp-Session-Id: fixture-session' http://docker-dev.workspace.localhost:5100/mcp".into(), "ask"),
+    ] {
+        assert_eq!(evaluate(&engine, &source), expected, "{source}");
+    }
+    let explicit = http_client_evaluator(&scoped, Some("deny"));
+    assert_eq!(evaluate(&explicit, &probe), "deny");
+
+    for (method, body) in [
+        (
+            "initialize",
+            r#"{"jsonrpc":"2.0","id":1,"method":"initialize"}"#,
+        ),
+        (
+            "notifications/initialized",
+            r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#,
+        ),
+        (
+            "tools/list",
+            r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#,
+        ),
+    ] {
+        let mut lifecycle = scoped.clone();
+        let fields = lifecycle["request_fields"].as_object_mut().unwrap();
+        fields.remove("/rpc_tool");
+        fields.insert("/rpc_method".into(), json!({"exact":method}));
+        let engine = http_client_evaluator(&lifecycle, None);
+        assert_eq!(evaluate(&engine, &command(body, url)), "allow", "{method}");
+        assert_eq!(evaluate(&engine, &probe), "ask", "{method}");
+    }
+
+    let mut cleanup = scoped;
+    cleanup["method"] = json!("DELETE");
+    cleanup["request_fields"] = json!({
+        "/hostname_resolution":{"exact":"system"},
+        "/body":{"exact":false},
+        "/headers":{"exact":["mcp-session-id"]}
+    });
+    let engine = http_client_evaluator(&cleanup, None);
+    let source = format!("curl -s -m 5 -X DELETE -H 'Mcp-Session-Id: fixture-session' {url}");
+    assert_eq!(evaluate(&engine, &source), "allow");
+    assert_eq!(
+        evaluate(&engine, &source.replace("/mcp", "/api/dashboards")),
         "ask"
     );
 }
@@ -545,6 +662,144 @@ fn curl_batches_check_every_host_and_the_output_before_allowing() {
     )
     .unwrap();
     assert_eq!(result["decision"], "ask");
+}
+
+#[test]
+fn curl_batches_retain_each_transfers_explicit_web_restrictions() {
+    let root = assert_fs::TempDir::new().unwrap();
+    let cwd = root.path().to_str().unwrap();
+    let rules = crate::policy::rules::document(&[
+        json!({"id":"local-review","decision":"ask","conditions":{"domain":"web","action":"request","method":"GET",
+            "url":{"schemes":["http"],"hosts":["127.0.0.1"],"path":{"exact":"/review"}}}}),
+        json!({"id":"local-deny","decision":"deny","conditions":{"domain":"web","action":"request","method":"GET",
+            "url":{"schemes":["http"],"hosts":["127.0.0.1"],"path":{"exact":"/private"}}}}),
+        json!({"id":"local-allow","decision":"allow","conditions":{"domain":"web","action":"request","method":"GET",
+            "url":{"schemes":["http"],"hosts":["127.0.0.1"],"path":{"one_of":["/allowed","/blocked"]}}}}),
+        json!({"id":"fetch-deny","decision":"deny","conditions":{"domain":"web","action":"fetch",
+            "url":{"schemes":["http"],"hosts":["127.0.0.1"],"path":{"exact":"/blocked"}}}}),
+        json!({"id":"fetch-allow","decision":"allow","conditions":{"domain":"web","action":"fetch",
+            "url":{"schemes":["https"],"hosts":["allowed.example.com"]}}}),
+    ]).unwrap().to_string();
+    let candidate = crate::configuration::Candidate::from_yaml(
+        "schema_version: 1\npacks: []\nrules: rules.json\n",
+    )
+    .unwrap();
+    let engine = Evaluator::new(vec![(
+        crate::policy::Scope::Project,
+        candidate.capture(&[], Some(&rules)).unwrap(),
+    )])
+    .unwrap();
+    for (first, second, expected) in [
+        (
+            "http://127.0.0.1/review",
+            "http://127.0.0.1/blocked",
+            "deny",
+        ),
+        (
+            "http://127.0.0.1/private",
+            "https://allowed.example.com/",
+            "deny",
+        ),
+        (
+            "http://127.0.0.1/private",
+            "ftp://unmodeled.example.com/",
+            "deny",
+        ),
+        (
+            "http://127.0.0.1/review",
+            "https://allowed.example.com/",
+            "ask",
+        ),
+        (
+            "http://127.0.0.1/allowed",
+            "https://allowed.example.com/",
+            "allow",
+        ),
+        (
+            "https://allowed.example.com/",
+            "ftp://unmodeled.example.com/",
+            "ask",
+        ),
+    ] {
+        for (first, second) in [(first, second), (second, first)] {
+            let source = format!("curl -q -H 'Accept: application/json' {first} {second}");
+            let result = analyze(&source, Dialect::Bash, cwd, cwd, &engine).unwrap();
+            assert_eq!(result["decision"], expected, "{source}: {result}");
+        }
+    }
+}
+
+#[test]
+fn curl_container_fetch_keeps_hostname_resolution_review() {
+    let root = assert_fs::TempDir::new().unwrap();
+    let cwd = root.path().to_str().unwrap();
+    let evaluator = http_client_evaluator(
+        &json!({"domain":"web","action":"fetch","url":{"schemes":["http"],"hosts":["localhost"]}}),
+        None,
+    );
+    let request = Request {
+        executable: "curl".into(),
+        arguments: Vec::new(),
+        cwd: cwd.into(),
+        project: cwd.into(),
+    };
+    let analysis = Analysis {
+        evaluator: &evaluator,
+        working_files: None,
+        checkpoint: &|| Ok(()),
+        context: request.clone(),
+        directories: crate::location::directory::Directories::new(),
+        clients: ClientEnvironment {
+            node_preload: false,
+            http_configuration: false,
+            inherited: None,
+            cdpath_empty: true,
+        },
+        operations: Vec::new(),
+        evidence_bytes: 0,
+        complete: true,
+        dialect: Dialect::Posix,
+        nested_bytes: 0,
+        source_unit: 0,
+        source_units: Vec::new(),
+        frames: Vec::new(),
+        suppressed: false,
+        exit_bytes: 0,
+    };
+    let url = "http://localhost:3200/ready";
+    for (arguments, decision, can_replace_review) in [
+        (vec!["-q", url], Decision::Allow, true),
+        (
+            vec!["-q", "-H", "Accept: application/json", url],
+            Decision::Allow,
+            false,
+        ),
+        (
+            vec![
+                "-q",
+                "-H",
+                "Accept: application/json",
+                url,
+                "https://blocked.example.com/",
+            ],
+            Decision::Deny,
+            false,
+        ),
+    ] {
+        let request = Request {
+            arguments: arguments.iter().map(|arg| (*arg).into()).collect(),
+            ..request.clone()
+        };
+        let result = analysis
+            .http_evaluation(&request, &arguments, true)
+            .unwrap()
+            .unwrap();
+        assert_eq!(result.evaluated.0.decision, decision, "{arguments:?}");
+        assert_eq!(
+            result.can_replace_container_review, can_replace_review,
+            "{arguments:?}"
+        );
+    }
 }
 
 #[test]
@@ -4417,6 +4672,16 @@ fn assert_published_container_fetches(
             "docker --context acme exec app curl -q http://localhost:3200/ready",
             loopback,
             None,
+        ),
+        (
+            "docker --context acme exec app curl -q -H 'Accept: application/json' http://localhost:3200/ready",
+            "ask",
+            None,
+        ),
+        (
+            "docker --context acme exec app curl -q -H 'Accept: application/json' http://localhost:3200/ready https://blocked.example.com/",
+            "deny",
+            Some("blocked-web"),
         ),
         (
             "docker --context acme exec app curl http://localhost:3200/ready",

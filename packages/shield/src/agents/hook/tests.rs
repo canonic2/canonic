@@ -811,7 +811,7 @@ fn curl_batches_offer_web_review_and_preserve_protected_output_guards() {
         &unscoped_shell(
             protected.path(),
             "claude",
-            "curl -o /dev/null https://docs.example.com/a https://docs.example.com/b",
+            "curl -o /dev/null https://docs.example.com/a -o /dev/null https://docs.example.com/b",
         ),
         "claude",
     );

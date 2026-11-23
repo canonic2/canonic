@@ -280,7 +280,21 @@ fn reason(
         C::ComputedAssignment => (2,"sets a shell variable from a value known only when it runs, so the user decides".into(),vec![]),
         C::BackgroundJobKill => (2,"signals a PID originating from a background job in this request; runtime ownership is unverified, so the user decides".into(),vec![]),
         C::RuntimeStatusArguments => (2,"uses an exit status known only when it runs, so the user decides".into(),vec![]),
-        C::LiteralArgv => rule_ask(operation.evaluation()?.evaluation()),
+        C::LiteralArgv => {
+            let evaluated = operation.evaluation()?;
+            if !denied && evaluated.unmatched_ask()
+                && let Some(PolicyRequest::Normalized(Input::Web { action, method: Some(method), .. })) = operation.policy_request()
+                && action == "request"
+            {
+                (
+                    2,
+                    format!("makes a local HTTP {method} request with no matching endpoint rule"),
+                    vec!["For recurring operations, group the reviewed HTTP methods, exact routes and JSON-RPC methods or tools in one policy_propose review. See Local HTTP requests in the rule reference.".into()],
+                )
+            } else {
+                rule_ask(evaluated.evaluation())
+            }
+        }
         _ => return None,
     })
 }

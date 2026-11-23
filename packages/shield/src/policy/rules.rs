@@ -389,6 +389,9 @@ impl Rule {
             if domain == "web" && !self.conditions["action"].is_string() {
                 return Err(Error::Contract("web action must be literal"));
             }
+            if self.decision.allows() && accepts_hostname_resolution(&self.conditions) {
+                validation::validate_hostname_request(&self.conditions)?;
+            }
             if domain == "shell" && self.decision.allows() {
                 let exact = |field: &str| {
                     self.conditions[field].get("exact").is_some()
@@ -559,7 +562,17 @@ impl Rule {
             }
             capabilities(value, domain, result);
         }
+        if accepts_hostname_resolution(&self.conditions) {
+            result.insert(crate::http_client::local::HOSTNAME_RESOLUTION_CAPABILITY.into());
+        }
     }
+}
+
+fn accepts_hostname_resolution(conditions: &Value) -> bool {
+    use crate::http_client::local::{HOSTNAME_RESOLUTION, SYSTEM_RESOLUTION};
+    conditions["domain"] == "web"
+        && conditions["action"] == "request"
+        && conditions["request_fields"][HOSTNAME_RESOLUTION]["exact"] == SYSTEM_RESOLUTION
 }
 
 pub(crate) fn document(rows: &[Value]) -> Result<Value, Error> {
@@ -768,6 +781,14 @@ impl Rule {
         profile: Profile,
         tier: u8,
     ) -> Result<Option<Match>, Error> {
+        if matches!(facts.input, Input::Web {action, conditions, ..}
+            if action == "request" && crate::http_client::local::uses_hostname_resolution(conditions))
+            && self.decision.selected(profile) == Decision::Allow
+            && self.conditions["domain"] != "exact_request"
+            && !accepts_hostname_resolution(&self.conditions)
+        {
+            return Ok(None);
+        }
         let original;
         let bound;
         let historical_read = legacy_read(request, facts);
