@@ -36,8 +36,8 @@ pub(in crate::review) fn report(context: &Context) -> Result<Value, Error> {
             value["policy_files"] = json!({"error":error.to_string()});
             problem(
                 "policy",
-                format!("the policy files cannot be used, so every request asks: {error}"),
-                "Fix the named file in .shield, then run shield doctor",
+                error.to_string(),
+                "Fix the policy files, then run shield doctor",
             );
         }
     }

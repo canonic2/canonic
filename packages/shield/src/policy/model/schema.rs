@@ -196,7 +196,7 @@ fn domains() -> Value {
     let shell = json!({"source":reference("text"),"dialect_version":one_of(vec![nonempty(4096),object(json!({"exact":nonempty(4096)}),&["exact"])])});
     let file = json!({"sources":reference("quantified"),"destination":reference("path"),"recursive":{"type":"boolean"},"targets":one_of(vec![reference("target"),list(reference("target"),1)])});
     let web = json!({"query":reference("text"),"url":reference("url"),"method":reference("method"),"request_fields":reference("field_map")});
-    let mcp = json!({"arguments":{"type":"object"},"fields":reference("field_map"),"connection":reference("field_map"),"field_paths":{"type":"object","minProperties":1,"maxProperties":256,"additionalProperties":object(json!({"path":reference("path"),"recursive":{"type":"boolean"},"absolute":{"type":"boolean"},"relative_to":{"enum":["cwd","project"]}}),&["path"])}});
+    let mcp = json!({"arguments":{"type":"object"},"fields":reference("field_map"),"connection":reference("field_map"),"field_paths":{"type":"object","minProperties":1,"maxProperties":256,"additionalProperties":object(json!({"path":reference("path"),"recursive":{"type":"boolean"},"absolute":{"type":"boolean"},"relative_to":{"enum":["cwd","project"]},"each":string(1024)}),&["path"])}});
     let mut conditions = Vec::new();
     let mut requirements = Vec::new();
     for (domain, predicates, identity, required) in [

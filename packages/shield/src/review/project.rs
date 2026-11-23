@@ -66,33 +66,37 @@ pub(super) fn status(context: &Context) -> Result<Value, Error> {
     let (state, pending) =
         Store::inspect(Path::new(&context.project_root))?.read_diagnostic_checkpoint()?;
     state.check_inspection(context)?;
-    // Requests are decided by the policy files; fetch any pack release they
-    // lock that this machine lacks before anything loads them, then report
-    // the files' state.
     let root = Path::new(&context.project_root);
-    let fetched = super::files::fetch_missing(root, &state.settings);
     let mut value = status_from(context, &state);
     value["pack_updates"] = super::pack_updates::inspect(context, &state, None);
     let cache = super::files::cache_for(&state.operator).ok();
-    value["policy_files"] = match super::files::check(root, cache.as_deref()) {
-        Ok(digest) => json!({"digest":digest}),
-        Err(error) => json!({"error":error.to_string()}),
-    };
-    match fetched {
-        Ok(fetched) => {
-            if !fetched.releases.is_empty() {
-                value["policy_files"]["fetched"] = json!(fetched.releases);
+    let mut policy = super::files::check(root, cache.as_deref());
+    let mut policy_files = json!({});
+    // A merge conflict needs an operator edit. Fetching packs cannot resolve
+    // it, and parsing the conflicted lock again only duplicates the error.
+    if !matches!(policy, Err(Error::PolicyFileConflict(_))) {
+        match super::files::fetch_missing(root, &state.settings) {
+            Ok(fetched) => {
+                if !fetched.releases.is_empty() {
+                    policy = super::files::check(root, cache.as_deref());
+                    policy_files["fetched"] = json!(fetched.releases);
+                }
+                if !fetched.failures.is_empty() {
+                    policy_files["fetch_failures"] = fetched
+                        .failures
+                        .into_iter()
+                        .map(|(release, error)| json!({"release":release,"error":error}))
+                        .collect();
+                }
             }
-            if !fetched.failures.is_empty() {
-                value["policy_files"]["fetch_failures"] = fetched
-                    .failures
-                    .into_iter()
-                    .map(|(release, error)| json!({"release":release,"error":error}))
-                    .collect();
-            }
+            Err(error) => policy_files["fetch_error"] = json!(error.to_string()),
         }
-        Err(error) => value["policy_files"]["fetch_error"] = json!(error.to_string()),
     }
+    match policy {
+        Ok(digest) => policy_files["digest"] = json!(digest),
+        Err(error) => policy_files["error"] = json!(error.to_string()),
+    }
+    value["policy_files"] = policy_files;
     value["checkpoint_upgrade_pending"] = json!(pending);
     Ok(value)
 }

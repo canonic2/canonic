@@ -149,3 +149,63 @@ fn action_request_kinds_missing_forms_and_disconnect_issue_nothing() {
         no_grants(&f);
     }
 }
+
+#[test]
+fn action_request_summary_uses_the_grant_route_and_reports_consumed_replays() {
+    let f = crate::review::approvals::tests::fixture("codex");
+    let transport = connect(&f, true);
+    let request_id = &f.ids[1];
+    let args = json!({"request_id":request_id});
+    let form = begin(&transport, &args, false);
+    let approved = answer(&transport, &args, &form, "accept", false);
+    let text = approved["result"]["content"][0]["text"].as_str().unwrap();
+    assert!(
+        text.contains(&format!("--approval-request {request_id}")),
+        "{approved}"
+    );
+
+    let mut run = f.context.clone();
+    run.surface = "run".into();
+    let (result, _) = crate::review::run_approval::gate(
+        &run,
+        &f.run,
+        &f.run_resource,
+        Some(request_id),
+        || true,
+        |_| (),
+    )
+    .unwrap();
+    assert_eq!(result["allowed"], true, "{result}");
+
+    let read_args = json!({"request_id":f.ids[0]});
+    let form = begin(&transport, &read_args, false);
+    let approved = answer(&transport, &read_args, &form, "accept", false);
+    assert_eq!(approved["result"]["isError"], false, "{approved}");
+    let read = crate::review::read_approval::gate(
+        &f.context,
+        "acme-factory",
+        &f.read,
+        &f.read_digest,
+        Some(&f.ids[0]),
+        || true,
+    )
+    .unwrap();
+    assert_eq!(read["allowed"], true, "{read}");
+
+    for args in [args, json!({"request_ids":f.ids})] {
+        let replay = begin(&transport, &args, false);
+        assert_eq!(
+            replay["result"]["structuredContent"]["data"]["allowed"], false,
+            "{replay}"
+        );
+        let text = replay["result"]["content"][0]["text"].as_str().unwrap();
+        assert!(
+            text.contains("grant") && text.contains("no permission"),
+            "{replay}"
+        );
+        assert!(
+            !text.contains("approved") && !text.contains("retry"),
+            "{replay}"
+        );
+    }
+}

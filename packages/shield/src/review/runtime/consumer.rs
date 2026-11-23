@@ -90,6 +90,7 @@ impl From<Error> for RuntimeError {
             Error::StateRecreated => Self::Invalid("project state was recreated; reconnect Shield"),
             Error::CacheUnavailable => Self::CacheUnavailable,
             Error::PolicyFiles(message) => Self::PolicyFiles(message),
+            error @ Error::PolicyFileConflict(_) => Self::PolicyFiles(error.to_string()),
             Error::ApprovalRequired => Self::Invalid("operator approval is required"),
             Error::WebReviewOffered => {
                 Self::Invalid("site save review already offered in this session")
@@ -577,7 +578,10 @@ pub(in crate::review) fn load(
     state.check(context)?;
     let cache = crate::review::files::cache_for(&state.operator).ok();
     let policy = crate::review::files::load_in(Path::new(&context.project_root), cache.as_deref())
-        .map_err(|error| Error::PolicyFiles(error.to_string()))?;
+        .map_err(|error| match error {
+            Error::PolicyFileConflict(_) => error,
+            error => Error::PolicyFiles(error.to_string()),
+        })?;
     crate::review::registry_trust::recover_effective(
         &state.operator,
         policy.evaluator.effective(),

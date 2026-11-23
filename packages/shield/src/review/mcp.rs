@@ -41,11 +41,26 @@ pub(crate) fn question_error(context: &Context, error: &Error) -> Value {
 }
 
 /// Validate exact retained review bytes before showing a host confirmation.
-pub(crate) fn apply_confirmation(
+pub(crate) struct PolicyConfirmation {
+    pub(crate) proposal_id: String,
+    pub(crate) message: String,
+    web_claim: Option<Context>,
+}
+
+impl PolicyConfirmation {
+    pub(crate) fn claim_web_offer(&self) -> Result<(), Error> {
+        if let Some(context) = &self.web_claim {
+            super::web_reviews::claim(context, &self.proposal_id)?;
+        }
+        Ok(())
+    }
+}
+
+pub(crate) fn prepare_apply_confirmation(
     context: &Context,
     connection: &Connection,
     args: &Value,
-) -> Result<Option<String>, Error> {
+) -> Result<Option<PolicyConfirmation>, Error> {
     let normalized = runtime_context(context)?;
     let context = &normalized;
     let confirmation = crate::agents::review::for_context(context).confirmation();
@@ -94,10 +109,11 @@ pub(crate) fn apply_confirmation(
     }
     // A tool-permission host's own prompt carries the save offer, and its hook
     // claimed it before dispatch; this connection form must not claim it again.
-    if !tool_permission {
-        super::web_reviews::claim(context, &id)?;
-    }
-    Ok(Some(message))
+    Ok(Some(PolicyConfirmation {
+        proposal_id: id,
+        message,
+        web_claim: (!tool_permission).then_some(normalized),
+    }))
 }
 
 /// Tool-permission hosts show their review before dispatching MCP. Check the
@@ -671,7 +687,11 @@ pub(crate) fn settle_apply_failure(
         == crate::agents::review::Confirmation::Terminal;
     if matches!(
         error,
-        Error::Missing | Error::Locked | Error::Io(_) | Error::WebReviewOffered
+        Error::Missing
+            | Error::Locked
+            | Error::Io(_)
+            | Error::WebReviewOffered
+            | Error::Invalid(apply::ARGUMENTS_MISMATCH)
     ) || matches!(error, Error::ApprovalRequired) && !unsupported
     {
         return None;

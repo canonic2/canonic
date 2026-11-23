@@ -149,8 +149,14 @@ fn field_paths(operand: &Value) -> Result<(), Error> {
     }
     for (pointer, selection) in fields {
         selectors::pointer_validate(pointer)?;
-        selectors::fields(selection, &["path", "recursive", "absolute", "relative_to"])?;
+        selectors::fields(
+            selection,
+            &["path", "recursive", "absolute", "relative_to", "each"],
+        )?;
         path_predicate(&selection["path"])?;
+        if let Some(each) = selection.get("each") {
+            selectors::pointer_validate(each.as_str().ok_or(Error::Syntax)?)?;
+        }
         for key in ["recursive", "absolute"] {
             if selection.get(key).is_some_and(|value| !value.is_boolean()) {
                 return Err(Error::Syntax);

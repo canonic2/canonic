@@ -117,6 +117,10 @@ fn invalid_policy_without_registration_names_policy_repair_before_setup() {
         );
         assert!(offered_id(&refused).is_none(), "{refused}");
         assert!(
+            reason(&refused).contains("Repair the policy files from your terminal first, then run `shield mcp setup` in this project and restart the agent session."),
+            "{refused}"
+        );
+        assert!(
             agent_context(&refused).contains("user must first repair the policy files"),
             "{refused}"
         );
@@ -337,11 +341,11 @@ fn web_reviews_decline_suppresses_save_offers_in_ten_native_calls() {
         before_form["hookSpecificOutput"]["permissionDecision"], "allow",
         "{before_form}"
     );
-    assert!(
-        review::mcp::apply_confirmation(&context, &connection, args)
-            .unwrap()
-            .is_some()
-    );
+    review::mcp::prepare_apply_confirmation(&context, &connection, args)
+        .unwrap()
+        .unwrap()
+        .claim_web_offer()
+        .unwrap();
     assert_eq!(
         review::mcp::policy_outcome(&context, args, "approval_declined")["error"]["code"],
         "approval_declined"
@@ -476,11 +480,11 @@ fn web_domain_review_precedes_execution_and_keeps_one_time_permission_separate()
             "deny"
         );
         if agent == "claude" {
-            assert!(
-                review::mcp::apply_confirmation(&context, &connection, arguments)
-                    .unwrap()
-                    .is_some()
-            );
+            review::mcp::prepare_apply_confirmation(&context, &connection, arguments)
+                .unwrap()
+                .unwrap()
+                .claim_web_offer()
+                .unwrap();
         } else {
             let call = json!({"hook_event_name":"PreToolUse","tool_name":"mcp__shield__policy_apply",
                 "tool_use_id":"save-site","session_id":"acme-session","cwd":root,"tool_input":arguments});
@@ -1128,30 +1132,51 @@ fn invalid_policy_recovery_repairs_and_aborts_a_real_active_worktree_rebase() {
         String::from_utf8(out.stdout).unwrap().trim().to_owned()
     };
     checked(&["init", "-q"]);
-    checked(&["add", ".shield/config.yml"]);
+    let lock = root.join(".shield/shield.lock");
+    fs::write(&lock, r#"{"packs":[],"note":"Acme base"}"#).unwrap();
+    checked(&["add", ".shield/config.yml", ".shield/shield.lock"]);
     checked(&["commit", "-qm", "base"]);
     checked(&["switch", "-qc", "topic"]);
     let config = root.join(".shield/config.yml");
     fs::write(&config, "schema_version: 1\npacks: []\n# Acme topic\n").unwrap();
+    fs::write(&lock, r#"{"packs":[],"note":"Acme topic"}"#).unwrap();
     fs::write(root.join("feature.txt"), "Acme feature\n").unwrap();
-    checked(&["add", ".shield/config.yml", "feature.txt"]);
+    checked(&[
+        "add",
+        ".shield/config.yml",
+        ".shield/shield.lock",
+        "feature.txt",
+    ]);
     checked(&["commit", "-qm", "feature"]);
     let original = checked(&["rev-parse", "HEAD"]);
     checked(&["switch", "-q", "main"]);
     let main = "schema_version: 1\npacks: []\n# Acme main\n";
     fs::write(&config, main).unwrap();
-    checked(&["add", ".shield/config.yml"]);
+    fs::write(&lock, r#"{"packs":[],"note":"Acme main"}"#).unwrap();
+    checked(&["add", ".shield/config.yml", ".shield/shield.lock"]);
     checked(&["commit", "-qm", "main"]);
     checked(&["switch", "-q", "topic"]);
     assert!(!restoration_git(root, &["rebase", "main"]).status.success());
     assert!(fs::read_to_string(&config).unwrap().contains("<<<<<<<"));
-    let command = "git checkout --ours -- .shield/config.yml";
-    let id = offered_id(&shell(root, "codex", command)).unwrap();
+    assert!(fs::read_to_string(&lock).unwrap().contains("<<<<<<<"));
+    let command = "git checkout --ours -- .shield/config.yml .shield/shield.lock";
+    let refused = shell(root, "codex", command);
+    let message = reason(&refused).replace('\\', "/");
+    for detail in ["Git conflict", ".shield/config.yml", ".shield/shield.lock"] {
+        assert!(message.contains(detail), "{refused}");
+    }
+    let id = offered_id(&refused).unwrap();
     let approved = request_approve(root, "codex", &id, true);
     assert_eq!(approved["data"]["status"], "approved", "{approved}");
     let retry = shell(root, "codex", command);
     assert!(agent_context(&retry).contains("allowed once"), "{retry}");
-    checked(&["checkout", "--ours", "--", ".shield/config.yml"]);
+    checked(&[
+        "checkout",
+        "--ours",
+        "--",
+        ".shield/config.yml",
+        ".shield/shield.lock",
+    ]);
     assert_eq!(fs::read_to_string(&config).unwrap(), main);
     assert!(
         crate::runtime::Project::open(root)
@@ -1159,7 +1184,7 @@ fn invalid_policy_recovery_repairs_and_aborts_a_real_active_worktree_rebase() {
             .snapshot()
             .is_ok()
     );
-    checked(&["add", ".shield/config.yml"]);
+    checked(&["add", ".shield/config.yml", ".shield/shield.lock"]);
     checked(&["-c", "core.editor=true", "rebase", "--continue"]);
     assert_eq!(
         fs::read_to_string(root.join("feature.txt")).unwrap(),
@@ -1187,6 +1212,64 @@ fn invalid_policy_recovery_repairs_and_aborts_a_real_active_worktree_rebase() {
             .snapshot()
             .is_ok()
     );
+}
+
+#[test]
+fn stash_pathspec_files_explain_the_unverified_scope_without_offering_an_override() {
+    let (_folder, context) = fixture();
+    let root = Path::new(&context.project_root);
+    fs::write(root.join("paths.txt"), b":(top,literal)src/app.txt\0").unwrap();
+    for agent in ["codex", "claude"] {
+        let command = "git stash push --all --pathspec-from-file=paths.txt --pathspec-file-nul";
+        let refused = shell(root, agent, command);
+        assert_eq!(
+            refused["hookSpecificOutput"]["permissionDecision"], "deny",
+            "{refused}"
+        );
+        assert!(reason(&refused).contains("whole worktree"), "{refused}");
+        assert!(
+            agent_context(&refused).contains("git stash push --all -- <literal paths>"),
+            "{refused}"
+        );
+        assert!(offered_id(&refused).is_none(), "{refused}");
+        assert!(!reason(&refused).contains("hooks.json"), "{refused}");
+    }
+}
+
+#[test]
+#[cfg(not(windows))]
+fn scoped_stash_all_can_review_exact_agent_settings_but_never_fixed_state() {
+    let (_folder, context) = fixture();
+    let root = Path::new(&context.project_root);
+    for arguments in [
+        &["init", "-q"][..],
+        &["add", "--", ".codex/config.toml"],
+        &["commit", "-qm", "Acme base"],
+    ] {
+        let output = restoration_git(root, arguments);
+        assert!(output.status.success(), "{output:?}");
+    }
+    fs::write(root.join(".codex/config.toml"), "# Acme change\n").unwrap();
+    let command = "git stash push --all -- .codex/config.toml";
+    let refused = shell(root, "codex", command);
+    let id = offered_id(&refused).expect("literal settings change can be reviewed");
+    let fixed = shell(root, "codex", &format!("{command} .shield/state"));
+    assert!(offered_id(&fixed).is_none(), "{fixed}");
+    assert_eq!(
+        request_approve(root, "codex", &id, true)["data"]["status"],
+        "approved"
+    );
+    let retry = shell(root, "codex", command);
+    assert!(agent_context(&retry).contains("allowed once"), "{retry}");
+    assert!(offered_id(&shell(root, "codex", command)).is_some());
+
+    fs::create_dir_all(root.join(".shield/state")).unwrap();
+    fs::write(root.join(".shield/state/acme.txt"), "Acme private state\n").unwrap();
+    let staged = restoration_git(root, &["add", "-f", "--", ".shield/state/acme.txt"]);
+    assert!(staged.status.success(), "{staged:?}");
+    let fixed = shell(root, "codex", "git stash push --all -- recovery.txt");
+    assert!(reason(&fixed).contains("the full index"), "{fixed}");
+    assert!(offered_id(&fixed).is_none(), "{fixed}");
 }
 
 #[test]

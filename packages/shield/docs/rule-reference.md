@@ -188,6 +188,12 @@ the request context's working folder, or
 `relative_to: project` when a verified launcher starts the server at the
 enrolled project root.
 
+To check paths inside an array, point the `field_paths` key at the array and set
+`each` to the JSON Pointer for a path within each item, such as `/path`. An empty
+`each` checks each item directly. Missing path members are skipped. A malformed
+array, a present non-string path, or more than 128 array items across one
+predicate fails the check. This also requires `field-path-arrays-v1`.
+
 ### Local HTTP requests
 
 Use action `request` to review a shell HTTP operation by method and endpoint.
@@ -485,6 +491,7 @@ Declare exactly the capabilities used anywhere in the document, once each.
 | `graphql-mutations-v1` | GraphQL predicates with `operation: mutation`. |
 | `graphql-subtree-v1` | Query-root fields with unrestricted descendant selections. |
 | `field-paths-v1` | Explicit path checks on MCP JSON fields. |
+| `field-path-arrays-v1` | Path checks on all items of a bounded MCP JSON array. |
 | `glob-v1`, `regex-v1` | Their respective text selectors. |
 | `location-v1` | Path references/predicates, cwd, file domains, or targets. |
 | `access-paths-v1` | `read` or `write` root unions. |

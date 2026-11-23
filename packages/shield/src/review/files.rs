@@ -27,7 +27,8 @@ pub(in crate::review) fn load(root: &Path) -> Result<Policy, Error> {
 /// without a cache.
 pub(in crate::review) fn load_in(root: &Path, cache: Option<&Path>) -> Result<Policy, Error> {
     let _trace = crate::diagnostics::trace::span("policy.files");
-    let sources = project_sources::read(&crate::layout::config_file(root)).map_err(error)?;
+    let invalid = |cause| diagnose(root, error(cause));
+    let sources = project_sources::read(&crate::layout::config_file(root)).map_err(invalid)?;
     let digest = key(&sources);
     // Without a cache folder every load compiles; the files still decide.
     let path = cache.map(|cache| plan_path(cache, &digest));
@@ -37,7 +38,7 @@ pub(in crate::review) fn load_in(root: &Path, cache: Option<&Path>) -> Result<Po
             evaluator
         } else {
             crate::diagnostics::trace::count("policy.plan_misses", 1);
-            let (_, snapshot) = sources.validated().map_err(error)?;
+            let (_, snapshot) = sources.validated().map_err(invalid)?;
             let evaluator = Evaluator::new(vec![(policy::Scope::Project, snapshot)])?;
             // The cache is disposable: a failed write only costs the next compile.
             if let Some(path) = &path {
@@ -52,12 +53,13 @@ pub(in crate::review) fn load_in(root: &Path, cache: Option<&Path>) -> Result<Po
 /// without compiling them: a plan cached under their exact key was compiled
 /// from them; otherwise their sources are validated and composed.
 pub(in crate::review) fn check(root: &Path, cache: Option<&Path>) -> Result<String, Error> {
-    let sources = project_sources::read(&crate::layout::config_file(root)).map_err(error)?;
+    let invalid = |cause| diagnose(root, error(cause));
+    let sources = project_sources::read(&crate::layout::config_file(root)).map_err(invalid)?;
     let digest = key(&sources);
     if cache.is_some_and(|cache| plan_recorded(&plan_path(cache, &digest), &digest)) {
         return Ok(digest);
     }
-    let (_, snapshot) = sources.validated().map_err(error)?;
+    let (_, snapshot) = sources.validated().map_err(invalid)?;
     Evaluator::revision_of(&[(policy::Scope::Project, snapshot)])?;
     Ok(digest)
 }
@@ -89,7 +91,10 @@ pub(in crate::review) fn sync(
     state: &mut super::model::State,
 ) -> Result<bool, Error> {
     let root = Path::new(&context.project_root);
-    let invalid = |error: Error| Error::PolicyFiles(error.to_string());
+    let invalid = |error: Error| match diagnose(root, error) {
+        conflict @ Error::PolicyFileConflict(_) => conflict,
+        error => Error::PolicyFiles(error.to_string()),
+    };
     // A selected file that cannot be read refuses; only a project with no
     // configuration in either default location has nothing to follow.
     let selection = crate::layout::select(root).map_err(|error| invalid(error.into()))?;
@@ -319,6 +324,25 @@ fn error(error: application::Error) -> Error {
             Error::Invalid("policy files are unreadable")
         }
     }
+}
+
+/// Inspect the policy files only after a load fails. Gathering all
+/// marker blocks in one report still works when config cannot name its rules
+/// or a conflicted lock cannot name the packs that would be fetched.
+fn diagnose(root: &Path, error: Error) -> Error {
+    let files = project_sources::conflicted_files(&crate::layout::config_file(root));
+    if files.is_empty() {
+        return error;
+    }
+    let names = files
+        .iter()
+        .map(|(file, line)| {
+            let path = file.strip_prefix(root).unwrap_or(file).display();
+            format!("{path} (line {line})")
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    Error::PolicyFileConflict(names)
 }
 
 /// The key requests are decided by: the policy files without their settings,

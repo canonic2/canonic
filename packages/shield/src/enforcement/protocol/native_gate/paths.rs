@@ -49,6 +49,10 @@ pub(super) enum Protection {
     /// the user decides.
     Undetermined,
     Blocked,
+    /// Git will read the stash selection from mutable input after handoff.
+    UnverifiedStashPaths,
+    /// Git records the entire index, whose protected entries were not clear.
+    UnverifiedStashIndex,
 }
 
 /// What an operation does to the paths it names. Unmodeled commands write.

@@ -26,6 +26,8 @@ pub(super) enum Query {
         revisions: Vec<String>,
         paths: Vec<PathBuf>,
     },
+    /// A stash records the index as its second parent, even for a scoped push.
+    Staged { paths: Vec<PathBuf> },
     /// Untracked files under `paths` that no ignore rule keeps.
     Untracked { paths: Vec<PathBuf> },
     /// A stash's worktree, index and optional untracked trees against its base.
@@ -54,6 +56,7 @@ impl Query {
     pub(super) fn path(&self) -> Option<&PathBuf> {
         match self {
             Self::Diff { paths, .. }
+            | Self::Staged { paths }
             | Self::Untracked { paths }
             | Self::Stash { paths, .. }
             | Self::Rebase { paths, .. } => paths.first(),
@@ -335,12 +338,11 @@ fn pick(target: &Target, rest: &[&str]) -> Plan {
 /// `--keep-index`, and removes untracked files with `--include-untracked`.
 /// `--all` also removes ignored files, which the path checks cover.
 fn stash(target: &Target, options: &[&str]) -> Plan {
-    const VALUED: &[&str] = &["-m", "--message", "--pathspec-from-file"];
     let mut queries = vec![target.diff(vec!["HEAD".to_owned()])];
-    if widens(options, &["-k", "--keep-index"], VALUED) {
+    if widens(options, &["-k", "--keep-index"], super::STASH_VALUES) {
         queries.push(target.diff(Vec::new()));
     }
-    if widens(options, &["-u", "--include-untracked"], VALUED) {
+    if widens(options, &["-u", "--include-untracked"], super::STASH_VALUES) {
         queries.push(Query::Untracked {
             paths: target.tracked_paths(),
         });

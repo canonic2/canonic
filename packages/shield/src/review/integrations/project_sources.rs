@@ -332,6 +332,80 @@ pub(in crate::review) fn capture(config: &Path) -> Result<configuration::Bundle,
     read(config)?.bundle()
 }
 
+/// The selected configuration, rules and lock files with Git conflict blocks.
+pub(in crate::review) fn conflicted_files(config: &Path) -> Vec<(PathBuf, usize)> {
+    let Ok(resolved) = regular_file(config) else {
+        return Vec::new();
+    };
+    let Some(root) = resolved.parent() else {
+        return Vec::new();
+    };
+    let shared = application::read(&resolved).ok();
+    let local = read_project_artifact(root, "config.local.yml").ok();
+    let mut files = Vec::new();
+    if let Some(line) = shared.as_deref().and_then(git_conflict_line) {
+        files.push((config.to_owned(), line));
+    }
+    let mut names: Vec<_> = ["rules.yml", "shield.lock"]
+        .into_iter()
+        .chain(crate::layout::LOCAL_FILES)
+        .map(str::to_owned)
+        .collect();
+    for (layer, keys) in [
+        (shared.as_deref(), &["rules", "local_rules"][..]),
+        (local.as_deref(), &["rules"]),
+    ] {
+        let Some(document) = layer.and_then(|text| crate::policy::parse::<Value>(text).ok()) else {
+            continue;
+        };
+        for name in keys.iter().filter_map(|key| document[*key].as_str()) {
+            if configuration::portable_path(name).is_ok() && !names.iter().any(|path| path == name)
+            {
+                names.push(name.to_owned());
+            }
+        }
+    }
+    for name in names {
+        let line = if name == "config.local.yml" {
+            local.as_deref().and_then(git_conflict_line)
+        } else {
+            read_project_artifact(root, &name)
+                .ok()
+                .as_deref()
+                .and_then(git_conflict_line)
+        };
+        if let Some(line) = line {
+            files.push((root.join(name), line));
+        }
+    }
+    files
+}
+
+fn git_conflict_line(text: &str) -> Option<usize> {
+    const DEFAULT_MARKER_WIDTH: usize = 7;
+    let marker = |line: &str, prefix| {
+        let rest = line.trim_start_matches(prefix);
+        let width = line.len() - rest.len();
+        (width >= DEFAULT_MARKER_WIDTH && (rest.is_empty() || rest.starts_with(' ')))
+            .then_some(width)
+    };
+    let mut opening = None;
+    let mut separated = false;
+    for (index, line) in text.trim_start_matches('\u{feff}').lines().enumerate() {
+        if let Some(width) = marker(line, '<') {
+            opening = Some((index + 1, width));
+            separated = false;
+        } else if let Some((start, width)) = opening {
+            if line.len() == width && line.bytes().all(|byte| byte == b'=') {
+                separated = true;
+            } else if separated && marker(line, '>') == Some(width) {
+                return Some(start);
+            }
+        }
+    }
+    None
+}
+
 /// Read a pack artifact from the configuration directory. An artifact named by
 /// its SHA-256 digest that is missing there, as in a fresh clone or worktree,
 /// comes from the per-user artifact store or this folder's earlier retained
@@ -428,6 +502,47 @@ fn regular_file(path: &Path) -> Result<PathBuf, Error> {
 mod tests {
     use super::*;
     use assert_fs::prelude::*;
+
+    #[test]
+    fn conflict_diagnostics_require_at_least_the_default_marker_width() {
+        assert_eq!(git_conflict_line("< HEAD\n{}\n=\n{}\n> topic\n"), None);
+        assert_eq!(
+            git_conflict_line("\n<<<<<<<<< HEAD\n{}\n=========\n{}\n>>>>>>>>> topic\n"),
+            Some(2)
+        );
+    }
+
+    #[test]
+    fn conflict_diagnostics_follow_rule_paths_in_each_readable_layer() {
+        let root = assert_fs::TempDir::new().unwrap();
+        let shared = root.child(".shield/config.yml");
+        shared
+            .write_str("schema_version: 1\npacks: []\nrules: custom.json\n")
+            .unwrap();
+        root.child(".shield/config.local.yml")
+            .write_str("schema_version: 1\nrules: personal.yml\n")
+            .unwrap();
+        let marker = "<<<<<<< HEAD\n{}\n=======\n{}\n>>>>>>> topic\n";
+        root.child(".shield/custom.json")
+            .write_str(&format!("\n{marker}"))
+            .unwrap();
+        root.child(".shield/personal.yml")
+            .write_str(marker)
+            .unwrap();
+        let check = || {
+            crate::review::files::check(root.path(), None)
+                .unwrap_err()
+                .to_string()
+        };
+        let both = check();
+        assert!(both.contains("custom.json (line 2)"), "{both}");
+        assert!(both.contains("personal.yml (line 1)"), "{both}");
+        shared.write_str(marker).unwrap();
+        let local = check();
+        assert!(local.contains("config.yml (line 1)"), "{local}");
+        assert!(local.contains("personal.yml (line 1)"), "{local}");
+        assert!(!local.contains("custom.json"), "{local}");
+    }
 
     #[test]
     fn source_only_metadata_preserves_shared_and_local_replacement_identities() {

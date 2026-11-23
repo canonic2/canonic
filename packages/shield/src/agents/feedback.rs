@@ -22,6 +22,8 @@ fn raw_deny(code: &str) -> Reply {
         "unsupported-shell" => "Shield: blocked this shell dialect because its file effects cannot be verified. Use supported file tools or ask the user to run the command.".to_owned(),
         "operator-cli" => "Shield's operator CLI is unavailable to agents. For diagnostics use doctor or status; for command help use docs_search or docs_read. For registrations use mcp_setup with explicit agents and repair: true to review conflicts; project may name an explicit enrolled repair target without changing this connection's project. For policy changes use policy_propose and copy apply_arguments unchanged into policy_apply. Registration and policy changes each require the user's confirmation; policy rules and session grants cannot open the operator CLI.".to_owned(),
         "protected-access" => format!("{PROTECTED_ACCESS} Never read or change .shield/state or the cache. Propose policy changes with policy_propose. Do not bypass protection."),
+        "git-stash-paths-unverified" => "Shield cannot bind the path list Git will read from a file or stdin. Use `git stash push --all -- <literal paths>` with the same selected paths. For worktree-root paths from a Git entry folder, use `:(top,literal)` pathspecs with shell quoting. Keep each command within the host's input limits and preserve the requested snapshot scope.".to_owned(),
+        "git-stash-index-unverified" => "Git records the full index even with literal stash paths. Shield could not verify that protected entries are unchanged. Preserve the user's staging and report that the stash needs operator attention.".to_owned(),
         "sensitive-read" => "Shield: settings may contain credentials; this callback cannot request read approval. Continue without them unless essential.".to_owned(),
         "policy-file-unknown" => "Shield: this Git command can replace Shield's policy files or its policy writes cannot be determined. Use the exact in-session approval route when offered, or name paths that leave policy files out. Direct policy-file edits require policy_propose.".to_owned(),
         "invalid-host-input" | "invalid-host-event" | "invalid-input" => "Shield: invalid request. Correct the tool input before retrying.".to_owned(),
@@ -47,9 +49,7 @@ pub(super) fn invalid_policy_files(_adapter: &dyn AgentAdapter, message: &str) -
         reason: format!(
             "Shield: blocked. The policy files in .shield/ are invalid ({message}), so policy cannot authorize this request."
         ),
-        agent_context: Some(format!(
-            "Shield cannot apply policy: the files in .shield/ are invalid ({message}). Use the exact in-session approval route when offered. Direct policy edits and fixed runtime paths remain protected."
-        )),
+        agent_context: Some("Use the exact in-session approval route when offered. Direct policy edits and fixed runtime paths remain protected.".into()),
     }
 }
 
@@ -438,8 +438,14 @@ fn response(
     if let Some(reply) = sensitive_prompt(adapter, event, receipt, &path) {
         return Some(reply);
     }
-    if ["sensitive-read", "policy-file-unknown", "protected-access"]
-        .contains(&receipt["code"].as_str()?)
+    if [
+        "sensitive-read",
+        "policy-file-unknown",
+        "protected-access",
+        "git-stash-paths-unverified",
+        "git-stash-index-unverified",
+    ]
+    .contains(&receipt["code"].as_str()?)
     {
         let mut value = raw_deny(receipt["code"].as_str()?);
         if receipt["code"] == "protected-access"

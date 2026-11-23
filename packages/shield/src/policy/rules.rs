@@ -648,12 +648,11 @@ pub(super) fn capabilities(value: &Value, domain: &str, result: &mut BTreeSet<St
                 if key == "argument_paths" || key == "field_paths" {
                     result.insert("location-v1".into());
                 }
+                if key == "field_paths" && any_child_has_key(v, "each") {
+                    result.insert("field-path-arrays-v1".into());
+                }
                 if ["fields", "request_fields", "connection"].contains(&key.as_str())
-                    && v.as_object().is_some_and(|fields| {
-                        fields
-                            .values()
-                            .any(|predicate| predicate.get("not").is_some())
-                    })
+                    && any_child_has_key(v, "not")
                 {
                     result.insert(FIELD_NEGATION.into());
                 }
@@ -698,6 +697,12 @@ pub(super) fn capabilities(value: &Value, domain: &str, result: &mut BTreeSet<St
         }
         _ => {}
     }
+}
+
+fn any_child_has_key(value: &Value, key: &str) -> bool {
+    value
+        .as_object()
+        .is_some_and(|fields| fields.values().any(|child| child.get(key).is_some()))
 }
 
 fn access_reference(value: &Value) -> bool {

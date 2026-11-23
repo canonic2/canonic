@@ -127,6 +127,11 @@ fn inspect_with(
             super::super::Inspection::plain(target.check(paths.iter().copied()))
         };
     }
+    if invocation.subcommand == "stash"
+        && let Some(finding) = stash_all(&target, invocation, ask)
+    {
+        return super::super::Inspection::plain(finding);
+    }
     let paths = written_paths(&target, invocation.subcommand, rest);
     if paths.0 != Protection::None {
         return super::super::Inspection::plain(paths);
@@ -150,16 +155,7 @@ fn written_paths(target: &Target, subcommand: &str, rest: &[&str]) -> Finding {
         "read-tree" if widens(rest, &["-u"], &[]) => undetermined(),
         "apply" => apply(rest),
         "am" if !has(rest, &["--abort", "--quit", "--show-current-patch"], &[]) => undetermined(),
-        "stash" => match rest.first().copied() {
-            Some("branch") => undetermined(),
-            // `--all` removes ignored files anywhere in the repository.
-            _ if tree::stash_options(rest)
-                .is_some_and(|options| widens(options, &["-a", "--all"], &["-m", "--message"])) =>
-            {
-                target.check([":/"])
-            }
-            _ => none(),
-        },
+        "stash" if rest.first() == Some(&"branch") => undetermined(),
         "clean"
             if !has(rest, &["-n", "--dry-run"], &["-e", "--exclude"])
                 && widens(rest, &["-x", "-X"], &["-e", "--exclude"]) =>
@@ -172,6 +168,83 @@ fn written_paths(target: &Target, subcommand: &str, rest: &[&str]) -> Finding {
         }
         _ => none(),
     }
+}
+
+const STASH_VALUES: &[&str] = &["-m", "--message", "--pathspec-from-file"];
+
+fn stash_all(target: &Target, invocation: &Invocation<'_>, ask: Ask<'_>) -> Option<Finding> {
+    let options = tree::stash_options(invocation.rest)?;
+    if !widens(options, &["-a", "--all"], STASH_VALUES) {
+        return None;
+    }
+    // The hook cannot bind what Git will read from a file or stdin later.
+    if invocation.rest.first() != Some(&"save")
+        && widens(options, &["--pathspec-from-file"], STASH_VALUES)
+    {
+        return Some((Protection::UnverifiedStashPaths, None));
+    }
+    if invocation.ordinary
+        && invocation.rest.first() == Some(&"push")
+        && let Some(specs) = stash_all_paths(options)
+        && let Some(worktree) = target.worktree()
+        && target.base.starts_with(worktree)
+    {
+        let protected = specs.iter().find_map(|spec| {
+            let (base, path) = spec
+                .strip_prefix(":(top,literal)")
+                .map_or((target.base.as_path(), *spec), |path| (worktree, path));
+            target.covered_path(&base.join(path))
+        });
+        if protected.is_some() {
+            return Some(blocked_path(protected));
+        }
+        // Git rolls back only the selected paths, but the stash's second
+        // parent records the full index.
+        let mut paths = target.tracked_paths();
+        paths.extend(
+            target
+                .cache_paths()
+                .filter(|path| path.starts_with(worktree)),
+        );
+        let staged = Query::Staged { paths };
+        return Some(match ask(target, &staged) {
+            Some(false) => none(),
+            _ => (Protection::UnverifiedStashIndex, None),
+        });
+    }
+    // With no verified selection, `--all` can remove ignored files anywhere.
+    Some(target.check([":/"]))
+}
+
+/// Only these `push` options have modeled arity and preserve the exact list
+/// after the separator. A message spelled `--` remains a message.
+fn stash_all_paths<'a>(options: &'a [&'a str]) -> Option<&'a [&'a str]> {
+    let mut words = options.iter();
+    let mut all = false;
+    while let Some(&word) = words.next() {
+        match word {
+            "-a" | "--all" => all = true,
+            "-q" | "--quiet" => {}
+            "-m" | "--message" => {
+                words.next()?;
+            }
+            "--" => {
+                let specs = words.as_slice();
+                return (all && !specs.is_empty() && specs.iter().all(|spec| stash_literal(spec)))
+                    .then_some(specs);
+            }
+            word if word.starts_with("--message=") => {}
+            _ => return None,
+        }
+    }
+    None
+}
+
+fn stash_literal(spec: &str) -> bool {
+    let path = spec.strip_prefix(":(top,literal)").unwrap_or(spec);
+    !path.contains([':', '\\', '*', '?', '['])
+        && !path.chars().any(char::is_control)
+        && path.split('/').all(|part| !matches!(part, "" | "." | ".."))
 }
 
 /// The plan's answer: ordinary policy when every query finds the policy
@@ -287,6 +360,14 @@ impl Target<'_> {
             .flat_map(|path| [path.clone(), resolve_existing(path)])
     }
 
+    fn cache_paths(&self) -> impl Iterator<Item = PathBuf> + '_ {
+        self.reach
+            .guard
+            .cache
+            .into_iter()
+            .flat_map(|path| [path.to_path_buf(), resolve_existing(path)])
+    }
+
     fn restore(
         &self,
         specs: &[&str],
@@ -364,6 +445,7 @@ impl Target<'_> {
         self.mapped.get_or_init(|| {
             let mut paths = self.protected.clone();
             paths.extend(self.relocated());
+            paths.extend(self.cache_paths());
             if let Some(root) = self.worktree() {
                 paths.extend(
                     crate::review::integrations::protected_files()
@@ -390,10 +472,14 @@ impl Target<'_> {
         let Some(literal) = self.reach.literal_path(spec) else {
             return Some(self.file.clone());
         };
-        if classify(&literal, self.reach.guard, Access::Write) == Protection::Blocked {
-            return Some(literal);
+        self.covered_path(&literal)
+    }
+
+    fn covered_path(&self, literal: &Path) -> Option<PathBuf> {
+        if classify(literal, self.reach.guard, Access::Write) == Protection::Blocked {
+            return Some(literal.to_path_buf());
         }
-        let path = super::resolved("", &literal);
+        let path = super::resolved("", literal);
         if classify(&path, self.reach.guard, Access::Write) == Protection::Blocked {
             return Some(path);
         }
@@ -428,16 +514,17 @@ impl Target<'_> {
     }
 
     fn check<'a>(&self, specs: impl IntoIterator<Item = &'a str>) -> Finding {
-        specs
-            .into_iter()
-            .find_map(|spec| self.covered(spec))
-            .map_or_else(none, |path| {
-                (
-                    Protection::Blocked,
-                    Some(path.to_string_lossy().into_owned()),
-                )
-            })
+        blocked_path(specs.into_iter().find_map(|spec| self.covered(spec)))
     }
+}
+
+fn blocked_path(path: Option<PathBuf>) -> Finding {
+    path.map_or_else(none, |path| {
+        (
+            Protection::Blocked,
+            Some(path.to_string_lossy().into_owned()),
+        )
+    })
 }
 
 fn none() -> Finding {

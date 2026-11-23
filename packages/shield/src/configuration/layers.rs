@@ -179,8 +179,9 @@ pub(crate) fn merge(shared: &str, local: Option<&str>) -> Result<String, Error> 
         settings.validate()?;
         return Ok(shared.to_owned());
     }
-    let packs = document["packs"]
-        .as_array_mut()
+    let packs = document
+        .get_mut("packs")
+        .and_then(Value::as_array_mut)
         .ok_or(Error::Contract("configuration packs required"))?;
     // Rows a local entry already named, shared or local-only. Disabled rows
     // leave the list after every entry has matched, so indices stay stable.

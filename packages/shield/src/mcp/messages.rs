@@ -17,22 +17,17 @@ pub(super) fn instructions_for(context: &crate::review::Context) -> String {
 }
 
 fn instructions_with(adapter: &dyn crate::agents::review::ReviewAdapter) -> String {
-    let inspection = "Lists take cursor and limit (default 50, maximum 100; suggestions default 16). Follow next_cursor with unchanged filters until null; invalid_cursor means restart without a cursor. Previews name the tool or section for the rest. Shield manages project permissions. Use policy_evaluate to inspect decisions and rule_list to inspect rules. If active policy already allows the request, continue through the normal tool. \
-suggestion_list returns this session's asked requests with evidence and authoring examples; respect incomplete evidence, pending proposals and deferred reviews. \
-Use pack_list and pack_show to inspect installed packs. history_list and history_show accept an explicit absolute project for an already enrolled nested worktree inside this connection's project; this is a read-only selector and cannot reach unrelated projects. ";
+    let inspection = "Shield manages project permissions. Inspect decisions with policy_evaluate, rules with rule_list, and installed packs with pack_list or pack_show. If the request is allowed, continue with the normal tool. Use suggestion_list for this session's evidence and existing reviews. \
+Use history_list or history_show with an absolute project path for history in an enrolled nested worktree. For more results, follow next_cursor with the same filters. Restart without a cursor on invalid_cursor. ";
     let host = adapter.guidance().instructions;
     if adapter.confirmation() == crate::agents::review::Confirmation::Terminal {
         return format!("{inspection}{host}");
     }
-    let approvals = "If a policy change is needed, follow skill://shield/custom-rules/SKILL.md: check policy_evaluate and rule_list, then propose a narrow change with rule_add or policy_propose; preserve scope and deny boundaries. Nothing changes until the user approves policy_apply. \
-Use pack_update to update one reference or all tracking packs when omitted, and pack_remove to prepare removal; omit its reference to let the person select installed packs. pack_configure accepts direct edits, named variables or bare guided settings and overrides. pack_add accepts known typed settings through set. registry_add can collect omitted name/location details through a form; then call it with the returned retry_arguments for a separate trust review. Input submission cannot approve trust or policy. \
-Previews and proposals grant no authority; the policy files change only through user-approved policy_apply. A preparation Task grants no authority either: poll tasks/get, use its review_arguments with policy_propose to create a fresh review, then obtain separate human confirmation using unchanged apply_arguments. Repeating identical creation arguments recovers a lost task handle; never restart failed or cancelled work automatically. Read returned report_resources with resources/read when full comparison or retained review evidence is needed; a report does not approve a change. Keep approval and setup in this conversation through Shield tools and host confirmation; sending the user to a terminal is a product bug, not a recovery solution. \
-Follow returned request_approve routes for one-time approval, then repeat the approved call once unchanged. For a planned batch of privileged native commands, inspect session_grant_list, propose a bounded exact batch or closed argv family with session_grant_propose, then copy apply_arguments to session_grant_approve for the user's form. Prefer temporary session permission for one task and persistent policy only for future sessions. Inspect existing grants first, never repeat a declined offer automatically, and never bypass refusals. Only the person's explicit request permits session_grant_reconsider followed by fresh human confirmation. \
-For a large administrative review, review_status: more_pages means nothing has applied: call retry_tool with the exact retry_arguments to present the next human confirmation page. Never skip pages or repeat a declined review. ";
-    format!(
-        "{inspection}{approvals}{} {host}Chat replies cannot replace host confirmation.",
-        crate::proposal_draft::PACK_SETUP_GUIDANCE
-    )
+    let approvals = "For one-time approval, follow request_approve and repeat the approved call once unchanged. For a batch needed this session, check session_grant_list, propose exact, bounded commands with session_grant_propose, then pass its unchanged apply_arguments to session_grant_approve. Use session_grant_reconsider only on explicit request and obtain fresh confirmation. \
+Prefer temporary session grants for work limited to this task. Propose persistent policy when the permission should carry over to future sessions. Open skill://shield/custom-rules/SKILL.md via MCP resources/read. Check policy_evaluate and rule_list, preserve scope and deny boundaries, and use rule_add or policy_propose. \
+Update a named pack with pack_update and its reference. Omit reference only to update all direct packs, including pinned packs. For removal use pack_remove, omitting reference only to let the user choose. Use pack_configure for installed settings and pack_info for setup settings before pack_add. In registry_add, use returned retry_arguments for the separate trust review after collecting any missing inputs. \
+Copy apply_arguments unchanged to policy_apply for host confirmation. A preview, report, prepared Task or chat reply grants no approval. For a preparation Task, poll tasks/get and pass its review_arguments to policy_propose. Recover a lost handle with identical creation arguments. Read report_resources via resources/read for more evidence. With review_status: more_pages, call retry_tool with exact retry_arguments until the review is complete. Keep confirmation in this session and stop on a decline. Never bypass a refusal or automatically restart failed or cancelled work. ";
+    format!("{inspection}{approvals}{host}")
 }
 
 pub(super) fn approval_unavailable(agent: Option<&str>) -> &'static str {
@@ -54,7 +49,7 @@ pub(super) fn deadline(name: &str, guided: bool) -> &'static str {
         _ if crate::review::mcp::prepares_review(name) => {
             "Shield stopped preparing this review at its time limit, so nothing was applied. Call the tool again with the same arguments; it returns the review if one was saved. If it stops again, tell the user Shield timed out on this call and include the doctor tool's result."
         }
-        "policy_apply" | "policy_withdraw" => {
+        "policy_apply" | "policy_withdraw" | "policy_reject" => {
             "Shield stopped this call at its time limit; whether it took effect is unknown. Call policy_show with its proposal_id before calling it again."
         }
         "request_approve" | "request_deny" => {
@@ -68,6 +63,15 @@ pub(super) fn deadline(name: &str, guided: bool) -> &'static str {
         }
         "policy_defer" | "policy_draft_remove" => {
             "Shield stopped this call at its time limit; whether it took effect is unknown. Call policy_draft_list before calling it again."
+        }
+        "registry_add" if guided => {
+            "Shield stopped collecting registry details at its time limit. Nothing was enrolled. If the details are still needed, ask the user before opening the form again."
+        }
+        "registry_add" => {
+            "Shield stopped this call at its time limit. Whether the registry was enrolled is unknown. Call registry_list with the original scope and check the named alias and source before calling it again."
+        }
+        "registry_default" => {
+            "Shield stopped this call at its time limit. Whether the default registry changed is unknown. Call registry_list with the original scope and check the current default before calling it again."
         }
         "registry_remove" => {
             "Shield stopped this call at its time limit. Whether the registry was removed is unknown. Call registry_list with the original scope and check whether the named alias is still registered in that scope before calling it again."
@@ -180,9 +184,12 @@ fn primary_summary(name: &str, agent: Option<&str>, value: &Value) -> String {
             data["change_summary"].as_str().map_or_else(|| guidance.into(), |change| format!("Proposed: {change} {guidance}"))
         },
         "policy_apply" => data["next_action"].as_str().unwrap_or("Policy change written to the policy files after host confirmation. Retry the original request only if still needed.").into(),
+        "request_approve" if data["terminal"] == true || data["status"] == "terminal" => {
+            data["next_action"].as_str().unwrap_or("These requests are closed. Their recorded outcomes grant no permission.").into()
+        },
         "request_approve" => match data["grants"].as_array() {
-            Some(grants) => format!("The user approved these {} requests once each. Follow each grant's next_action. Checked commands require --approval-request with their request_id; repeat every call unchanged through its original consumer.", grants.len()),
-            None => "The user approved this request once. Repeat the identical call now; any change to it needs a new approval.".into(),
+            Some(grants) => format!("The user approved these {} requests once each. {}", grants.len(), data["next_action"].as_str().unwrap_or("Follow each grant's next_action.")),
+            None => format!("The user approved this request once. {}", data["next_action"].as_str().unwrap_or("Repeat the request once through its original consumer with the same inputs.")),
         },
         "request_deny" => "The user denied this request or revoked its unused grant. No action was authorized.".into(),
         "suggestion_list" => {

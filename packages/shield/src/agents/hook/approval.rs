@@ -74,15 +74,13 @@ pub(super) fn in_session(
             // A failed read is not a missing registration; recording the
             // request below reports it with a retry.
             if enrolled(root, key.agent) == Some(false) {
-                reply.reason.push_str(" Shield's approval connection is not registered in this checkout; repair Shield setup to restore in-session approval.");
-                append(
-                    &mut reply.agent_context,
-                    if refusals.iter().any(|r| r["policy_unavailable"] == true) {
-                        INVALID_POLICY_NOT_CONNECTED
-                    } else {
-                        NOT_CONNECTED
-                    },
-                );
+                if refusals.iter().any(|r| r["policy_unavailable"] == true) {
+                    reply.reason.push_str(" In-session approval is unavailable in this checkout. Repair the policy files from your terminal first, then run `shield mcp setup` in this project and restart the agent session.");
+                    append(&mut reply.agent_context, INVALID_POLICY_NOT_CONNECTED);
+                } else {
+                    reply.reason.push_str(" Shield's approval connection is not registered in this checkout; repair Shield setup to restore in-session approval.");
+                    append(&mut reply.agent_context, NOT_CONNECTED);
+                }
                 return None;
             }
             let Some(summary) = summary(request, refusals) else {
@@ -131,7 +129,7 @@ const INVALID_POLICY_NOT_CONNECTED: &str = "Shield cannot ask the user to allow 
 /// condition its MCP connection needs to ask the person; `None` when the
 /// project could not be read.
 fn enrolled(root: &Path, agent: &str) -> Option<bool> {
-    let context = crate::review::open(root).ok()?;
+    let context = crate::review::open_authorization(root).ok()?;
     crate::review::cli::registered(&context, agent).ok()
 }
 

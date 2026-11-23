@@ -124,6 +124,65 @@ fn an_explicit_only_checkout_is_its_own_project_without_prior_state() {
 }
 
 #[test]
+fn policy_file_conflicts_are_visible_in_status_and_doctor() {
+    let root = TempDir::new().unwrap();
+    root.child(".shield/config.yml")
+        .write_str("schema_version: 1\npacks: []\n")
+        .unwrap();
+    let lock = root.child(".shield/shield.lock");
+    let command = |verb| {
+        let mut cmd = cargo_bin_cmd!("shield");
+        cmd.args(["--no-debug-log", "--project"])
+            .arg(root.path())
+            .arg(verb)
+            .env("HOME", root.path())
+            .env("SHIELD_PACK_UPDATE_CHECK", "off");
+        cmd
+    };
+    let broken = "<<<<<<< HEAD\n{\"packs\":[]}\n||||||| base\n{}\n=======\n{\"packs\":[],\"note\":\"Acme side\"}\n>>>>>>> acme-topic\n";
+    lock.write_str(broken).unwrap();
+    for verb in ["status", "doctor"] {
+        let output = command(verb).output().unwrap();
+        assert!(output.status.success(), "{verb}: {output:?}");
+        let text = String::from_utf8(output.stdout).unwrap();
+        assert!(
+            text.contains("Shield policy is unavailable"),
+            "{verb}: {text}"
+        );
+        assert_eq!(text.matches("Git conflict").count(), 1, "{verb}: {text}");
+        assert!(
+            text.replace('\\', "/")
+                .contains(".shield/shield.lock (line 1)"),
+            "{verb}: {text}"
+        );
+        assert!(!text.contains("Acme side"), "{verb}: {text}");
+    }
+    let output = command("status").arg("--json").output().unwrap();
+    let report: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(report["policy_files"]["fetch_error"].is_null(), "{report}");
+    assert_eq!(std::fs::read_to_string(lock.path()).unwrap(), broken);
+    lock.write_str(r#"{"packs":[]}"#).unwrap();
+    let local = root.child(".shield/config.local.yml");
+    local
+        .write_str("schema_version: 1\r\n<<<<<<<<< HEAD\r\nhistory: {enabled: true}\r\n=========\r\nhistory: {enabled: false}\r\n>>>>>>>>> acme-topic\r\n")
+        .unwrap();
+    let output = command("status").arg("--json").output().unwrap();
+    let report: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(
+        report["policy_files"]["error"]
+            .as_str()
+            .is_some_and(|message| message
+                .replace('\\', "/")
+                .contains(".shield/config.local.yml")),
+        "{report}"
+    );
+    local.write_str("schema_version: 1\n").unwrap();
+    let output = command("status").arg("--json").output().unwrap();
+    let report: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(report["policy_files"]["digest"].is_string(), "{report}");
+}
+
+#[test]
 fn human_errors_are_actionable_plain_text_and_json_errors_keep_their_contract() {
     let root = TempDir::new().expect("unenrolled project");
     let human = cargo_bin_cmd!("shield")

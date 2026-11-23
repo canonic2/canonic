@@ -22,6 +22,7 @@ use canonic_mcp_kit::{
     stdio::{self, Confirm, Direction, Outcome, Request},
 };
 use std::{
+    collections::BTreeMap,
     sync::{Arc, Mutex, RwLock},
     time::Duration,
 };
@@ -41,6 +42,7 @@ pub(crate) struct Server {
     review: RwLock<Arc<crate::review::Context>>,
     connection: Arc<crate::review::mcp::Connection>,
     confirmations: Mutex<confirmation::Confirmations>,
+    policy_waits: PolicyWaits,
     questions: Mutex<elicitation::Questions>,
     log: Option<Arc<crate::diagnostics::Log>>,
     preparations: Arc<crate::review::preparation_tasks::Runtime>,
@@ -83,6 +85,7 @@ impl Server {
             review: RwLock::new(Arc::new(context)),
             connection,
             confirmations: Mutex::new(confirmation::Confirmations::default()),
+            policy_waits: PolicyWaits::default(),
             questions: Mutex::new(elicitation::Questions::default()),
             log: None,
             preparations,
@@ -158,7 +161,7 @@ impl Server {
             },
         ) {
             Ok(Some((message, binding))) => {
-                return self.confirm_bound(review, call, context, message, Some(binding));
+                return self.confirm_bound(review, call, context, message, Some(binding), None);
             }
             Err(error) => {
                 return Outcome::Tool(response::tool_result(
@@ -243,7 +246,7 @@ impl Server {
         context: &stdio::Context,
         message: String,
     ) -> Outcome {
-        self.confirm_bound(review, call, context, message, None)
+        self.confirm_bound(review, call, context, message, None, None)
     }
 
     fn confirm_bound(
@@ -253,6 +256,7 @@ impl Server {
         context: &stdio::Context,
         message: String,
         review_binding: Option<u64>,
+        mut guard: Option<PolicyWait>,
     ) -> Outcome {
         if crate::agents::review::for_context(&review).confirmation()
             == crate::agents::review::Confirmation::Terminal
@@ -264,6 +268,9 @@ impl Server {
                     adapter.native_forms_unavailable(review.host_version.as_deref())
                 })
         {
+            if let Some(guard) = &mut guard {
+                guard.disarm();
+            }
             return Outcome::Tool(reply(
                 &review,
                 &self.connection,
@@ -279,13 +286,7 @@ impl Server {
                 .confirmations
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .begin(
-                    request,
-                    &call,
-                    &message,
-                    review_binding,
-                    Some(PolicyWait::new(&review, &call)),
-                );
+                .begin(request, &call, &message, review_binding, guard);
             return match interim {
                 Ok(result) => Outcome::InputRequired(result),
                 Err(confirmation::Refusal::Full(error)) => {
@@ -305,15 +306,20 @@ impl Server {
                 )),
             };
         }
-        let connection = self.connection.clone();
         let trace = crate::diagnostics::trace::current();
         let waiting = trace
             .as_ref()
             .map(|trace| trace.wait("approval.wait", "approval.wait_us"));
-        let mut guard = PolicyWait::new(&review, &call);
+        let mut admin = AdminWait {
+            connection: self.connection.clone(),
+            binding: review_binding,
+        };
         Outcome::Confirm(Confirm::new(message, move |decision, context| {
             let review = progress::resume(review, context);
-            guard.disarm();
+            if let Some(guard) = &mut guard {
+                guard.disarm();
+            }
+            let review_binding = admin.take();
             let _scope = trace
                 .as_ref()
                 .map(crate::diagnostics::trace::Request::enter);
@@ -339,7 +345,7 @@ impl Server {
                         Answer::AdminFailed(id, "approval_unavailable")
                     }),
             };
-            let result = reply(&review, &connection, &call, context, answer);
+            let result = reply(&review, &admin.connection, &call, context, answer);
             if let Some(trace) = &trace {
                 trace.finish(if result.is_error {
                     "refused"
@@ -397,20 +403,30 @@ impl Server {
         call: ToolCall,
         context: &stdio::Context,
     ) -> Outcome {
-        match crate::review::mcp::apply_confirmation(&review, &self.connection, &call.arguments) {
-            Ok(Some(message)) => self.confirm_apply(review, call, context, message),
-            Err(error) => {
-                let outcome =
-                    crate::review::mcp::settle_apply_failure(&review, &call.arguments, &error);
-                let committed = outcome.is_some();
-                Outcome::Tool(response::tool_result(
-                    &call.name,
-                    review.agent.as_deref(),
-                    outcome.unwrap_or_else(|| crate::review::mcp::question_error(&review, &error)),
-                    !committed,
-                    &|| Ok(()),
-                ))
+        match crate::review::mcp::prepare_apply_confirmation(
+            &review,
+            &self.connection,
+            &call.arguments,
+        ) {
+            Ok(Some(question)) => {
+                let mut guard = match PolicyWait::begin(
+                    &self.policy_waits,
+                    &review,
+                    &call.arguments,
+                    &question.proposal_id,
+                    context.request_id(),
+                ) {
+                    Ok(guard) => guard,
+                    Err(error) => return Outcome::Method(Err(error)),
+                };
+                if let Err(error) = question.claim_web_offer() {
+                    // A competing connection may own the durable offer.
+                    guard.disarm();
+                    return Self::policy_apply_failure(&review, &call, &error);
+                }
+                self.confirm_bound(review, call, context, question.message, None, Some(guard))
             }
+            Err(error) => Self::policy_apply_failure(&review, &call, &error),
             Ok(None) => Outcome::Tool(reply(
                 &review,
                 &self.connection,
@@ -419,6 +435,22 @@ impl Server {
                 Answer::None,
             )),
         }
+    }
+
+    fn policy_apply_failure(
+        review: &crate::review::Context,
+        call: &ToolCall,
+        error: &crate::review::Error,
+    ) -> Outcome {
+        let outcome = crate::review::mcp::settle_apply_failure(review, &call.arguments, error);
+        let committed = outcome.is_some();
+        Outcome::Tool(response::tool_result(
+            &call.name,
+            review.agent.as_deref(),
+            outcome.unwrap_or_else(|| crate::review::mcp::question_error(review, error)),
+            !committed,
+            &|| Ok(()),
+        ))
     }
 
     fn runtime_refusal(
@@ -649,9 +681,13 @@ enum Answer {
     Failed(&'static str),
 }
 
-/// Dropping a legacy wait (RPC cancellation/expiry) closes its candidate even
-/// though the transport deliberately does not invoke its continuation.
+type PolicyWaits = Arc<Mutex<BTreeMap<String, serde_json::Value>>>;
+
+/// Own the wait for one validated, exact policy review across both transports.
+/// Dropping the wait before an answer closes the candidate.
 struct PolicyWait {
+    waits: PolicyWaits,
+    proposal_id: String,
     context: crate::review::Context,
     arguments: serde_json::Value,
     armed: bool,
@@ -660,12 +696,34 @@ impl PolicyWait {
     fn disarm(&mut self) {
         self.armed = false;
     }
-    fn new(context: &crate::review::Context, call: &ToolCall) -> Self {
-        Self {
-            context: context.clone(),
-            arguments: call.arguments.clone(),
-            armed: call.name == "policy_apply",
+    fn begin(
+        waits: &PolicyWaits,
+        context: &crate::review::Context,
+        arguments: &serde_json::Value,
+        proposal_id: &str,
+        request_id: Option<&serde_json::Value>,
+    ) -> Result<Self, RpcError> {
+        let mut open = waits
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(id) = open.get(proposal_id) {
+            return Err(RpcError::new(
+                -32000,
+                "Confirmation for this policy review is already pending. Wait for the existing form to be answered or cancelled.",
+            )
+            .with_data(serde_json::json!({"code":"human_input_busy","requestId":id})));
         }
+        open.insert(
+            proposal_id.to_owned(),
+            request_id.cloned().unwrap_or_default(),
+        );
+        Ok(Self {
+            waits: waits.clone(),
+            proposal_id: proposal_id.to_owned(),
+            context: context.clone(),
+            arguments: arguments.clone(),
+            armed: true,
+        })
     }
 }
 impl Drop for PolicyWait {
@@ -677,6 +735,31 @@ impl Drop for PolicyWait {
                 "withdrawn",
                 "cancelled",
             );
+        }
+        self.waits
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove(&self.proposal_id);
+    }
+}
+
+/// Release a captured administrative review even when legacy stdio drops the
+/// continuation without delivering an answer.
+struct AdminWait {
+    connection: Arc<crate::review::mcp::Connection>,
+    binding: Option<u64>,
+}
+
+impl AdminWait {
+    fn take(&mut self) -> Option<u64> {
+        self.binding.take()
+    }
+}
+
+impl Drop for AdminWait {
+    fn drop(&mut self) {
+        if let Some(binding) = self.binding {
+            crate::review::mcp::discard_admin(&self.connection, binding);
         }
     }
 }

@@ -64,6 +64,7 @@ pub(crate) const CAPABILITIES: &[&str] = &[
     "graphql-mutations-v1",
     "graphql-subtree-v1",
     "field-paths-v1",
+    "field-path-arrays-v1",
     "glob-v1",
     "regex-v1",
     "location-v1",

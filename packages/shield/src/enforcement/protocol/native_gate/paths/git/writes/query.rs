@@ -139,6 +139,7 @@ fn answer(base: &Path, owner: &Path, root: &Path, query: &Query) -> Option<bool>
     let deadline = Instant::now() + Duration::from_secs(2);
     let paths = match query {
         Query::Diff { paths, .. }
+        | Query::Staged { paths }
         | Query::Untracked { paths }
         | Query::Stash { paths, .. }
         | Query::Rebase { paths, .. } => paths,
@@ -168,7 +169,8 @@ fn answer(base: &Path, owner: &Path, root: &Path, query: &Query) -> Option<bool>
         return None;
     }
     match query {
-        Query::Diff { revisions, .. } => diff(base, revisions, &selected, deadline),
+        Query::Diff { revisions, .. } => diff(base, &[], revisions, &selected, deadline),
+        Query::Staged { .. } => diff(base, &["--cached"], &["HEAD"], &selected, deadline),
         Query::Untracked { .. } => {
             let mut listing = command(base);
             listing
@@ -210,9 +212,9 @@ fn stash(
     // --index cannot hide a policy edit absent from the saved worktree.
     // Applying merges the base, the working tree and the stash, so the
     // working tree must also match the base on the protected paths.
-    for revisions in [vec![ids[1], ids[0]], vec![ids[1], ids[2]], vec![ids[1]]] {
-        let revisions: Vec<_> = revisions.into_iter().map(str::to_owned).collect();
-        if diff(base, &revisions, paths, deadline)? {
+    let comparisons: [&[&str]; 3] = [&[ids[1], ids[0]], &[ids[1], ids[2]], &[ids[1]]];
+    for revisions in comparisons {
+        if diff(base, &[], revisions, paths, deadline)? {
             return Some(true);
         }
     }
@@ -277,7 +279,7 @@ fn rebase(
             if !object_id(tip) {
                 return None;
             }
-            diff(base, &[tip.to_owned()], paths, deadline)?
+            diff(base, &[], &[tip], paths, deadline)?
         }
         RebaseStep::Remaining => {
             let todo = read_state(&state.join("git-rebase-todo"))?;
@@ -413,7 +415,8 @@ fn touched(
 #[cfg(not(windows))]
 fn diff(
     base: &Path,
-    revisions: &[String],
+    options: &[&str],
+    revisions: &[impl AsRef<std::ffi::OsStr>],
     paths: &[std::path::PathBuf],
     deadline: Instant,
 ) -> Option<bool> {
@@ -425,8 +428,9 @@ fn diff(
             "--no-ext-diff",
             "--no-textconv",
             "--ignore-submodules=all",
-            "--end-of-options",
         ])
+        .args(options)
+        .arg("--end-of-options")
         .args(revisions)
         .arg("--")
         .args(paths);

@@ -77,12 +77,15 @@ fn web_reviews_decline_is_durable_per_domain_session_without_history() {
         "Changed wording does not create another offer.",
     );
     assert!(duplicate["error"].is_object(), "{duplicate}");
-    assert!(
-        review::mcp::apply_confirmation(&context, &connection, args)
-            .unwrap()
-            .is_some()
-    );
-    let duplicate = review::mcp::apply_confirmation(&context, &connection, args).unwrap_err();
+    let confirmation = review::mcp::prepare_apply_confirmation(&context, &connection, args)
+        .unwrap()
+        .unwrap();
+    confirmation.claim_web_offer().unwrap();
+    let duplicate = review::mcp::prepare_apply_confirmation(&context, &connection, args)
+        .unwrap()
+        .unwrap()
+        .claim_web_offer()
+        .unwrap_err();
     assert!(matches!(duplicate, Error::WebReviewOffered));
     assert!(review::mcp::settle_apply_failure(&context, args, &duplicate).is_none());
     let declined = review::mcp::policy_outcome(&context, args, "approval_declined");

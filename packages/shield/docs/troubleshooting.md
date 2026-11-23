@@ -223,10 +223,13 @@ next one. Run:
 shield status
 ```
 
-If status reports the files' error, fix the invalid files. A supported native
-request can still use `request_approve` and an identical retry; supported Git
-restorations can repair conflicted policy files through that review. Direct
-policy edits, state and caches remain protected. See
+When policy loading fails and Shield finds Git conflict markers, it reports
+the affected paths and opening lines in the shared configuration, local
+`config.local.yml`, rules and lock files. Resolve the conflicts and run
+`shield status` again. Shield resumes using the files as soon as they are valid.
+A supported native request can still use `request_approve` and an identical
+retry. Supported Git restorations can repair conflicted policy files through
+that review. Direct policy edits, state and caches remain protected. See
 [allowing one blocked request](project-review.md#allowing-one-blocked-request).
 Otherwise inspect the request with
 `shield history list` to see which rule decided it; another rule may take precedence.

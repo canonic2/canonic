@@ -490,8 +490,9 @@ terminal behavior.
 On a connection that supports in-session approval, call `pack_update` with `{}` to
 update all direct packs, including pins, or with `{"reference":"gate"}` to update
 one selection and its dependencies. Use `{"reference":"main/canonic/gate@0.2.7"}`
-to request an exact release. Profiles and pin modes are retained, and applying
-changes requires review and approval. Call `pack_remove` with
+to request an exact release. Call `pack_update` directly for a known selection.
+It fetches the catalog metadata it needs. Profiles and pin modes are retained,
+and applying changes requires review and approval. Call `pack_remove` with
 `{"reference":"gate"}` to remove one selection using the same dependency checks
 as `shield pack remove`.
 
@@ -850,6 +851,7 @@ for in-session confirmation.
 `request_approve` supports native-hook requests, SDK reads and checked commands.
 It shows the stored action to the person; Accept creates a one-time permission
 without executing it or changing policy. Follow the returned `next_action`.
+A replay of a consumed approval reports the closed outcome without creating a grant.
 Checked commands retry with `--approval-request REQUEST` and unchanged command,
 agent, session and tool attribution. SDK reads retry through the same factory,
 session and read window. SDK applications use the explicit

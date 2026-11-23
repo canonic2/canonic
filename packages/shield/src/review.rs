@@ -152,6 +152,9 @@ pub(crate) enum Error {
     /// is no policy to apply. The message names the problem.
     #[error("the policy files in .shield/ are invalid: {0}")]
     PolicyFiles(String),
+    /// An invalid policy load with unresolved markers in named policy files.
+    #[error("{0}: Unresolved Git conflict markers. Resolve the conflict and retry.")]
+    PolicyFileConflict(String),
     /// Live review capacity is full. The counts say how many objects wait for
     /// the operator and which bound was reached.
     #[error(
@@ -245,7 +248,7 @@ impl Error {
             Self::PageItemTooLarge(_) => "item_too_large",
             Self::Overloaded => "overloaded",
             Self::CacheUnavailable => "cache-unavailable",
-            Self::PolicyFiles(_) => "policy-files-invalid",
+            Self::PolicyFiles(_) | Self::PolicyFileConflict(_) => "policy-files-invalid",
             Self::Capacity { .. } => "capacity-reached",
         }
     }
@@ -377,10 +380,20 @@ pub(crate) fn retire_user_records() {
     storage::retired::retire_user_records();
 }
 
-pub(crate) fn open(project: &Path) -> Result<Context, Error> {
+fn open_checkpoint(project: &Path) -> Result<(Context, model::State), Error> {
     let store = Store::open(project)?;
     let state = store.read_checkpoint()?;
     let context = Context::new(state.project_id.clone(), state.project_root.clone(), "cli");
+    Ok((context, state))
+}
+
+/// Current checkout identity for recovery and exact approval bookkeeping.
+pub(crate) fn open_authorization(project: &Path) -> Result<Context, Error> {
+    open_checkpoint(project).map(|(context, _)| context)
+}
+
+pub(crate) fn open(project: &Path) -> Result<Context, Error> {
+    let (context, state) = open_checkpoint(project)?;
     integrations::rebind_launchers(&context, &state);
     Ok(context)
 }
@@ -443,9 +456,7 @@ pub(crate) fn update_operator_fixture(
 /// Derive caller context and pause guards from one validated checkpoint.
 /// Later authority handoff still performs its locked freshness check.
 pub(crate) fn open_native(project: &Path) -> Result<(Context, Option<mode::Paused>), Error> {
-    let store = Store::open(project)?;
-    let state = store.read_checkpoint()?;
-    let context = Context::new(state.project_id.clone(), state.project_root.clone(), "cli");
+    let (context, state) = open_checkpoint(project)?;
     integrations::rebind_launchers(&context, &state);
     Ok((context, mode::paused(&state)))
 }

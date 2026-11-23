@@ -860,6 +860,69 @@ fn mcp_field_paths_check_physical_roots_and_require_observation() {
     assert!(CustomRules::from_yaml(&missing.to_string()).is_err());
 }
 
+#[test]
+fn mcp_field_path_arrays_check_every_present_path_within_a_bound() {
+    let root = assert_fs::TempDir::new().unwrap();
+    let outside = assert_fs::TempDir::new().unwrap();
+    let root_path = root.path().canonicalize().unwrap();
+    let row = json!({"id":"paths","decision":"allow",
+        "conditions":{"domain":"mcp","server":"acme","tool":"upload"},
+        "requirements":{"field_paths":{"/items":{"each":"/path","path":{"within":{"root":"read"}}}}},
+        "on_unmet":{"decision":"ask"}});
+    let mut source = document(std::slice::from_ref(&row)).unwrap();
+    assert!(
+        source["capabilities"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("field-path-arrays-v1"))
+    );
+    source["capabilities"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|cap| cap != "field-path-arrays-v1");
+    assert!(CustomRules::from_yaml(&source.to_string()).is_err());
+
+    let evaluator = prepared(vec![row]);
+    let context = Context {
+        cwd: root_path.to_string_lossy().into_owned(),
+        environment: None,
+        working_files: None,
+    };
+    let text = json!({"text":"fixture"});
+    let mut mixed = vec![text.clone(); 127];
+    mixed.push(json!({"path":root_path.join("allowed.txt")}));
+    let allowed = json!(mixed);
+    mixed[127]["path"] = json!(outside.path().join("unapproved.txt"));
+    for (arguments, expected) in [
+        (json!({"items":vec![text.clone(); 128]}), "allow"),
+        (json!({"items":allowed}), "allow"),
+        (json!({"items":mixed}), "ask"),
+        (json!({"items":vec![text; 129]}), "ask"),
+        (json!({"items":[{"path":null}]}), "ask"),
+        (json!({"items":{}}), "ask"),
+        (json!({}), "ask"),
+    ] {
+        let input = Input::Mcp {
+            server: "acme".into(),
+            tool: "upload".into(),
+            arguments,
+            connection: None,
+            original_input: json!({}),
+        };
+        let result = evaluator
+            .evaluate_normalized(
+                &input,
+                &context,
+                &context.cwd,
+                None,
+                &crate::evidence::now(),
+                &|| Ok(()),
+            )
+            .unwrap();
+        assert_eq!(result["decision"], expected);
+    }
+}
+
 fn check_project_relative_field_paths(root: &std::path::Path, row: &Value) {
     // A server launched at the project root does not follow the agent into
     // its current subfolder. Preserve that coordinate system explicitly.

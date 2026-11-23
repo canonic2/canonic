@@ -20,7 +20,9 @@ pub(super) const REASON: &str = "equivalent private launcher rebind";
 pub(in crate::review) fn resume(context: &Context, initial: &State) {
     let _trace = crate::diagnostics::trace::span("integration.rebind");
     crate::diagnostics::trace::count("integration.rebind_attempts", 1);
-    if let Err(error) = resume_inner(context, initial) {
+    if let Err(error) = resume_inner(context, initial)
+        && !matches!(error, Error::PolicyFileConflict(_))
+    {
         eprintln!("Shield launcher maintenance unavailable ({})", error.code());
     }
 }

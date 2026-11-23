@@ -5,7 +5,14 @@ pub(super) fn denial(mut reply: Reply, receipt: &Value) -> Reply {
     let code = receipt["code"].as_str().unwrap_or_default();
     let resource_failure = crate::agent_message::resource_failure(&receipt["diagnostics"]);
     let explanation = match code {
-        _ if receipt["policy_unavailable"] == true && receipt["fixed_protection"] == false => "The policy files in .shield/ are invalid. Only an exact one-time review can authorize this request until they are repaired.".into(),
+        _ if receipt["policy_unavailable"] == true && receipt["fixed_protection"] == false => {
+            let detail = receipt["diagnostics"]["message"].as_str().filter(|text| {
+                !text.is_empty() && text.len() <= crate::agent_message::MAX_MESSAGE
+                    && !text.chars().any(char::is_control)
+            });
+            let cause = detail.map_or_else(String::new, |text| format!(" {}.", text.trim_end_matches('.')));
+            format!("The policy files in .shield/ are invalid.{cause} Only an exact one-time review can authorize this request until they are repaired.")
+        }
         _ if crate::agent_message::rewrite_detail(&receipt["diagnostics"]).is_some() => "The command could not be checked in this form. The agent has instructions to revise it.".into(),
         "policy-deny" if receipt["outside_path"]["path"].is_string() => format!(
             "`{}` is outside the approved folders. Additional folder access requires your approval.",
@@ -21,6 +28,8 @@ pub(super) fn denial(mut reply: Reply, receipt: &Value) -> Reply {
         "policy-deny" => crate::agent_message::denial_detail(&receipt["diagnostics"]).unwrap_or_else(|| "The active policy does not allow this request. Inspect the matching rule before proposing a policy change.".into()),
         "request-rewrite" => "The command could not be checked in this form. The agent has instructions to revise it.".into(),
         "approval-required" => "A reusable site allowance needs your review before this request runs. The agent has instructions to open the review.".into(),
+        "git-stash-paths-unverified" => "Git reads the stash path list when it runs. Shield could not verify a narrower scope than the whole worktree.".into(),
+        "git-stash-index-unverified" => "Git records the full index in a stash. Shield could not verify that protected index entries are unchanged.".into(),
         "protected-access" if receipt["protected_path"].as_str().is_none() => "This request reaches protected files or directories.".into(),
         "protected-access" => {
             let path = receipt["protected_path"]

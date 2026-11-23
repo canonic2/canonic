@@ -242,7 +242,7 @@ fn fixed(value: &Value, owner: &Path, cwd: &Path, guard: paths::Guard<'_>) -> bo
     opaque_shell(value)
         || paths::operator_cli(&value["_shell_analysis"], cwd)
         || protected_removal(value, cwd, owner, open)
-        || footprint(value, owner, cwd, open).finding.0 == paths::Protection::Blocked
+        || footprint(value, owner, cwd, open).finding.0 >= paths::Protection::Blocked
 }
 
 /// The guard with every operator-openable group open: reading and changing
@@ -298,6 +298,10 @@ fn gate(
     let blocked = if let Some(route) = paths::operator_route(&value["_shell_analysis"], cwd) {
         value["operator_route"] = json!(route);
         Some("operator-cli")
+    } else if protection == paths::Protection::UnverifiedStashPaths {
+        Some("git-stash-paths-unverified")
+    } else if protection == paths::Protection::UnverifiedStashIndex {
+        Some("git-stash-index-unverified")
     } else if protected_removal(value, cwd, owner, guard)
         || protection == paths::Protection::Blocked
     {
@@ -323,23 +327,18 @@ fn gate(
         value["outside_path"] =
             json!({"path":found.path,"access":found.access,"folder":found.folder});
     }
-    // A Git command that would change the policy files, or whose writes to
-    // them cannot be determined, asks; no Ask fallback or policy Allow stands in for the user. A policy
-    // Deny stands.
-    if protection == paths::Protection::Undetermined && value["decision"] != "deny" {
+    // Policy Deny stands. Otherwise, uncertain policy writes and sensitive
+    // reads require human approval regardless of policy Allow or Ask fallback.
+    let approval = match protection {
+        paths::Protection::Undetermined => Some("policy-file-unknown"),
+        paths::Protection::Sensitive => Some("sensitive-read"),
+        _ => None,
+    };
+    if let Some(code) = approval
+        && value["decision"] != "deny"
+    {
         value["decision"] = json!("ask");
-        value["code"] = json!("policy-file-unknown");
-        value["disposition"] = json!(if native.approval == NativeApproval::Prompt {
-            "approval_required"
-        } else {
-            "blocked"
-        });
-        return Ok(());
-    }
-    // A policy Deny stands; otherwise the user decides on reading agent settings.
-    if protection == paths::Protection::Sensitive && value["decision"] != "deny" {
-        value["decision"] = json!("ask");
-        value["code"] = json!("sensitive-read");
+        value["code"] = json!(code);
         value["disposition"] = json!(if native.approval == NativeApproval::Prompt {
             "approval_required"
         } else {

@@ -421,7 +421,7 @@ pub(crate) fn refused_observed(
     summary: &Summary,
     decision_requests: &[&str],
 ) -> Result<Outcome, Error> {
-    let context = super::open(root)?;
+    let context = super::open_authorization(root)?;
     let store = Store::open(root)?;
     let found = store.inspect_checkpoint(&context, &|| Ok(()), |state| {
         let time = now()?;
@@ -594,7 +594,7 @@ pub(crate) fn followup_observed(
             row.status == "consumed" && row.matches(key, &access) && row.live_id(time).is_some()
         }))
     };
-    let context = super::open(root)?;
+    let context = super::open_authorization(root)?;
     let store = Store::open(root)?;
     if store
         .inspect_checkpoint(&context, &|| Ok(()), |state| covering(state, now()?))?

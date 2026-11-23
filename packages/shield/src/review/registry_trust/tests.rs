@@ -295,6 +295,39 @@ fn versioned_adoption_is_frozen_explicit_and_preserves_policy() {
 }
 
 #[test]
+fn modern_registry_trust_accepts_its_bound_confirmation() {
+    if !crate::test_support::isolated_home(concat!(
+        module_path!(),
+        "::modern_registry_trust_accepts_its_bound_confirmation"
+    )) {
+        return;
+    }
+    let fixture = Fixture::new();
+    let mut context = fixture.context.clone();
+    context.agent = Some("codex".into());
+    let server = crate::mcp::Server::for_review(context).unwrap();
+    let transport = crate::mcp::tests::Transport::start(server);
+    let call =
+        |id, params: &Value| json!({"jsonrpc":"2.0","id":id,"method":"tools/call","params":params});
+    let mut params = json!({"name":"registry_trust","arguments":{"name":"acme"},"_meta":{
+        "io.modelcontextprotocol/protocolVersion":"2026-07-28",
+        "io.modelcontextprotocol/clientCapabilities":{"elicitation":{"form":{}}}
+    }});
+    let form = transport.request(&call(1, &params));
+    assert_eq!(form["result"]["resultType"], "input_required", "{form}");
+    let namespace = Namespace::user().unwrap();
+    assert!(namespace.read(fixture.source.identity()).unwrap().is_none());
+    params["requestState"] = form["result"]["requestState"].clone();
+    params["inputResponses"] = json!({"confirmation":{"action":"accept"}});
+    let accepted = transport.request(&call(2, &params));
+    assert_eq!(
+        accepted["result"]["structuredContent"]["data"]["committed"], true,
+        "{accepted}"
+    );
+    assert!(namespace.read(fixture.source.identity()).unwrap().is_some());
+}
+
+#[test]
 fn revoked_metadata_invalidates_retained_handoff_and_stays_offline() {
     if !crate::test_support::isolated_home(concat!(
         module_path!(),

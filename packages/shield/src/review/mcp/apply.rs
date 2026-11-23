@@ -87,6 +87,8 @@ pub(super) fn apply(
     Ok(result)
 }
 
+pub(super) const ARGUMENTS_MISMATCH: &str = "approval arguments differ from the proposal. Retrieve it with policy_show using proposal_id, then copy apply_arguments unchanged to policy_apply";
+
 pub(super) fn validate(context: &Context, args: &Value) -> Result<(State, String), Error> {
     validate_with_views(context, args, None).map(|(state, id, _)| (state, id))
 }
@@ -160,9 +162,7 @@ fn validate_with_views(
         &regenerated
     };
     if args != expected {
-        return Err(Error::Invalid(
-            "approval arguments differ from the proposal. Retrieve it with policy_show using proposal_id, then copy apply_arguments unchanged to policy_apply",
-        ));
+        return Err(Error::Invalid(ARGUMENTS_MISMATCH));
     }
     if proposal.status == "applied" {
         let id = proposal.id.clone();

@@ -6,23 +6,6 @@ use canonic_mcp_kit::{Decision, RequestContext, RpcError, ToolCall, rpc};
 use ring::rand::{SecureRandom, SystemRandom};
 use std::collections::BTreeMap;
 
-/// Tools whose call waits for the person's answer to Shield's form.
-pub(super) const CONFIRMED_TOOLS: &[&str] = &[
-    "policy_apply",
-    "request_approve",
-    "request_deny",
-    "session_grant_approve",
-    "protection_set",
-    "enable",
-    "disable",
-    "registry_add",
-    "registry_remove",
-    "registry_default",
-    "history_configure",
-    "policy_reject",
-    "mcp_setup",
-];
-
 /// Why a confirmation could not start.
 #[derive(Debug)]
 pub(super) enum Refusal {
@@ -131,10 +114,7 @@ impl Confirmations {
         // Consume on any retry, including decline, changed arguments or missing
         // capability. Connection destruction revokes every remaining token.
         let mut pending = self.pending.remove(token).ok_or_else(invalid)?;
-        if !CONFIRMED_TOOLS.contains(&call.name.as_str())
-            || pending.tool != call.name
-            || pending.arguments != call.arguments
-        {
+        if pending.tool != call.name || pending.arguments != call.arguments {
             return Err(invalid());
         }
         let decision = request.confirmation_decision()?.ok_or_else(invalid)?;

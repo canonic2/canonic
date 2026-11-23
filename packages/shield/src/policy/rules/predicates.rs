@@ -219,31 +219,55 @@ fn field_paths(
     let Input::Mcp { arguments, .. } = facts.input else {
         return Ok(vec!["evidence_unavailable"]);
     };
-    let Some(locations) = facts.locations.filter(|_| facts.known_cwd) else {
-        return Ok(vec!["evidence_unavailable"]);
-    };
+    let locations = facts.locations.filter(|_| facts.known_cwd);
+    let check =
+        |value: &Value, selection: &Value, codes: &mut Vec<&'static str>| -> Result<(), Error> {
+            let Some(locations) = locations else {
+                codes.push("evidence_unavailable");
+                return Ok(());
+            };
+            let Some(path) = value.as_str() else {
+                codes.push("predicate_mismatch");
+                return Ok(());
+            };
+            if !std::path::Path::new(path).is_absolute()
+                && (selection["absolute"] == true || selection.get("relative_to").is_none())
+            {
+                codes.push("predicate_mismatch");
+                return Ok(());
+            }
+            codes.extend(locations.field_path(
+                path,
+                &selection["path"],
+                selection["recursive"] == true,
+                selection["relative_to"].as_str().unwrap_or("cwd"),
+                patterns,
+            )?);
+            Ok(())
+        };
+    let mut remaining = 128usize;
     for (pointer, selection) in predicate.as_object().ok_or(Error::Syntax)? {
         let Some(value) = arguments.pointer(pointer) else {
             codes.push("field_missing");
             continue;
         };
-        let Some(path) = value.as_str() else {
-            codes.push("predicate_mismatch");
-            continue;
-        };
-        if !std::path::Path::new(path).is_absolute()
-            && (selection["absolute"] == true || selection.get("relative_to").is_none())
-        {
-            codes.push("predicate_mismatch");
-            continue;
+        if let Some(each) = selection["each"].as_str() {
+            let Some(items) = value.as_array() else {
+                return Ok(vec!["predicate_mismatch"]);
+            };
+            let Some(budget) = remaining.checked_sub(items.len()) else {
+                return Ok(vec!["evidence_unavailable"]);
+            };
+            remaining = budget;
+            for item in items {
+                patterns.checkpoint()?;
+                if let Some(path) = item.pointer(each) {
+                    check(path, selection, &mut codes)?;
+                }
+            }
+        } else {
+            check(value, selection, &mut codes)?;
         }
-        codes.extend(locations.field_path(
-            path,
-            &selection["path"],
-            selection["recursive"] == true,
-            selection["relative_to"].as_str().unwrap_or("cwd"),
-            patterns,
-        )?);
     }
     Ok(codes)
 }

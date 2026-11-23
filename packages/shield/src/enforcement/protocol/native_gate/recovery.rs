@@ -10,7 +10,7 @@ pub(in crate::enforcement::protocol) fn inspect(
     native: NativeContext<'_>,
     message: &str,
 ) -> Result<Value, &'static str> {
-    let context = crate::review::open(root).map_err(|_| "runtime-unavailable")?;
+    let context = crate::review::open_authorization(root).map_err(|_| "runtime-unavailable")?;
     if input.expected_project_id.as_deref() != Some(context.project_id.as_str()) {
         return Err("project-changed");
     }

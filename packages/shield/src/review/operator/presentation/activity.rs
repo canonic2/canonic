@@ -69,10 +69,13 @@ fn configuration_line(configuration: &Value, output: &mut String) {
 pub(super) fn status(value: &Value, doctor: bool) -> String {
     let agents = integrations(&value["coverage"]);
     let root = label(&value["project_root"]);
+    let error = &value["policy_files"]["error"];
     let mut output = if value["enabled"] == false {
         format!(
             "Shield policy is disabled in {root}; protected controls remain guarded. Other requests use the agent's permissions. Resume with shield enable.\n"
         )
+    } else if error.is_string() {
+        format!("Shield policy is unavailable in {root}.\n")
     } else if agents.is_empty() {
         format!(
             "Shield policy is active in {root}, but no agent is connected. Connect one with shield mcp setup.\n"
@@ -88,12 +91,16 @@ pub(super) fn status(value: &Value, doctor: bool) -> String {
                 .as_array()
                 .map_or(0, Vec::len)
         });
-    let _ = writeln!(
-        output,
-        "Policy: {} · revision {}",
-        plural(packs, "pack", "packs"),
-        short(&value["policy_files"]["digest"])
-    );
+    if error.is_string() {
+        let _ = writeln!(output, "Policy files: {}", label(error));
+    } else {
+        let _ = writeln!(
+            output,
+            "Policy: {} · revision {}",
+            plural(packs, "pack", "packs"),
+            short(&value["policy_files"]["digest"])
+        );
+    }
     configuration_line(&value["configuration"], &mut output);
     let history = &value["history"];
     let _ = writeln!(output, "History: {}", history_status(history));
@@ -129,7 +136,7 @@ pub(super) fn status(value: &Value, doctor: bool) -> String {
             )
         );
     }
-    if value["project_file_inspection"] == "unchecked" {
+    if error.is_null() && value["project_file_inspection"] == "unchecked" {
         output.push_str(
             "Editable project files are unchecked; inspect them with shield policy review.\n",
         );
@@ -178,7 +185,7 @@ fn diagnostics(value: &Value, connected: bool) -> String {
     if connected && coverage["live_host_verification"] == "unchecked" {
         output.push_str("Hook activity was not inspected. Run shield history list for retained evidence; current host loading remains unverified.\n");
     }
-    if value["project_file_inspection"] == "unchecked" {
+    if value["policy_files"]["error"].is_null() && value["project_file_inspection"] == "unchecked" {
         output.push_str("Project policy file integrity was not inspected. Review edits with shield policy review.\n");
     }
     if connected && coverage["live_host_verification"] == "unverified" {
@@ -200,6 +207,9 @@ fn diagnostics(value: &Value, connected: bool) -> String {
         let _ = writeln!(output, "Problem: {}", label(diagnostic));
     }
     for check in value["checks"].as_array().into_iter().flatten() {
+        if check["check"] == "policy" && value["policy_files"]["error"].is_string() {
+            continue;
+        }
         let _ = writeln!(
             output,
             "Problem: {}; run {}.",

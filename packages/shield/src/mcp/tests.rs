@@ -653,6 +653,14 @@ fn guidance_uses_the_enrolled_agent_never_client_metadata() {
             assert!(instructions.contains(name), "{name}");
         }
         let supports_approval = matches!(agent, Some("codex" | "claude"));
+        if supports_approval {
+            assert!(instructions.contains("all direct packs, including pinned packs"));
+            assert!(
+                instructions
+                    .contains("Prefer temporary session grants for work limited to this task.")
+            );
+            assert!(instructions.contains("permission should carry over to future sessions"));
+        }
         for name in [
             "policy_propose",
             "policy_apply",
@@ -1171,6 +1179,7 @@ fn deadline_errors_name_the_outcome_and_the_next_call() {
     }
     for (name, route) in [
         ("policy_apply", "policy_show"),
+        ("policy_reject", "policy_show"),
         ("request_approve", "request_show"),
         ("request_deny", "request_show"),
         ("session_grant_approve", "session_grant_show"),
@@ -1188,5 +1197,24 @@ fn deadline_errors_name_the_outcome_and_the_next_call() {
             "{name}: {message}"
         );
     }
+    for (name, args) in [
+        (
+            "registry_add",
+            json!({"name":"acme","location":"registry","scope":"user"}),
+        ),
+        ("registry_default", json!({"name":"acme","scope":"user"})),
+    ] {
+        let message = deadline(name, args);
+        assert!(
+            message.contains("unknown")
+                && message.contains("registry_list with the original scope"),
+            "{message}"
+        );
+    }
+    let guidance = deadline("registry_add", json!({}));
+    assert!(
+        guidance.contains("Nothing was enrolled") && guidance.contains("ask the user"),
+        "{guidance}"
+    );
     assert!(deadline("pack_list", json!({})).contains("nothing changed"));
 }

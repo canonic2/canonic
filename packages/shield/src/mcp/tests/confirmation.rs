@@ -234,8 +234,10 @@ fn modern_confirmation_accept_decline_cancel_and_receipt_replay() {
 }
 
 #[test]
-fn superseded_questions_free_their_slots_and_a_full_queue_keeps_the_new_review() {
+fn superseded_questions_free_slots_and_duplicates_keep_the_original_confirmation() {
     let (transport, project, mut args) = prepared(Some("claude"), &capabilities(FORM));
+    let before = project.revision();
+    let mut latest = Value::Null;
     // Each new proposal supersedes the last; the host drops the old forms.
     for round in 0..10 {
         if round > 0 {
@@ -245,32 +247,94 @@ fn superseded_questions_free_their_slots_and_a_full_queue_keeps_the_new_review()
                 &rule(&format!("acme-read-{round}"), "acme"),
             );
         }
-        let interim = transport.request(&modern_apply(200 + round, &args, None, None, true));
-        assert_eq!(
-            interim["result"]["resultType"], "input_required",
-            "{interim}"
-        );
+        latest = transport.request(&modern_apply(200 + round, &args, None, None, true));
+        assert_eq!(latest["result"]["resultType"], "input_required", "{latest}");
     }
-    // Questions for the one live review fill the queue; the next is refused
-    // without withdrawing it.
-    for id in 300..307 {
-        let interim = transport.request(&modern_apply(id, &args, None, None, true));
+    for id in 300..310 {
+        let refused = transport.request(&modern_apply(id, &args, None, None, true));
         assert_eq!(
-            interim["result"]["resultType"], "input_required",
-            "{interim}"
+            refused["error"]["data"]["code"], "human_input_busy",
+            "{refused}"
         );
+        assert_eq!(refused["error"]["data"]["requestId"], 209, "{refused}");
     }
-    let refused = transport.request(&modern_apply(307, &args, None, None, true));
-    assert_eq!(refused["error"]["code"], rpc::INVALID_PARAMS, "{refused}");
-    let adapter = crate::agents::review::resolve(project.review.agent.as_deref());
-    let outcomes = crate::review::proposals(&project.review, None).unwrap();
-    let live = outcomes["proposals"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|row| adapter.identifies(&args, row["proposal_id"].as_str().unwrap()))
-        .unwrap();
-    assert_eq!(live["status"], "pending", "{outcomes}");
+    let legacy = transport.call(json!(310), "policy_apply", &args);
+    assert_eq!(
+        legacy["error"]["data"]["code"], "human_input_busy",
+        "{legacy}"
+    );
+    assert_eq!(project.revision(), before);
+    let result = transport.request(&modern_apply(
+        311,
+        &args,
+        Some(&latest["result"]["requestState"]),
+        Some("accept"),
+        true,
+    ));
+    assert_eq!(
+        result["result"]["structuredContent"]["data"]["status"], "applied",
+        "{result}"
+    );
+    assert_ne!(project.revision(), before);
+}
+
+#[test]
+fn linked_web_save_duplicates_report_the_original_pending_form() {
+    for modern in [false, true] {
+        let (server, project) = fixture(Some("claude"));
+        let change = crate::proposal_draft::web_fetch("https://example.com/docs").unwrap();
+        let crate::review::web_reviews::Offer::Pending { id, .. } =
+            crate::review::web_reviews::offer(
+                project.root.path(),
+                "claude",
+                "acme-session",
+                &change,
+            )
+            .unwrap()
+        else {
+            panic!("the site should have a pending save offer");
+        };
+        let transport = Transport::start(server);
+        for message in initialize(&capabilities(FORM), "claude-code") {
+            transport.send(&message);
+        }
+        assert!(transport.receive()["result"].is_object());
+        let args = propose(
+            &transport,
+            json!(2),
+            &json!({"change":change,"review_ids":[id]}),
+        );
+        let form = if modern {
+            transport.request(&modern_apply(3, &args, None, None, true))
+        } else {
+            transport.call(json!(3), "policy_apply", &args)
+        };
+        if modern {
+            assert_eq!(form["result"]["resultType"], "input_required", "{form}");
+        } else {
+            assert_eq!(form["method"], "elicitation/create", "{form}");
+        }
+        let mut changed = args.clone();
+        changed["changes"] = json!([]);
+        let invalid = transport.request(&modern_apply(4, &changed, None, None, true));
+        assert_eq!(error_code(&invalid), "invalid_input", "{invalid}");
+        let duplicate = transport.request(&modern_apply(5, &args, None, None, true));
+        let data = &duplicate["error"]["data"];
+        assert_eq!(data["code"], "human_input_busy", "{duplicate}");
+        assert_eq!(data["requestId"], 3, "{duplicate}");
+        let declined = if modern {
+            transport.request(&modern_apply(
+                6,
+                &args,
+                Some(&form["result"]["requestState"]),
+                Some("decline"),
+                true,
+            ))
+        } else {
+            transport.request(&answer(&form, &json!({"action":"decline"})))
+        };
+        assert_eq!(error_code(&declined), "approval_declined", "{declined}");
+    }
 }
 
 #[test]
@@ -821,21 +885,11 @@ fn inspection_runs_while_a_form_is_open_and_a_second_form_is_unavailable() {
     assert_eq!(project.revision(), before);
     let applied = transport.request(&answer(&form, &json!({"action":"accept"})));
     assert_eq!(applied["id"], 3, "{applied}");
-    // Refusing the duplicate drops its cancellation guard, closing the shared
-    // review. A late answer to the outstanding form cannot activate it.
-    assert_eq!(error_code(&applied), "invalid_input", "{applied}");
-    assert!(
-        applied["result"]["structuredContent"]["error"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("call the tool that prepared it again"),
-        "{applied}"
-    );
+    assert_eq!(applied["result"]["isError"], false, "{applied}");
     let outcome =
         crate::review::proposal_outcome(project.root.path(), args["proposal_id"].as_str().unwrap());
-    assert_eq!(outcome["status"], "withdrawn", "{outcome}");
-    assert_eq!(outcome["closed_reason"], "cancelled", "{outcome}");
-    assert_eq!(project.revision(), before);
+    assert_eq!(outcome["status"], "applied", "{outcome}");
+    assert_ne!(project.revision(), before);
 }
 
 #[test]
@@ -916,9 +970,10 @@ fn confirmation_describes_retained_web_scope_and_removed_requirements() {
     let (transport, project, _) = prepared(Some("claude"), &capabilities(FORM));
     let connection = crate::review::mcp::Connection::new("acme-review".into());
     let message = |args: &Value| {
-        crate::review::mcp::apply_confirmation(&project.review, &connection, args)
+        crate::review::mcp::prepare_apply_confirmation(&project.review, &connection, args)
             .unwrap()
             .unwrap()
+            .message
     };
     let narrow = json!({"id":"fetch", "decision":"allow", "conditions":{"domain":"web", "action":"fetch",
         "url":{"schemes":["https"],"hosts":["docs.example.com","api.example.com"]}},

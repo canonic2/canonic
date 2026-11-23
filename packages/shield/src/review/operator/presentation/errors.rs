@@ -146,6 +146,7 @@ fn classify(command: &PublicCommand, error: &Error) -> Report {
             ],
         ),
         Error::PolicyFiles(problem) => invalid_policy_files(problem),
+        Error::PolicyFileConflict(_) => invalid_policy_files(&error.to_string()),
         Error::Locked => Report::new(
             "Another Shield operation is writing",
             "The project state is locked by its current writer.",

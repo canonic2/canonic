@@ -48,6 +48,7 @@ fn asked(root: &Path, arguments: &[&str]) -> Result<Vec<Vec<String>>, Protection
                 revisions
             }
             Query::Untracked { .. } => vec!["untracked".to_owned()],
+            Query::Staged { .. } => vec!["staged".to_owned()],
             Query::Stash { reference, .. } => vec!["stash".to_owned(), reference],
             Query::Rebase { step, paths } => {
                 assert!(paths.contains(&root.join(".shield")), "{arguments:?}");
@@ -437,6 +438,171 @@ fn root_pathspecs_resolve_from_the_git_worktree_including_gate_entries() {
     ] {
         assert!(level(arguments) == Protection::Blocked, "{arguments:?}");
     }
+}
+
+#[test]
+#[cfg(not(windows))]
+fn scoped_stash_all_saves_only_selected_worktree_paths_from_a_git_entry() {
+    let (_folder, root) = project();
+    let entry = root.join(".gate/repos/public");
+    std::fs::create_dir_all(&entry).unwrap();
+    git(&entry, &["init", "-q"]);
+    git(&entry, &["config", "core.worktree", root.to_str().unwrap()]);
+    std::fs::write(root.join(".gitignore"), "*.tmp\n").unwrap();
+    let settings = root.join(".agents/hooks.json");
+    std::fs::create_dir(settings.parent().unwrap()).unwrap();
+    std::fs::write(&settings, "{}\n").unwrap();
+    let source = root.join("src/app.txt");
+    std::fs::write(&source, "base\n").unwrap();
+    git(
+        &entry,
+        &[
+            "add",
+            "--",
+            ":/.shield",
+            ":/.agents",
+            ":/.gitignore",
+            ":/src",
+        ],
+    );
+    git(&entry, &["commit", "-qm", "Acme base"]);
+    std::fs::write(&source, "interrupted update\n").unwrap();
+    let selected = root.join("src/selected file.tmp");
+    let unrelated = root.join("src/keep.tmp");
+    std::fs::write(&selected, "selected\n").unwrap();
+    std::fs::write(&unrelated, "unrelated\n").unwrap();
+
+    let level = |arguments: &[&str]| policy_files(arguments, &root, &root, true, guard()).0;
+    let stash = [
+        "stash",
+        "push",
+        "--all",
+        "--message",
+        "Recovery snapshot",
+        "--",
+        ":(top,literal)src/app.txt",
+        ":(top,literal)src/selected file.tmp",
+    ];
+    let mut arguments = vec!["-C", ".gate/repos/public"];
+    arguments.extend(stash);
+
+    // Git records the entire index even when it resets only selected paths.
+    let config = root.join(".shield/config.yml");
+    std::fs::write(&config, "schema_version: 1\n# staged change\n").unwrap();
+    git(&entry, &["add", "--", ":/.shield/config.yml"]);
+    std::fs::write(&config, "schema_version: 1\n").unwrap();
+    assert_eq!(level(&arguments), Protection::UnverifiedStashIndex);
+    git(
+        &entry,
+        &["restore", "--staged", "--", ":/.shield/config.yml"],
+    );
+
+    std::fs::write(&settings, "{\"local\":true}\n").unwrap();
+    assert_eq!(level(&arguments), Protection::None);
+    git(&entry, &stash);
+    assert_eq!(std::fs::read_to_string(source).unwrap(), "base\n");
+    assert!(!selected.exists());
+    assert_eq!(std::fs::read_to_string(unrelated).unwrap(), "unrelated\n");
+    assert_eq!(
+        std::fs::read_to_string(settings).unwrap(),
+        "{\"local\":true}\n"
+    );
+    assert_eq!(
+        std::fs::read_to_string(config).unwrap(),
+        "schema_version: 1\n"
+    );
+    assert_eq!(
+        git(
+            &entry,
+            &["ls-tree", "-r", "--full-tree", "--name-only", "stash@{0}^3"],
+        ),
+        "src/selected file.tmp"
+    );
+}
+
+#[test]
+#[cfg(not(windows))]
+fn scoped_stash_all_protects_relocated_cache_in_paths_and_index() {
+    let (_folder, root) = project();
+    git(&root, &["init", "-q"]);
+    std::fs::write(root.join("src/app.txt"), "base\n").unwrap();
+    git(&root, &["add", "--", ".shield", "src"]);
+    git(&root, &["commit", "-qm", "Acme base"]);
+    let cache = root.join("scratch/compiled");
+    std::fs::create_dir_all(&cache).unwrap();
+    std::fs::write(cache.join("plan.json"), "{}\n").unwrap();
+    let guard = Guard {
+        cache: Some(&cache),
+        ..guard()
+    };
+    let level = |spec| {
+        policy_files(
+            &["stash", "push", "--all", "--", spec],
+            &root,
+            &root,
+            true,
+            guard,
+        )
+        .0
+    };
+    assert_eq!(level("scratch"), Protection::Blocked);
+    assert_eq!(level("src/app.txt"), Protection::None);
+    git(&root, &["add", "--", "scratch/compiled/plan.json"]);
+    assert_eq!(level("src/app.txt"), Protection::UnverifiedStashIndex);
+}
+
+#[test]
+#[cfg(not(windows))]
+fn scoped_stash_all_keeps_broad_magic_and_protected_paths_closed() {
+    let (_folder, root) = project();
+    git(&root, &["init", "-q"]);
+    let level = |arguments: &[&str]| policy_files(arguments, &root, &root, true, guard()).0;
+    for spec in [
+        ".",
+        "",
+        ".shield/config.yml",
+        ".agents/hooks.json",
+        ":(top,literal).shield/state/state.json",
+        ":(top,literal).agents",
+        ":(exclude)src",
+        ":(icase)src",
+        ":/",
+        "src/*",
+        "src/../.shield",
+    ] {
+        assert_eq!(
+            level(&["stash", "push", "--all", "--", spec]),
+            Protection::Blocked,
+            "{spec:?}"
+        );
+    }
+    for rest in [
+        &["--all", "--message", "--", "src"][..],
+        &["--all", "--future-option", "--", "src"],
+        &["--all", "--"],
+    ] {
+        let mut arguments = vec!["stash", "push"];
+        arguments.extend(rest);
+        assert_eq!(level(&arguments), Protection::Blocked, "{arguments:?}");
+    }
+    for options in [
+        &["--pathspec-from-file=paths.txt", "--pathspec-file-nul"][..],
+        &["--pathspec-from", "paths.txt"],
+        &["--pathspec-from-file=-"],
+    ] {
+        let mut arguments = vec!["stash", "push", "-a"];
+        arguments.extend(options);
+        assert_eq!(
+            level(&arguments),
+            Protection::UnverifiedStashPaths,
+            "{arguments:?}"
+        );
+    }
+    std::os::unix::fs::symlink(root.join(".shield"), root.join("source-link")).unwrap();
+    assert_eq!(
+        level(&["stash", "push", "--all", "--", "source-link/config.yml"]),
+        Protection::Blocked
+    );
 }
 
 #[test]

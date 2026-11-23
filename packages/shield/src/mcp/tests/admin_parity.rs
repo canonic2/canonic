@@ -225,6 +225,37 @@ fn settings(transport: &Transport, id: i64) -> Value {
     response["result"]["structuredContent"]["data"]["history"].clone()
 }
 
+#[test]
+fn legacy_admin_busy_and_cancelled_forms_release_review_slots() {
+    let (server, _project) = fixture(Some("codex"));
+    let transport = connect(server);
+    let args = json!({"enabled":false});
+    let held = begin(&transport, 2, &args, false);
+    for id in 3..13 {
+        let busy = transport.call(json!(id), "history_configure", &args);
+        assert_eq!(busy["error"]["data"]["code"], "human_input_busy", "{busy}");
+        assert_eq!(busy["error"]["data"]["requestId"], 2, "{busy}");
+    }
+    let cancel = |id, form: &Value| {
+        transport.send(
+            &json!({"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":id}}),
+        );
+        let notice = transport.receive();
+        assert_eq!(notice["method"], "notifications/cancelled", "{notice}");
+        assert_eq!(notice["params"]["requestId"], form["id"], "{notice}");
+    };
+    cancel(2, &held);
+    for id in 13..23 {
+        let form = begin(&transport, id, &args, false);
+        cancel(id, &form);
+    }
+    assert_eq!(settings(&transport, 23)["enabled"], true);
+    let final_form = begin(&transport, 24, &args, false);
+    let accepted = answer(&transport, 25, &args, &final_form, "accept", false);
+    assert_eq!(accepted["result"]["isError"], false, "{accepted}");
+    assert_eq!(settings(&transport, 26)["enabled"], false);
+}
+
 fn overlapping_reviews(modern: bool) {
     let (server, project) = fixture(Some("codex"));
     let transport = connect(server);
