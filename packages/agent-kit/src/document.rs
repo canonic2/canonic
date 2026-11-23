@@ -6,6 +6,38 @@ use std::collections::BTreeSet;
 use std::ops::Range;
 use std::rc::Rc;
 
+/// Recovery guidance for a configuration document that contains Git markers.
+pub const GIT_CONFLICT_MESSAGE: &str =
+    "Unresolved Git conflict markers. Resolve the conflict and retry.";
+
+/// The one-based opening line of the first complete Git conflict block.
+/// Checks column-zero markers of equal width, including diff3 and zdiff3
+/// blocks. Callers pass their already-read, bounded document after parsing
+/// fails. The result contains no branch names or document values.
+#[must_use]
+pub fn git_conflict_line(text: &str) -> Option<usize> {
+    let marker = |line: &str, prefix| {
+        let rest = line.trim_start_matches(prefix);
+        let width = line.len() - rest.len();
+        (width > 0 && (rest.is_empty() || rest.starts_with(' '))).then_some(width)
+    };
+    let mut opening = None;
+    let mut separated = false;
+    for (index, line) in text.trim_start_matches('\u{feff}').lines().enumerate() {
+        if let Some(width) = marker(line, '<') {
+            opening = Some((index + 1, width));
+            separated = false;
+        } else if let Some((start, width)) = opening {
+            if line.len() == width && line.bytes().all(|byte| byte == b'=') {
+                separated = true;
+            } else if separated && marker(line, '>') == Some(width) {
+                return Some(start);
+            }
+        }
+    }
+    None
+}
+
 pub(crate) struct Prepared {
     /// Shared with the command's file snapshot rather than copied.
     source: Rc<str>,
@@ -942,6 +974,23 @@ fn edit_allow_list(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn git_conflict_line_requires_a_complete_column_zero_block() {
+        let block = "<<<<<<<<< HEAD\r\nmode: ours\r\n||||||||| base\r\nmode: base\r\n=========\r\nmode: theirs\r\n>>>>>>>>> topic";
+        assert_eq!(
+            git_conflict_line(&format!("\u{feff}version: 2\r\n{block}")),
+            Some(2)
+        );
+        assert_eq!(
+            git_conflict_line(&block.replace(">>>>>>>>>", ">>>>>>>")),
+            None
+        );
+        assert_eq!(
+            git_conflict_line(&format!("env: |\n  {}", block.replace('\n', "\n  "))),
+            None
+        );
+    }
 
     #[test]
     fn inserted_json_entries_follow_nested_space_and_tab_indentation() {
