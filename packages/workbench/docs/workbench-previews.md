@@ -76,9 +76,8 @@ You need:
    This example renders a React component; each framework guide has a complete
    example of its own.
 
-2. Run **Workbench: Refresh Pages**, or save `workbench.yaml`. The preview
-   appears in the page list with its scenarios, and opens on the canvas like any
-   other page.
+2. Save the file. The preview appears in the page list with its scenarios, and
+   opens on the canvas like any other page.
 
 Workbench finds every `*.workbench.ts` and `*.workbench.tsx` file in the
 project. It skips hidden folders, `node_modules`, `dist`, `build`, and
@@ -334,8 +333,9 @@ After a server restart, previews reload their code when the connection returns.
 This also resets component state held in the old document.
 An ordinary reconnect to the same server keeps the running preview's state.
 
-If you add or remove a definition, or change its `title` or scenarios, run
-**Workbench: Refresh Pages** to update the sidebar.
+When you add or remove a definition, or change its `title` or scenarios, the
+open canvas and the VS Code sidebar update on their own. **Workbench: Refresh
+Pages** does the same by hand.
 
 Workbench compiles previews with [Rspack](https://rspack.rs/), bundled with the
 extension. It builds requested previews and docs examples together, so code they

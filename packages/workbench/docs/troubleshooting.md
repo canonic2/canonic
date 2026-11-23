@@ -161,10 +161,13 @@ files define.
   hidden folders, `node_modules`, build output such as `dist` and `build`,
   and anything a `.gitignore` in the project ignores. `previews: false` turns
   discovery off.
-- **Added or removed a file:** in VS Code the list updates on its own when a
-  definition is added, removed, renamed or retitled; **Workbench: Refresh
-  Pages** does the same by hand. A canvas opened in a browser from the
-  standalone server needs a reload.
+- **Added or removed a file:** an open canvas, in VS Code or in a browser,
+  follows its server and updates on its own when a definition is added,
+  removed, renamed, retitled or given new scenarios, and when `workbench.yaml`
+  changes. In VS Code the sidebar updates too; **Workbench: Refresh Pages**
+  does the same by hand. A `.config` folder created for `workbench.yaml` while
+  Workbench runs is followed from its next start; until then, run
+  **Workbench: Refresh Pages**, or restart the server for a browser canvas.
 - **`Workbench previews: …`** Listing the previews or reading
   `workbench.config.ts` failed. In the log, `server.exited` holds the error
   output of a Workbench server that stopped.
@@ -176,10 +179,11 @@ files define.
 - **`link … names unknown Workbench preview` or `… unknown scenario`:** an entry
   in the definition's `links` names a preview ID or scenario no definition
   declares. See [Links and navigation](preview-data.md#links-and-navigation).
-- **`… has no scenario “…”`:** the canvas asked an artboard for a scenario
-  that its copy of the page list doesn't have yet, usually one you just added.
-  Run **Workbench: Refresh Pages**, or reload a canvas opened from the
-  standalone server.
+- **`… has no scenario “…”`:** the canvas asked an artboard for a scenario its
+  page list doesn't have. The canvas reads the server's latest page list
+  before it opens a scenario, so this names a scenario the definition doesn't
+  declare, or a canvas that lost its connection to the server. Check the
+  definition's `scenarios`, then reload the canvas.
 - **`request … must be "[METHOD] /path [Operation]" or a full URL`:** a
   `requests` key isn't in that form. Paths start with `/`.
 - **`The preview config environment must be a file inside the project`:**
