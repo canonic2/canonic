@@ -397,12 +397,17 @@ pub(super) fn access(arguments: &[&str]) -> Access {
     if invocation.execution_override
         || invocation.elsewhere
         || !RECORDS.contains(&invocation.subcommand)
-        || invocation.rest.iter().any(|a| a.starts_with("--output"))
+        || options(invocation.rest).any(|option| {
+            let name = option_name(option);
+            name.starts_with("--output") || (name.len() > 2 && "--output".starts_with(name))
+        })
     {
         return Access::Write;
     }
     let rest = invocation.rest;
     match invocation.subcommand {
+        "diff" if invocation.diff_inspection() => Access::Diff,
+        "diff" if invocation.no_index() => Access::Read,
         "ls-files" if !object_ids(rest) => Access::Metadata,
         "status" if !verbose(rest) && !status_object_ids(rest) => Access::Metadata,
         "check-ignore" => Access::Metadata,
@@ -483,6 +488,19 @@ fn content(
 }
 
 fn content_of(invocation: &Invocation<'_>, reach: &Reach<'_>) -> Finding {
+    if invocation.subcommand == "diff"
+        && let Some(reads) = filesystem_diff_reads(invocation, reach)
+    {
+        return strictest(std::iter::once(reads).chain(
+            (invocation.execution_override || invocation.diff_driver()).then(|| reach.repository()),
+        ));
+    }
+    // Reviewing a diff is ordinary development, including when tracked agent
+    // settings appear in it. Named state/cache paths and all output writes
+    // retain their independent protections.
+    if invocation.diff_inspection() {
+        return (Protection::None, None);
+    }
     if invocation.execution_override {
         return reach.repository();
     }
@@ -561,6 +579,32 @@ fn content_of(invocation: &Invocation<'_>, reach: &Reach<'_>) -> Finding {
     strictest([revisions, printed].into_iter())
 }
 
+fn filesystem_diff_reads(invocation: &Invocation<'_>, reach: &Reach<'_>) -> Option<Finding> {
+    let operands = diff_operands(invocation.rest);
+    let explicit = invocation.no_index();
+    if !explicit && operands.len() < 2 {
+        return None;
+    }
+    let reads = strictest(operands.iter().map(|word| {
+        // A raw directory comparison can descend into ignored state.
+        if resolved(word, &reach.base).is_dir() {
+            (Protection::Blocked, Some((*word).to_owned()))
+        } else {
+            super::inspect_path(word, &reach.base, reach.guard, Access::Read)
+        }
+    }));
+    // When both interpretations pass the read check, keep ordinary inspection
+    // free of repository subprocesses.
+    (explicit
+        || (reads.0 != Protection::None
+            && reach.worktree().is_none_or(|root| {
+                operands
+                    .iter()
+                    .any(|word| !resolved(word, &reach.base).starts_with(root))
+            })))
+    .then_some(reads)
+}
+
 /// Content modes print each named object; type, size and existence checks do not.
 fn cat_file(reach: &Reach<'_>, rest: &[&str]) -> Finding {
     let objects: Vec<&str> = rest
@@ -609,6 +653,26 @@ struct Invocation<'a> {
 }
 
 impl<'a> Invocation<'a> {
+    fn no_index(&self) -> bool {
+        options(self.rest).any(|option| long_prefix(option, "--no-index"))
+    }
+
+    fn diff_driver(&self) -> bool {
+        options(self.rest).any(|option| {
+            let name = option_name(option);
+            (name.starts_with("--ext") && "--ext-diff".starts_with(name))
+                || (name.starts_with("--textc") && "--textconv".starts_with(name))
+        })
+    }
+
+    fn diff_inspection(&self) -> bool {
+        self.subcommand == "diff"
+            && !self.execution_override
+            && !self.elsewhere
+            && !self.no_index()
+            && !self.diff_driver()
+    }
+
     /// Interpret global options once, retaining directory changes in Git order.
     fn parse(arguments: &'a [&'a str]) -> Option<Self> {
         let mut directories = Vec::new();
@@ -1052,6 +1116,30 @@ fn consumes_next(option: &str) -> Option<bool> {
 
 fn option_name(option: &str) -> &str {
     option.split_once('=').map_or(option, |(name, _)| name)
+}
+
+fn long_prefix(option: &str, flag: &str) -> bool {
+    let name = option_name(option);
+    name.len() > 2 && flag.starts_with(name)
+}
+
+fn diff_operands<'a>(rest: &'a [&'a str]) -> Vec<&'a str> {
+    let mut words = rest.iter().copied();
+    let mut operands = Vec::new();
+    while let Some(word) = words.next() {
+        if word == "--" {
+            operands.extend(words);
+            break;
+        }
+        if word.starts_with('-') && word.len() > 1 {
+            if consumes_next(word) == Some(true) {
+                words.next();
+            }
+        } else {
+            operands.push(word);
+        }
+    }
+    operands
 }
 
 fn patch(rest: &[&str]) -> bool {

@@ -60,7 +60,15 @@ pub(crate) fn migrate(
 /// project-relative `--config` of an explicit configuration selection, so the
 /// server selects the same policy files as the command that set it up.
 pub(crate) fn serve_args(root: &std::path::Path, agent: &str) -> Vec<String> {
-    let mut args: Vec<String> = ["mcp", "serve", "--project", ".", "--agent", agent]
+    serve_args_for_project(root, agent, ".")
+}
+
+pub(super) fn serve_args_for_project(
+    root: &std::path::Path,
+    agent: &str,
+    project: &str,
+) -> Vec<String> {
+    let mut args: Vec<String> = ["mcp", "serve", "--project", project, "--agent", agent]
         .into_iter()
         .map(str::to_owned)
         .collect();

@@ -151,7 +151,7 @@ pub(crate) fn execution_completion(
 /// and conflicts, so the receipt claims no correlation.
 fn record_completion(context: &Context, details: impl FnOnce() -> Value) -> Result<Value, Error> {
     let store = Store::open(Path::new(&context.project_root))?;
-    store.observe(context, history::lock_completion, |state| {
+    store.observe(context, history::lock, |state| {
         let mut event = state.event("completion", context, json!({}), json!({}), details());
         event["event_id"] = json!(history::identifier("event", &state.project_id)?);
         let result = receipt(&event, &Value::Null);
@@ -226,6 +226,8 @@ pub(crate) struct AskedRequest {
     pub(crate) invocations: std::collections::BTreeSet<String>,
     pub(crate) recurrence_known: bool,
     pub(crate) partial: bool,
+    /// Exact cwd evidence for a complete, single invocation.
+    pub(crate) literal_cwd: Option<String>,
     /// A newer escalated call not yet known to retry an earlier attempt.
     escalated: Option<(Option<String>, Option<i64>)>,
 }
@@ -345,6 +347,10 @@ pub(crate) fn asked_requests(root: &Path, session: Option<&str>, cap: usize) -> 
                 invocations: std::collections::BTreeSet::new(),
                 recurrence_known: invocation.is_some(),
                 partial: evaluation["coverage"] == "partial",
+                literal_cwd: event["details"]["request"]["cwd"]
+                    .as_str()
+                    .filter(|_| evaluation["coverage"] == "single-literal-invocation")
+                    .map(str::to_owned),
                 escalated: None,
             };
             request.attempt(invocation, escalation, at);

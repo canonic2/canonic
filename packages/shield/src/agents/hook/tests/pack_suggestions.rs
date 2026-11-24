@@ -83,6 +83,103 @@ fn advice<'a>(value: &'a Value, agent: &str) -> &'a str {
     }
 }
 
+#[cfg(unix)]
+#[test]
+fn a_temporary_executable_has_no_pack_binding_advice() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let pack = json!({"schema_version":1,"kind":"pack","id":"acme/rust","version":"1.0.0",
+        "description":"Acme Rust tools","license":"MIT","maintainers":["Acme"],"engines":{"shield":"*"},
+        "capabilities":["structured-rules-v1","argument-rules-v1","location-v1","access-paths-v1","regex-v1","variables-v1"],
+        "variables":{"cargo_executable":{"type":"string","description":"Acme cargo path","layer":"local","match":{"regex":"/[^\\r\\n]+/cargo"}}},
+        "rules":[{"id":"format","conditions":{"domain":"argv","executable":{"var":"cargo_executable"},"arguments":{"kind":"exact","values":["fmt"]},"cwd":{"within":{"root":"write"}}},
+            "decision":{"loose":"allow","recommended":"allow","strict":"ask"}}]}).to_string();
+    let external = assert_fs::TempDir::new().unwrap();
+    let cargo = external.path().join("cargo");
+    fs::write(&cargo, "#!/bin/sh\nexit 0\n").unwrap();
+    fs::set_permissions(&cargo, fs::Permissions::from_mode(0o755)).unwrap();
+    check_installed_executable_setting(&pack, "acme/rust", "1.0.0", &cargo, false);
+}
+
+#[cfg(unix)]
+#[test]
+#[ignore = "requires the Rust pack artifact named by SHIELD_TEST_RUST_PACK"]
+fn installed_executable_setting_covers_the_published_rust_pack() {
+    let artifact = std::env::var_os("SHIELD_TEST_RUST_PACK").expect("select a Rust pack artifact");
+    let pack = fs::read_to_string(artifact).unwrap();
+    let document: Value = crate::policy::parse(&pack).unwrap();
+    let cargo = std::env::var_os("CARGO_HOME")
+        .map_or_else(
+            || std::env::home_dir().unwrap().join(".cargo"),
+            std::path::PathBuf::from,
+        )
+        .join("bin/cargo");
+    check_installed_executable_setting(
+        &pack,
+        "canonic/rust",
+        document["version"].as_str().unwrap(),
+        &cargo,
+        true,
+    );
+}
+
+#[cfg(unix)]
+fn check_installed_executable_setting(
+    pack: &str,
+    id: &str,
+    version: &str,
+    cargo: &Path,
+    trusted: bool,
+) {
+    for (profile, expected) in [("recommended", trusted), ("strict", false)] {
+        let root = assert_fs::TempDir::new().unwrap();
+        let config = json!({"schema_version":1,"packs":[{"id":id,"version":version,"path":"rust.yml","profile":profile}]});
+        let bundle = Bundle::capture(&config.to_string(), &[pack.to_owned()], None).unwrap();
+        let context = review::mcp::initialize_fixture(root.path(), &bundle);
+        let root = Path::new(&context.project_root);
+        for agent in ["claude", "codex"] {
+            let reply = call(root, agent, &format!("'{}' fmt", cargo.display()));
+            let advice = advice(&reply, agent);
+            assert!(advice.contains("with rule_add"), "{reply}");
+            assert!(
+                !advice.contains("matching installed pack setting"),
+                "{reply}"
+            );
+        }
+        call(root, "claude", &format!("'{}' publish", cargo.display()));
+        let connection = review::mcp::Connection::new("acme-binding-advice".into());
+        let listed = review::mcp::call(
+            &context,
+            &connection,
+            "suggestion_list",
+            &json!({"session_id":"acme-session"}),
+            &|| Ok(()),
+        );
+        let rows = listed["data"]["requests"]
+            .as_array()
+            .unwrap_or_else(|| panic!("{listed}"));
+        for (command, recommends_binding) in [("fmt", expected), ("publish", false)] {
+            let row = rows
+                .iter()
+                .find(|row| row["request"]["arguments"] == json!([command]))
+                .unwrap_or_else(|| panic!("{listed}"));
+            assert_eq!(
+                row["next_action"]["tool"] == "pack_configure",
+                recommends_binding,
+                "{row}"
+            );
+            if recommends_binding {
+                let args = &row["next_action"]["arguments"];
+                assert!(args["reference"].as_str().unwrap().starts_with("pack:"));
+                assert_eq!(args["set"], json!({"cargo_executable":cargo}));
+                assert_eq!(args["layer"], "local");
+                assert_eq!(row["eligible_for_offer"], false);
+                assert!(row.get("not_portable").is_none());
+            }
+        }
+    }
+}
+
 #[test]
 fn unique_pack_offers_deliver_shared_instructions_only_in_agent_context() {
     let (_root, context) = fixture();
@@ -132,7 +229,7 @@ fn unique_pack_offers_deliver_shared_instructions_only_in_agent_context() {
     assert!(!prompt.contains("policy_propose") && !prompt.contains("policy_apply"));
     let codex = crate::agents::find("codex").unwrap();
     assert_eq!(codex.pack_offer_instruction(), Some(instruction));
-    // Both fallback paths keep the same candidate/payload and add one instruction.
+    // A blocked Ask can offer a pack. An Ask allowed by fallback stays silent.
     for fallback in ["block", "allow"] {
         let mut receipt = receipt.clone();
         if fallback == "allow" {
@@ -158,8 +255,11 @@ fn unique_pack_offers_deliver_shared_instructions_only_in_agent_context() {
                 json!("deny")
             }
         );
-        let text = output["additionalContext"].as_str().unwrap();
-        assert_offer(text);
+        if fallback == "allow" {
+            assert!(output["additionalContext"].is_null(), "{wire}");
+        } else {
+            assert_offer(output["additionalContext"].as_str().unwrap());
+        }
         assert!(
             !output["permissionDecisionReason"]
                 .as_str()
@@ -227,7 +327,7 @@ fn refusals_and_unrelated_commands_receive_no_pack_installation_advice() {
 }
 
 #[test]
-fn automatic_fallback_reports_policy_ask_and_the_same_advisory_candidate() {
+fn automatic_fallback_does_not_offer_an_available_pack_inline() {
     let (_root, context) = fixture();
     let root = Path::new(&context.project_root);
     crate::review::operator::integrations::configure_fixture(
@@ -238,13 +338,10 @@ fn automatic_fallback_reports_policy_ask_and_the_same_advisory_candidate() {
     retain(&context, &json!({"node":["canonic/node"]}));
     for _ in 0..3 {
         let value = call(root, "codex", "node --version");
-        assert_permitted(&value, "codex");
-        let text = value.to_string();
-        assert!(text.contains("configured Ask fallback"), "{value}");
-        assert!(text.contains("main/canonic/node"), "{value}");
-        assert!(!text.contains("user approved"), "{value}");
-        // Suppressing repeated offers belongs to the conversation, not hook state.
-        assert_eq!(text.matches("Briefly offer this rule pack").count(), 1);
+        assert_eq!(
+            value,
+            json!({"hookSpecificOutput":{"hookEventName":"PreToolUse"}})
+        );
     }
 }
 

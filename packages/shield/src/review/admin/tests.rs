@@ -31,6 +31,60 @@ fn enrolled() -> (assert_fs::TempDir, Context) {
 }
 
 #[test]
+fn ordinary_setup_repairs_native_hooks_and_preserves_paused_policy() {
+    let (root, context) = enrolled();
+    let run = |name, arguments: Value| prepare(&context, name, &arguments, &|| Ok(())).unwrap();
+    let plan = run("setup", json!({"agents":["claude"]}));
+    assert!(plan.committed_result().is_none());
+    assert_eq!(
+        plan.commit(&context, &|| Ok(())).unwrap()["setup_status"],
+        "configured"
+    );
+    let disabled = run("disable", json!({}))
+        .commit(&context, &|| Ok(()))
+        .unwrap();
+    assert_eq!(disabled["enabled"], false);
+    let hooks = root.path().join(".claude/settings.local.json");
+    let policy = std::fs::read(root.path().join(".shield/config.yml")).unwrap();
+    let recorded_hooks = std::fs::read(&hooks).unwrap();
+    let repeat = run("setup", json!({})).committed_result().unwrap();
+    assert_eq!(repeat["setup_status"], "unchanged");
+    assert_eq!(repeat["next"]["tool"], "enable");
+    assert_eq!(std::fs::read(&hooks).unwrap(), recorded_hooks);
+    std::fs::remove_file(&hooks).unwrap();
+    let repair = run("setup", json!({}));
+    assert!(repair.committed_result().is_none());
+    assert!(!hooks.exists());
+    assert_eq!(
+        repair.commit(&context, &|| Ok(())).unwrap()["enabled"],
+        false
+    );
+    assert_eq!(std::fs::read(&hooks).unwrap(), recorded_hooks);
+    assert_eq!(
+        std::fs::read(root.path().join(".shield/config.yml")).unwrap(),
+        policy
+    );
+}
+
+#[test]
+fn ordinary_setup_resumes_the_same_confirmed_publication() {
+    let (root, context) = enrolled();
+    let plan = prepare(&context, "setup", &json!({"agents":["claude"]}), &|| Ok(())).unwrap();
+    let blocked = root.child(format!(".claude/.shield-{}.tmp", std::process::id()));
+    blocked.write_str("occupied").unwrap();
+    let receipt = plan.commit(&context, &|| Ok(())).unwrap();
+    assert!(receipt["setup_error"].is_string(), "{receipt}");
+    std::fs::remove_file(blocked.path()).unwrap();
+    assert!(review::mcp::resume_setup(&context, "setup", &json!({})).unwrap());
+    let value = prepare(&context, "setup", &json!({}), &|| Ok(()))
+        .unwrap()
+        .committed_result()
+        .unwrap();
+    assert_eq!(value["setup_status"], "unchanged");
+    assert!(root.path().join(".claude/settings.local.json").exists());
+}
+
+#[test]
 fn parity_admin_protection_answers_remain_bound_to_the_pre_question_snapshot() {
     let (root, context) = enrolled();
     let before = review::path_access::current(root.path()).unwrap();
@@ -672,4 +726,43 @@ fn parity_admin_mcp_setup_dry_run_does_not_disclose_protected_credentials() {
             .all(|file| file.get("before").is_none() && file.get("after").is_none())
     );
     assert!(response["data"].get("connections").is_none());
+}
+
+#[test]
+fn administrative_review_operator_handoff_preserves_the_selected_repair() {
+    use clap::Parser as _;
+    let (root, context) = enrolled();
+    let args = json!({"agents":["codex"],"repair":true,"project":root.path()});
+    let unsummarized = json!({"operation":"set up agent integrations","connection_changes":[{
+        "agent":"codex","id":"acme","change":"Update",
+        "after":{"source":"local","settings":{"type":"stdio","command":"acme-private-launcher"}}
+    }]});
+    let refusal = review::operator::administrative_review(&unsummarized, &context.project_root)
+        .form()
+        .unwrap_err();
+    let result = review::mcp::admin_form_error(&context, "mcp_setup", &args, &refusal);
+    assert_eq!(
+        result["error"]["code"],
+        "confirmation_review_requires_details"
+    );
+    assert!(!result.to_string().contains("acme-private-launcher"));
+    let handoff = &result["error"]["operator_action"];
+    let command = std::iter::once(handoff["command"].as_str().unwrap()).chain(
+        handoff["argv"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|arg| arg.as_str().unwrap()),
+    );
+    let cli = crate::cli::Cli::try_parse_from(command).unwrap();
+    assert_eq!(cli.project.as_deref(), Some(root.path()));
+    let crate::cli::PublicCommand::Mcp(crate::cli::public::Mcp {
+        command: crate::cli::public::McpCommand::Setup(setup),
+    }) = cli.command
+    else {
+        panic!("registration repair route")
+    };
+    assert!(setup.repair);
+    assert!(!setup.dry_run);
+    assert_eq!(setup.agents, ["codex"]);
 }

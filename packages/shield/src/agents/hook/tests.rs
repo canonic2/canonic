@@ -1490,12 +1490,7 @@ fn assert_permitted(value: &Value, agent: &str) {
                 .contains_key("permissionDecision"),
             "{value}"
         );
-        assert!(
-            output["additionalContext"]
-                .as_str()
-                .is_some_and(|s| !s.is_empty()),
-            "{value}"
-        );
+        assert_eq!(output["hookEventName"], "PreToolUse", "{value}");
         assert!(output.get("updatedInput").is_none(), "{value}");
     } else {
         assert_eq!(output["permissionDecision"], "allow", "{value}");
@@ -1648,6 +1643,47 @@ fn native_completion_history_joins_without_a_shield_receipt() {
         assert_eq!(outcome["evidence"], "host-reported");
         for absent in ["status", "exit_code", "command"] {
             assert!(!outcome.contains_key(absent), "{agent}: {response}");
+        }
+    }
+}
+
+#[test]
+fn native_completion_history_accepts_maximum_length_tool_ids() {
+    for agent in ["codex", "claude"] {
+        for tool_id in ["a".repeat(128), "é".repeat(64)] {
+            let (root, context) = fixture();
+            let mut host = json!({"hook_event_name":"PreToolUse", "tool_name":"Bash",
+                "tool_use_id":tool_id, "session_id":"acme-session", "cwd":root.path(),
+                "tool_input":{"command":"git status"}});
+            let before = translate_for(
+                root.path(),
+                agent,
+                Event::Before,
+                &serde_json::to_vec(&host).unwrap(),
+            );
+            assert_permitted(&before, agent);
+            host["hook_event_name"] = json!("PostToolUse");
+            let post = translate_for(
+                root.path(),
+                agent,
+                Event::Completed,
+                &serde_json::to_vec(&host).unwrap(),
+            );
+            assert!(post.get("systemMessage").is_none(), "{agent}: {post}");
+
+            let response = review::mcp::call(
+                &context,
+                &review::mcp::Connection::new("maximum-tool-id".into()),
+                "history_list",
+                &json!({}),
+                &|| Ok(()),
+            );
+            let entries = response["data"]["entries"].as_array().unwrap();
+            assert_eq!(entries.len(), 1, "{response}");
+            assert_eq!(entries[0]["provenance"]["tool_use_id"], tool_id);
+            assert_eq!(entries[0]["observations_total"], 2, "{response}");
+            assert_eq!(entries[0]["outcome"]["evidence"], "host-reported");
+            assert!(entries[0]["outcome"]["delivery_id"].as_str().unwrap().len() <= 128);
         }
     }
 }
@@ -2951,6 +2987,36 @@ fn operator_cli_help_only_requests_follow_policy_without_opening_actions() {
 }
 
 #[test]
+fn operator_cli_version_checks_follow_policy_without_opening_actions() {
+    let named = argv_fixture("shield", "allow");
+    let absolute = argv_fixture("/opt/acme/bin/shield", "allow");
+    let denied = argv_fixture("shield", "deny");
+    for agent in ["claude", "codex"] {
+        for (root, source) in [
+            (named.path(), "shield --version"),
+            (named.path(), "shield -V"),
+            (absolute.path(), "'/opt/acme/bin/shield' --version"),
+        ] {
+            assert_permitted(&call(root, agent, source), agent);
+        }
+        for (root, source) in [
+            (denied.path(), "shield --version"),
+            (named.path(), "shield --version protection set"),
+            (named.path(), "shield protection set --version"),
+            (named.path(), "shield --version > .mcp.json"),
+            (named.path(), "shield --version; shield protection set"),
+        ] {
+            let value = call(root, agent, source);
+            assert_eq!(
+                denial_decision(&value),
+                "deny",
+                "{agent}: {source}: {value}"
+            );
+        }
+    }
+}
+
+#[test]
 fn operator_diagnostics_offer_administration_routes_without_session_grants() {
     let (root, _) = fixture();
     for agent in ["claude", "codex"] {
@@ -2968,7 +3034,7 @@ fn operator_diagnostics_offer_administration_routes_without_session_grants() {
                 context.contains("doctor") && context.contains("mcp_setup"),
                 "{value}"
             );
-            assert!(!context.contains("For planned repeated"), "{value}");
+            assert!(!context.contains("session_grant_propose"), "{value}");
         }
     }
 }
@@ -4759,6 +4825,17 @@ fn codex_patches_decide_every_changed_file_and_refuse_unknown_patch_text() {
     let outside = outside.path().join("acme.txt");
     let outside = outside.to_str().unwrap();
     let patch = |body: &str| json!({"command":format!("*** Begin Patch\n{body}\n*** End Patch\n")});
+    let blocked = tool(
+        root,
+        "codex",
+        "apply_patch",
+        &patch("*** Add File: valid.txt\n+Acme allowed\n*** Delete File: README.md"),
+    );
+    assert!(
+        reason(&blocked).contains("Patch removal of `README.md`"),
+        "{blocked}"
+    );
+    assert!(!reason(&blocked).contains("valid.txt"), "{blocked}");
     let decision = |value: &Value| {
         value["hookSpecificOutput"]["permissionDecision"]
             .as_str()
@@ -4986,7 +5063,7 @@ fn refusals_offer_command_drafting_guidance_or_non_command_proposals() {
 }
 
 #[test]
-fn a_fallback_allow_in_a_session_defers_rule_offers_to_its_suggestions() {
+fn a_fallback_allow_is_quiet_and_keeps_session_suggestions() {
     let (root, context) = fixture();
     review::operator::integrations::configure_fixture(
         root.path(),
@@ -4994,20 +5071,39 @@ fn a_fallback_allow_in_a_session_defers_rule_offers_to_its_suggestions() {
         crate::review::integrations::AskFallback::Allow,
     );
     let project = Path::new(&context.project_root);
-    // However often it repeats, the agent finishes its task and then offers
-    // every rule at once from suggestion_list, instead of one inline offer.
-    for _ in 1..=3 {
+    for _ in 0..3 {
         let value = call(project, "codex", "node --version");
-        let text = value["hookSpecificOutput"]["additionalContext"]
-            .as_str()
-            .unwrap();
-        assert!(text.contains("Ask fallback allows"), "{text}");
-        assert!(
-            text.contains("suggestion_list with session_id \"acme-session\""),
-            "{text}"
+        assert_eq!(
+            value,
+            json!({"hookSpecificOutput":{"hookEventName":"PreToolUse"}})
         );
-        assert!(!text.contains("policy_propose with"), "{text}");
     }
+    let listed = review::mcp::call(
+        &context,
+        &review::mcp::Connection::new("fallback-suggestions".into()),
+        "suggestion_list",
+        &json!({"session_id":"acme-session"}),
+        &|| Ok(()),
+    );
+    let requests = listed["data"]["requests"].as_array().unwrap();
+    assert!(
+        requests
+            .iter()
+            .any(|row| row["command"] == "node --version"),
+        "{listed}"
+    );
+}
+
+#[test]
+fn interpreter_review_explains_why_an_allowed_argv_still_asks() {
+    let root = argv_fixture("node", "allow");
+    let value = call(root.path(), "codex", "node scripts/generate.mjs");
+    assert_eq!(value["hookSpecificOutput"]["permissionDecision"], "deny");
+    let message = reason(&value);
+    assert!(message.contains("approval required"), "{value}");
+    assert!(message.contains("cannot inspect the code"), "{value}");
+    assert!(message.contains("arguments match an Allow rule"), "{value}");
+    assert!(!message.contains("policy_propose"), "{value}");
 }
 
 #[test]
@@ -5265,6 +5361,10 @@ fn git_global_options_keep_policy_reads_and_neighboring_writes_distinct() {
         }
         for source in [
             "git --no-pager diff --output=.shield/config.yml",
+            "git diff --output=.mcp.json",
+            "git diff --out=.mcp.json",
+            "git diff --check > .mcp.json",
+            "git diff --check; printf x > .shield/config.yml",
             "git -C src -C .. show HEAD --output .mcp.json",
             "git -c alias.show='!acme' show -- .shield/config.yml",
             "git --future-global show HEAD -- .shield/config.yml",
@@ -5278,12 +5378,17 @@ fn git_global_options_keep_policy_reads_and_neighboring_writes_distinct() {
                 "{agent} {source}: {value}"
             );
         }
-        let value = call(root.path(), agent, "git --no-pager show HEAD -- .mcp.json");
-        assert_eq!(
-            value["hookSpecificOutput"]["permissionDecision"],
-            if agent == "claude" { "ask" } else { "deny" },
-            "{agent}: {value}"
-        );
+        for source in [
+            "git --no-pager show HEAD -- .mcp.json",
+            "git diff --check; cat .mcp.json",
+        ] {
+            let value = call(root.path(), agent, source);
+            assert_eq!(
+                value["hookSpecificOutput"]["permissionDecision"],
+                if agent == "claude" { "ask" } else { "deny" },
+                "{agent}: {value}"
+            );
+        }
     }
 }
 
@@ -5309,12 +5414,28 @@ fn command_output_protects_direct_settings_reads_but_allows_codebase_searches() 
                 ("git log -U3", true),
                 ("git log -p --author src", true),
                 ("git --no-pager log --patch -- .", true),
-                ("git diff", true),
-                ("git diff HEAD", true),
-                ("git diff .", true),
-                ("git diff -- '*.json'", true),
-                ("git diff .mcp.json", true),
-                ("git -c color.ui=never diff", true),
+                ("git diff", false),
+                ("git diff HEAD", false),
+                ("git diff .", false),
+                ("git diff -- '*.json'", false),
+                ("git diff .mcp.json", false),
+                ("git -c color.ui=never diff", false),
+                ("git diff --check", false),
+                ("git diff --cached --check", false),
+                ("git diff --staged -- .codex/config.toml", false),
+                ("git --no-pager -C src diff --check", false),
+                ("git diff --no-index .mcp.json src/main.rs", true),
+                ("git diff --no-index .shield src", true),
+                ("git diff --ext-diff", true),
+                ("git diff --ext", true),
+                ("git diff --text", false),
+                ("git diff --textconv", true),
+                ("git diff --textc", true),
+                (
+                    "git diff --no-index .shield/state/state.json src/main.rs",
+                    true,
+                ),
+                ("git diff --output=.codex/config.toml", true),
                 ("git status -v", true),
                 ("git status -sv", true),
                 ("git grep token", true),
@@ -5381,12 +5502,12 @@ fn command_output_protects_direct_settings_reads_but_allows_codebase_searches() 
 #[test]
 fn settings_reached_only_through_output_ask_claude_and_tell_codex_to_narrow() {
     let root = settings_fixture("git");
-    let value = call(root.path(), "claude", "git diff");
+    let value = call(root.path(), "claude", "git show");
     assert_eq!(
         value["hookSpecificOutput"]["permissionDecision"], "ask",
         "{value}"
     );
-    let value = call(root.path(), "codex", "git diff");
+    let value = call(root.path(), "codex", "git show");
     assert!(reason(&value).contains("can print `"), "{value}");
     assert!(reason(&value).contains("Limit it to paths"), "{value}");
     // A named settings path keeps the protected-path explanation.
@@ -5462,7 +5583,7 @@ fn object_id_listings_check_unscoped_and_named_settings_but_allow_safe_paths() {
 }
 
 #[test]
-fn git_option_values_do_not_hide_changed_settings_outside_an_existing_folder() {
+fn git_diff_option_values_keep_inspection_free_of_settings_read_review() {
     let root = settings_fixture("git");
     fs::write(root.path().join(".mcp.json"), "{\"key\":\"acme-before\"}\n").unwrap();
     for arguments in [
@@ -5477,6 +5598,18 @@ fn git_option_values_do_not_hide_changed_settings_outside_an_existing_folder() {
         assert!(output.status.success(), "{output:?}");
     }
     fs::write(root.path().join(".mcp.json"), "{\"key\":\"acme-after\"}\n").unwrap();
+    let other = assert_fs::TempDir::new().unwrap();
+    let note = other.path().join("note.txt");
+    fs::write(&note, "Acme note").unwrap();
+    let raw = call(
+        root.path(),
+        "codex",
+        &format!("git diff -- '{}' .mcp.json", note.display()),
+    );
+    assert_eq!(
+        raw["hookSpecificOutput"]["permissionDecision"], "deny",
+        "{raw}"
+    );
     let output = crate::test_support::git()
         .current_dir(root.path())
         .args(["diff", "--ignore-matching-lines", "src"])
@@ -5499,10 +5632,7 @@ fn git_option_values_do_not_hide_changed_settings_outside_an_existing_folder() {
         "git diff --future-option=src -- src",
     ] {
         let value = call(root.path(), "codex", source);
-        assert_eq!(
-            value["hookSpecificOutput"]["permissionDecision"], "deny",
-            "{source}: {value}"
-        );
+        assert_permitted(&value, "codex");
     }
     for source in [
         "git diff --ignore-matching-lines src -- src",

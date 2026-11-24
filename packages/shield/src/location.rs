@@ -127,6 +127,20 @@ struct Target {
     descendants: Descendants,
     follow: bool,
 }
+
+enum PathCheckFailure {
+    Unavailable(&'static str),
+    Mismatch(&'static str),
+}
+
+impl PathCheckFailure {
+    fn code(self) -> &'static str {
+        match self {
+            Self::Unavailable(_) => "evidence_unavailable",
+            Self::Mismatch(code) => code,
+        }
+    }
+}
 /// Which descendants of a recursive target its operation can reach.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Descendants {
@@ -151,6 +165,30 @@ struct Targets {
     unavailable: Vec<(PathBuf, &'static str)>,
 }
 
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+struct ReferenceRoot {
+    path: PathBuf,
+    file_grant: bool,
+}
+
+impl From<PathBuf> for ReferenceRoot {
+    fn from(path: PathBuf) -> Self {
+        Self {
+            path,
+            file_grant: false,
+        }
+    }
+}
+
+impl ReferenceRoot {
+    fn relative<'a>(&self, path: &'a Path) -> Option<&'a Path> {
+        if self.file_grant && self.path != path {
+            return None;
+        }
+        path.strip_prefix(&self.path).ok()
+    }
+}
+
 pub(crate) struct Observer {
     input: Input,
     project: PathBuf,
@@ -172,6 +210,15 @@ impl Observer {
         cwd: &Path,
         paths: &crate::configuration::AccessPaths,
     ) -> Option<Vec<PathBuf>> {
+        Self::approved_roots(project, cwd, paths, true)
+    }
+
+    pub(crate) fn approved_roots(
+        project: &Path,
+        cwd: &Path,
+        paths: &crate::configuration::AccessPaths,
+        read: bool,
+    ) -> Option<Vec<PathBuf>> {
         let input = Input::File {
             action: "read".into(),
             sources: vec![],
@@ -179,9 +226,14 @@ impl Observer {
             recursive: false,
             original_input: serde_json::json!({}),
         };
-        Self::new(&input, project.to_str()?, cwd.to_str()?, None)
+        let roots = Self::new(&input, project.to_str()?, cwd.to_str()?, None)
             .with_access_paths(paths)
-            .reference(&serde_json::json!({"root":"read"}), true, false)
+            .reference(
+                &serde_json::json!({"root":if read { "read" } else { "write" }}),
+                true,
+                false,
+            )?;
+        Some(roots.into_iter().map(|root| root.path).collect())
     }
 
     pub(crate) fn new(input: &Input, project: &str, cwd: &str, executable: Option<&str>) -> Self {
@@ -232,13 +284,13 @@ impl Observer {
         reference: &Value,
         follow: bool,
         include_missing: bool,
-    ) -> Option<Vec<PathBuf>> {
+    ) -> Option<Vec<ReferenceRoot>> {
         let suffix = reference["path"].as_str().unwrap_or(".");
         let mut paths = match reference["root"].as_str()? {
-            "absolute" => vec![PathBuf::from(reference["path"].as_str()?)],
-            "project" => vec![self.project.join(suffix)],
+            "absolute" => vec![PathBuf::from(reference["path"].as_str()?).into()],
+            "project" => vec![self.project.join(suffix).into()],
             "read" | "write" => {
-                let mut roots = vec![self.project.join(suffix)];
+                let mut roots = vec![self.project.join(suffix).into()];
                 if let Some(scope) = &self.working_files {
                     for root in scope.roots(reference["root"] == "read") {
                         let base = self.observed(root, true)?;
@@ -250,7 +302,7 @@ impl Observer {
                             self.unverified.set(true);
                             return None;
                         }
-                        roots.push(path);
+                        roots.push(path.into());
                     }
                 }
                 let additional = self.access_paths.write.iter().chain(
@@ -265,15 +317,18 @@ impl Observer {
                     // Other observation failures keep the whole union unknown.
                     let base = self.observed(Path::new(path), true)?;
                     match self.present(&base) {
-                        Ok(false) if include_missing => roots.push(base.join(suffix)),
+                        Ok(false) if include_missing => roots.push(base.join(suffix).into()),
                         Ok(false) => {}
                         Ok(true) => {
                             if self.directory(&base)? {
-                                roots.push(base.join(suffix));
+                                roots.push(base.join(suffix).into());
                             } else if Path::new(suffix) == Path::new(".") {
                                 // An explicit file grant contributes the file itself,
                                 // never fictional children such as file/.git.
-                                roots.push(base);
+                                roots.push(ReferenceRoot {
+                                    path: base,
+                                    file_grant: true,
+                                });
                             }
                         }
                         _ => {
@@ -290,7 +345,7 @@ impl Observer {
         // root that cannot be observed cannot prove the complement or silently
         // weaken an exclusion.
         for path in &mut paths {
-            *path = self.observed(path, follow)?;
+            path.path = self.observed(&path.path, follow)?;
         }
         paths.sort();
         paths.dedup();
@@ -329,7 +384,7 @@ impl Observer {
             self.unverified.set(true);
             return Some("evidence_unavailable");
         }
-        (!expected.contains(&path)).then_some("predicate_mismatch")
+        (!expected.iter().any(|root| root.path == path)).then_some("predicate_mismatch")
     }
     pub(crate) fn cwd(
         &self,
@@ -362,31 +417,43 @@ impl Observer {
         target: &Target,
         patterns: &dyn Provider,
     ) -> Result<Option<&'static str>, Error> {
+        Ok(self
+            .check_path(predicate, target, patterns)?
+            .map(PathCheckFailure::code))
+    }
+
+    fn check_path(
+        &self,
+        predicate: &Value,
+        target: &Target,
+        patterns: &dyn Provider,
+    ) -> Result<Option<PathCheckFailure>, Error> {
+        use PathCheckFailure::{Mismatch, Unavailable};
         let Some(path) = self.observed(&target.path, target.follow) else {
-            return Ok(Some("evidence_unavailable"));
+            return Ok(Some(Unavailable("target_unresolved")));
         };
         let (kind, reference) = ["exact", "within", "outside"]
             .iter()
             .find_map(|key| predicate.get(*key).map(|v| (*key, v)))
             .ok_or(Error::Syntax)?;
         let Some(roots) = self.reference(reference, kind != "exact" || target.follow, false) else {
-            return Ok(Some("evidence_unavailable"));
+            return Ok(Some(Unavailable("roots_unverified")));
         };
-        let inside = roots.iter().any(|root| path.starts_with(root));
+        let inside = roots.iter().any(|root| root.relative(&path).is_some());
         let matched = match kind {
-            "exact" => roots.contains(&path),
+            "exact" => roots.iter().any(|root| root.path == path),
             "within" => inside,
             "outside" => !inside,
             _ => false,
         };
         if !matched {
-            return Ok(Some("location_outside"));
+            return Ok(Some(Mismatch("location_outside")));
         }
         for reference in predicate["exclude"].as_array().into_iter().flatten() {
             let Some(exclusions) = self.reference(reference, target.follow, true) else {
-                return Ok(Some("evidence_unavailable"));
+                return Ok(Some(Unavailable("exclusions_unverified")));
             };
-            for excluded in exclusions {
+            for ReferenceRoot { path: excluded, .. } in exclusions {
                 let reached = target.recursive
                     && excluded.starts_with(&path)
                     && match target.descendants {
@@ -396,33 +463,41 @@ impl Observer {
                         }),
                         Descendants::Present => match self.present(&excluded) {
                             Ok(present) => present,
-                            Err(()) => return Ok(Some("evidence_unavailable")),
+                            Err(()) => return Ok(Some(Unavailable("exclusions_unverified"))),
                         },
                     };
                 if path.starts_with(&excluded) || reached {
-                    return Ok(Some("location_excluded"));
+                    return Ok(Some(Mismatch("location_excluded")));
                 }
                 match self.same_entry(&path, &excluded) {
-                    Ok(true) => return Ok(Some("location_excluded")),
-                    Err(()) => return Ok(Some("evidence_unavailable")),
+                    Ok(true) => return Ok(Some(Mismatch("location_excluded"))),
+                    Err(()) => return Ok(Some(Unavailable("exclusion_identity_unverified"))),
                     Ok(false) => {}
                 }
             }
         }
         if let Some(selector) = predicate.get("match") {
-            let mut selected = false;
             for root in &roots {
-                if let Some(relative) = path.strip_prefix(root).ok().and_then(Path::to_str) {
-                    selected |= selectors::matches(
-                        selector,
-                        &relative.replace(std::path::MAIN_SEPARATOR, "/"),
-                        patterns,
-                    )?;
+                let Some(relative) = root.relative(&path).and_then(Path::to_str) else {
+                    continue;
+                };
+                if selectors::matches(
+                    selector,
+                    &relative.replace(std::path::MAIN_SEPARATOR, "/"),
+                    patterns,
+                )? {
+                    return Ok(None);
+                }
+                // Baseline's nonempty path selector excludes directory roots.
+                // A single-file grant can satisfy it using the file's own name.
+                if root.file_grant
+                    && let Some(name) = path.file_name().and_then(std::ffi::OsStr::to_str)
+                    && selectors::matches(selector, name, patterns)?
+                {
+                    return Ok(None);
                 }
             }
-            if !selected {
-                return Ok(Some("predicate_mismatch"));
-            }
+            return Ok(Some(Mismatch("predicate_mismatch")));
         }
         Ok(None)
     }
@@ -654,6 +729,49 @@ impl crate::policy::rules::resources::Resources for Observer {
         })?;
         let path = path.strip_prefix(&self.cwd).unwrap_or(path).to_str()?;
         let evidence = serde_json::json!({"resource":{"path":path,"code":code}});
+        crate::json::fits(&evidence, 1024).then_some(evidence)
+    }
+
+    fn unavailable_file_evidence(
+        &self,
+        key: &str,
+        predicate: &Value,
+        patterns: &dyn Provider,
+    ) -> Option<Value> {
+        let targets = self.targets.get_or_init(|| self.collect());
+        let [target] = targets.items.as_slice() else {
+            return None;
+        };
+        if !targets.complete {
+            return None;
+        }
+        // The original predicate already observed these paths. Reuse its
+        // request-local observations to identify which check failed.
+        let unavailable =
+            |selector: &Value| match self.check_path(selector, target, patterns).ok()? {
+                Some(PathCheckFailure::Unavailable(code)) => Some(code),
+                _ => None,
+            };
+        let quantified = |item: &Value| unavailable(item.get("all").or_else(|| item.get("any"))?);
+        let code = match key {
+            "targets" => predicate
+                .as_array()
+                .map_or_else(|| std::slice::from_ref(predicate), Vec::as_slice)
+                .iter()
+                .filter(|item| item["action"] == target.action)
+                .find_map(quantified),
+            "sources" if target.role == "source" => quantified(predicate),
+            "destination" if target.role == "destination" || target.role == "replacement" => {
+                unavailable(predicate)
+            }
+            _ => None,
+        }?;
+        let path = target
+            .path
+            .strip_prefix(&self.cwd)
+            .unwrap_or(&target.path)
+            .to_str()?;
+        let evidence = serde_json::json!({"resource":{"kind":"file","path":path,"code":code}});
         crate::json::fits(&evidence, 1024).then_some(evidence)
     }
 

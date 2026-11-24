@@ -52,12 +52,11 @@ output. Native terminal behavior is verified on macOS.
 Reviews list what changes: packs added (`+`), removed (`-`) or changed (`~`)
 with their version, profile, rule count and short digest, custom rules, access
 paths, and how command decisions change, with one example of a stricter or
-broader decision. Initialization and setup reviews summarize each agent's hooks,
-MCP server and Codex Ask fallback, name the Shield binary the hooks run, and
-list each owned file as created, updated, unchanged or removed; Shield only
-changes its own entries there, so file contents are not repeated. Digests show
-their first 12 characters. Installation and cache status are reported separately
-from live interception.
+broader decision. Initialization and setup reviews name the project, agents,
+Shield binary, hook changes, and permission changes. Repeated file changes
+are grouped by count. Select **Inspect details** in the terminal to see the
+captured before and after settings. This view can show private values.
+Installation and cache status are reported separately from live interception.
 
 Errors name the failure, cause, and recovery step on stderr. Recovery commands
 do not run automatically. Cancellation prints `Cancelled; nothing changed.`
@@ -77,6 +76,7 @@ interfaces never acquire this operator UI or emit human presentation.
 
 | Command | Workflow |
 | --- | --- |
+| `setup` | Initialize, repeat, or repair Shield using saved or detected choices |
 | `init` | Review default baseline and project configuration, select agents, confirm enrollment |
 | `mcp setup [--agent AGENT]... [--remove] [--pending review\|cancel] [--dry-run]` | Install, repair or remove project hooks/MCP integrations; omission opens guided selection or resumes confirmed work; pending reviews conflicts or cancellation; removal keeps unselected agents; restart/trust the agent after registration changes |
 | `status`, `doctor` | Inspect the policy files, history, registrations and reported problems |

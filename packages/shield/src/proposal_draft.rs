@@ -5,6 +5,23 @@ use std::path::Path;
 /// Shared installation guidance for startup, pack offers and conversation prompts.
 pub(crate) const PACK_SETUP_GUIDANCE: &str = "Inspect pack_info setup/settings before installation. Request declared optional variables needed for the user's restrictions with pack_add.variables; the form collects values. Omit unrequested optional settings. If unsupported, explain the gap instead of proposing broader permissions. Local storage does not restrict targets.";
 
+pub(crate) const UNMATCHED_RULE: &str =
+    "If it should run without asking, propose a pack or rule that covers it with policy_propose.";
+pub(crate) const CHECK_EXECUTABLE_SETTING: &str =
+    "Check suggestion_list for a matching installed pack setting before proposing a custom rule.";
+
+pub(crate) fn check_executable_setting(guidance: &Value) -> bool {
+    guidance["source"] == "decisive"
+        && guidance["request"]["executable"]
+            .as_str()
+            .is_some_and(|path| Path::new(path).is_absolute())
+        && guidance["alternatives"].as_array().is_some_and(|items| {
+            items
+                .iter()
+                .any(|item| item == CHECK_EXECUTABLE_SETTING || item == UNMATCHED_RULE)
+        })
+}
+
 /// Whether a matched pack rule's guidance for this operation asks for a project
 /// rule proposal, as pack rules for project scripts do. Standalone requests
 /// share a null operation reference. Shield's own generic advice has no rule

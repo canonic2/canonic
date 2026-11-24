@@ -452,6 +452,18 @@ This focused SDK case uses the installed pinned SDK, an owned loopback provider,
 temporary projects and scripted elicitation answers; it makes no cloud model
 requests. The application remains responsible for rendering its human form.
 
+The Rust executable-discovery regression accepts a built registry artifact and
+uses installed Claude and Codex with owned executable proxies:
+
+```sh
+SHIELD_TEST_RUST_PACK=/path/to/shield-registry/packs/canonic/rust/0.2.1/pack.yml cargo xtask adapter-test --file adapters/sdk-tests/rust-executable-native.test.mjs --filter 'installed .* discovers Rust proxies'
+```
+
+It checks fresh setup, reviewed repair, routine Cargo without command approval,
+outside-output denial and an unbound executable named `cargo`. The fixture puts
+the selected test binary on PATH because portable hooks and MCP entries launch
+`shield` by name. It does not invoke real Cargo builds or cloud models.
+
 ### Generated Copilot/OpenCode acceptance on the selected Mac
 
 The opt-in generated-callback fixture uses installed Copilot CLI **1.0.105** or

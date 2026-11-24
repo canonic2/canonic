@@ -12,15 +12,22 @@ pub(super) fn collect(
     key: &str,
     facts: &Facts<'_>,
     patterns: &dyn Provider,
+    unavailable: bool,
 ) -> Result<Option<Value>, Error> {
     match (key, facts.input) {
         ("graphql", _) => {
             Ok(super::predicates::graphql(predicate, facts, patterns)?
                 .map(|failure| json!(failure)))
         }
-        ("targets" | "sources" | "destination", _) => Ok(facts
-            .locations
-            .and_then(|locations| locations.predicate_evidence(key))),
+        ("targets" | "sources" | "destination", _) => Ok(facts.locations.and_then(|locations| {
+            if unavailable && matches!(facts.input, Input::File { .. }) {
+                locations
+                    .unavailable_file_evidence(key, predicate, patterns)
+                    .or_else(|| locations.predicate_evidence(key))
+            } else {
+                locations.predicate_evidence(key)
+            }
+        })),
         ("arguments", Input::Argv { arguments, .. }) if facts.known_arguments => Ok(Some(
             argument_rules::matches(predicate, arguments, patterns)?.evidence(predicate),
         )),

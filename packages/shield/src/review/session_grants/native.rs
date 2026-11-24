@@ -3,7 +3,7 @@ use super::{Context, Conversation, Error, Record, Value, hash, json, registratio
 use crate::policy::Request;
 
 /// Observational capture: existing contexts need neither a lock nor a write.
-fn capture(context: &Context, receipt: &mut Value) -> Result<(), Error> {
+fn capture(context: &Context, receipt: &mut Value, offer_ordinary: bool) -> Result<(), Error> {
     let Some(agent) = context
         .agent
         .as_deref()
@@ -83,8 +83,14 @@ fn capture(context: &Context, receipt: &mut Value) -> Result<(), Error> {
     let Some(captured) = captured else {
         return Ok(());
     };
-    receipt["session_context"] = json!({"session_ref":captured.reference,"consumer":agent,"offer_hint":first || receipt["decision"]=="ask" || receipt["decision"]=="deny",
-        "next_action":"For repeated privileged operations, inspect session_grant_show and propose a bounded batch or argv family before the batch. The user confirms session_grant_approve; project policy stays unchanged."});
+    let offer_hint = offer_ordinary && (first || receipt["decision"] == "ask");
+    receipt["session_context"] =
+        json!({"session_ref":captured.reference,"consumer":agent,"offer_hint":offer_hint});
+    if offer_hint {
+        receipt["session_context"]["next_action"] = json!(
+            "For repeated eligible Ask decisions, inspect session_grant_show and propose a bounded batch or argv family. An ordinary grant covers Ask only. The user confirms session_grant_approve."
+        );
+    }
     Ok(())
 }
 
@@ -94,12 +100,15 @@ pub(crate) fn handoff(
     receipt: &mut Value,
     original: Option<&Value>,
 ) -> Result<(), Error> {
-    // Context capture never grants authority and cannot veto ordinary policy.
-    let _ = capture(context, receipt);
+    let eligible = eligible(receipt, original);
+    let offer_ordinary = eligible && ordinary_offer(receipt);
+    // Capture the reference for inspection even when this request cannot use
+    // an ordinary grant. A Deny has its own recovery and is never an Ask offer.
+    let _ = capture(context, receipt, offer_ordinary);
     if receipt["decision"] == "allow" {
         return Ok(());
     }
-    if !eligible(receipt, original) {
+    if !eligible {
         return Ok(());
     }
     let Some(agent) = context
@@ -115,6 +124,39 @@ pub(crate) fn handoff(
     handoff_session(context, receipt, agent, session)
 }
 
+fn ordinary_offer(receipt: &Value) -> bool {
+    matches!(
+        (receipt["code"].as_str(), receipt["decision"].as_str()),
+        (Some("policy-allow"), Some("allow")) | (Some("approval-required"), Some("ask"))
+    ) && literal_operations(receipt).is_some_and(|operations| {
+        operations.iter().all(|op| {
+            op["decision"] == "allow"
+                || (op["decision"] == "ask"
+                    && op["policy_request"].is_null()
+                    && !failed_requirements(op))
+        }) && (receipt["decision"] == "allow"
+            || operations.iter().any(|op| op["decision"] == "ask"))
+    })
+}
+
+fn literal_operations(receipt: &Value) -> Option<&[Value]> {
+    let operations = receipt["_shell_analysis"]["operations"].as_array()?;
+    (!operations.is_empty()
+        && operations.len() <= 256
+        && operations.iter().all(|op| op["coverage"] == "literal-argv"))
+    .then_some(operations.as_slice())
+}
+
+fn failed_requirements(operation: &Value) -> bool {
+    operation["evaluation"]["evaluation"]["requirement_checks"]
+        .as_array()
+        .is_some_and(|checks| {
+            checks
+                .iter()
+                .any(|c| c["applied"] != false && c["status"] != "met")
+        })
+}
+
 fn eligible(receipt: &Value, original: Option<&Value>) -> bool {
     !(!["approval-required", "policy-deny", "policy-allow"]
         .iter()
@@ -124,7 +166,7 @@ fn eligible(receipt: &Value, original: Option<&Value>) -> bool {
         // whose form warns about it; a reusable grant would repeat it unseen.
         || receipt["policy_change"] == true
         || receipt["protected_path"].is_string()
-        || receipt["outside_path"].is_object()
+        || receipt["_outside_grant_boundary"] == true
         || !["single-literal-invocation", "structured-literal-operations"]
             .iter()
             .any(|c| receipt["_shell_analysis"]["coverage"] == *c)
@@ -155,16 +197,9 @@ fn handoff_session(
     let now = super::super::clock::now_ms()?;
     let key = hash(&json!([agent, session]));
     let store = store(context)?;
-    let operations = receipt["_shell_analysis"]["operations"]
-        .as_array()
-        .cloned()
-        .unwrap_or_default();
-    if operations.is_empty()
-        || operations.len() > 256
-        || operations.iter().any(|o| o["coverage"] != "literal-argv")
-    {
+    let Some(operations) = literal_operations(receipt) else {
         return Ok(());
-    }
+    };
     let top = &receipt["_observation"]["evaluation"];
     let explanation = top.get("explanation").unwrap_or(&top["evaluation"]);
     // A source-level refusal cannot be covered by argv-only selectors.
@@ -187,10 +222,9 @@ fn handoff_session(
         candidates.sort_by_key(|r|(!r.overrides.as_array().is_none_or(Vec::is_empty),r.grant.as_ref().map(|g|g.expires),&r.id));
         let prepared=candidates.iter().map(|r|scope::prepare(&r.scope)).collect::<Result<Vec<_>,_>>()?;
         let mut selected=std::collections::BTreeMap::<String,Value>::new();
-        for operation in &operations {
+        for operation in operations {
             if operation["decision"]=="allow" {continue;}
-            if operation["evaluation"]["evaluation"]["requirement_checks"].as_array().is_some_and(|checks|
-                checks.iter().any(|c|c["applied"]!=false && c["status"]!="met")) {return Ok(None);}
+            if failed_requirements(operation) {return Ok(None);}
             let request:Request=serde_json::from_value(operation["request"].clone()).map_err(|_|Error::Invalid("unsupported_scope: operation context unavailable"))?;
             // Remapped argv/file consumers need their own selector binding;
             // the written argv alone cannot describe their effective context.

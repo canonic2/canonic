@@ -135,6 +135,9 @@ pub(in crate::review) fn preview_for(
         if before.is_none() && after.is_none() {
             continue;
         }
+        if before != after {
+            review["prefix_files_changed"] = serde_json::json!(true);
+        }
         if let Some(files) = review["files"].as_array_mut() {
             files.push(serde_json::json!({"path":path,"before":before,"after":after}));
         }

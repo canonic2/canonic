@@ -63,6 +63,8 @@ pub(super) enum Access {
     Read,
     /// Lists or records paths; may name the .shield folder itself.
     Index,
+    /// Ordinary Git diff inspection may print tracked agent settings.
+    Diff,
     /// Prints names and metadata only, never contents, so agent settings may
     /// be named; review state and the cache stay closed.
     Metadata,
@@ -361,7 +363,12 @@ pub(super) struct Outside {
     pub(super) folder: Option<PathBuf>,
 }
 
-pub(super) fn outside(operation: &Value, root: &Path, cwd: &Path) -> Option<Outside> {
+pub(super) fn outside(
+    operation: &Value,
+    root: &Path,
+    cwd: &Path,
+    unapproved: &dyn Fn(&Path, &str) -> bool,
+) -> Option<Outside> {
     let request = &operation["request"];
     let access = if matches!(access(request), Access::Write | Access::Restore) {
         "write"
@@ -381,7 +388,7 @@ pub(super) fn outside(operation: &Value, root: &Path, cwd: &Path) -> Option<Outs
             let path = resolve_existing(&absolute(value, cwd));
             (!value.is_empty() && !path.starts_with(&root)).then_some(path)
         })
-        .find(|path| path.is_absolute())
+        .find(|path| path.is_absolute() && unapproved(path, access))
         .map(|path| {
             let folder = if path.is_dir() {
                 path.clone()
@@ -422,15 +429,16 @@ pub(super) fn operator_route(value: &Value, cwd: &Path) -> Option<&'static str> 
                         || submitted_path(executable, cwd)
                             .canonicalize()
                             .is_ok_and(|p| p.file_name().is_some_and(operator_name));
-                    if shield && help_only(&value["arguments"]) {
+                    let arguments = &value["arguments"];
+                    if shield && (version_only(arguments) || help_only(arguments)) {
                         return None;
                     }
-                    let server = value["arguments"].as_array().is_some_and(|arguments| {
+                    let server = arguments.as_array().is_some_and(|arguments| {
                         arguments
                             .windows(2)
                             .any(|pair| pair[0] == "mcp" && pair[1] == "serve")
                     });
-                    (server || shield).then(|| recovery_category(&value["arguments"]))
+                    (server || shield).then(|| recovery_category(arguments))
                 })
                 .or_else(|| {
                     fields
@@ -464,10 +472,15 @@ fn recovery_category(arguments: &Value) -> &'static str {
     }
     match (command, words.next()) {
         (Some("doctor" | "status"), _) => "diagnostics",
-        (Some("mcp"), Some("setup" | "remove")) => "registration",
+        (Some("setup"), _) | (Some("mcp"), Some("setup" | "remove")) => "registration",
         (Some("rule" | "pack" | "policy"), _) => "policy",
         _ => "administration",
     }
+}
+
+/// Clap prints the top-level version and exits before running Shield.
+fn version_only(arguments: &Value) -> bool {
+    matches!(arguments.as_array().map(Vec::as_slice), Some([flag]) if flag == "--version" || flag == "-V")
 }
 
 /// A trailing help flag after plain words cannot select an operator action.
@@ -874,7 +887,7 @@ fn classify(path: &Path, guard: Guard<'_>, access: Access) -> Protection {
                 Protection::None
             }
             Access::Write | Access::Restore => Protection::Blocked,
-            Access::Metadata => Protection::None,
+            Access::Metadata | Access::Diff => Protection::None,
             _ if guard.allow.agent_settings_read == Read::Allow => Protection::None,
             _ => Protection::Sensitive,
         };
@@ -882,7 +895,7 @@ fn classify(path: &Path, guard: Guard<'_>, access: Access) -> Protection {
     match parts.get(index + 1) {
         Some(part) if state_component(part) => Protection::Blocked,
         // Naming the folder reaches its state unless Git and listings skip it.
-        None if matches!(access, Access::Index | Access::Metadata)
+        None if matches!(access, Access::Index | Access::Metadata | Access::Diff)
             && path.join(".gitignore").is_file() =>
         {
             Protection::None

@@ -138,6 +138,14 @@ impl AgentAdapter for OpenCode {
     fn has_mcp_entry(&self, source: &str) -> Result<bool, Error> {
         setup::has_mcp(source)
     }
+    fn borrow_mcp_entry(
+        &self,
+        source: &str,
+        binary: &Path,
+        root: &Path,
+    ) -> Result<Option<String>, Error> {
+        setup::borrow_mcp(source, binary, root)
+    }
     fn merge_mcp(
         &self,
         source: Option<&str>,

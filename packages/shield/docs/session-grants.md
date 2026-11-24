@@ -13,6 +13,9 @@ during the task. Prefer the fixed set when the batch is already known.
 Before a known batch of privileged commands, inspect `session_grant_show`.
 Shield's native hook supplies a `session_ref` after an ordinary shell request;
 this reference selects a recorded conversation, and grants no permission.
+An ordinary batch grant covers eligible Ask decisions. For a Deny, follow the
+recovery shown with the refusal. A temporary override of a supported policy
+Deny needs its own explicit review and must identify every applied Deny rule.
 
 Call `session_grant_propose` with that reference, an `idempotency_key`, and a
 `scope` array. Every array entry is an alternative; all constraints within an

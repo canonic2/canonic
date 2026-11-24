@@ -296,12 +296,7 @@ fn native_busy_final_guard_blocks_allowing_fallback_without_consuming_grant() {
         baseline["hookSpecificOutput"]["permissionDecision"], "deny",
         "standing fallback is genuinely allowing: {baseline}"
     );
-    assert!(
-        baseline["hookSpecificOutput"]["additionalContext"]
-            .as_str()
-            .unwrap()
-            .contains("allow")
-    );
+    assert!(baseline["hookSpecificOutput"]["additionalContext"].is_null());
     install_registration(&fixture, "block");
     let row = approved(&fixture);
     install_registration(&fixture, "allow");

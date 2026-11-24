@@ -35,6 +35,7 @@ impl Serialize for Operation {
                         policy_request,
                         transition,
                         stdin,
+                        ..
                     } => {
                         fields.serialize_entry(
                             "effects",

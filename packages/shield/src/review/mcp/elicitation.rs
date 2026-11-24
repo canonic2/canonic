@@ -71,6 +71,15 @@ impl PackQuestion {
             return Err(Error::Invalid("choose project or local layer"));
         }
         let installed = packs::installed(context, reference)?;
+        if args.get("variables").is_none() && discovers_executables(&installed["artifact"]) {
+            let installation = packs::installation::Installation::discover(context, reference)?;
+            return Self::captured(
+                "pack_configure",
+                args,
+                installation,
+                "discovered executables",
+            );
+        }
         let all_names: Vec<Value> = installed["artifact"]["variables"]
             .as_object()
             .into_iter()
@@ -372,6 +381,14 @@ impl PackQuestion {
         }
         Ok(change)
     }
+}
+
+fn discovers_executables(artifact: &Value) -> bool {
+    artifact["variables"].as_object().is_some_and(|variables| {
+        variables
+            .values()
+            .any(|declaration| declaration.get("discover").is_some())
+    })
 }
 
 fn configuration_fields(args: &Value) -> Result<(), Error> {

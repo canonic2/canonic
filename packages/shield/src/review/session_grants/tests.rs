@@ -790,10 +790,18 @@ fn explicit_deny_override_covers_only_the_named_current_rule() {
     ]}).to_string();
     let (_root, context, reference) = fixture_with_rules(Some(&rules));
     let ordinary = proposal(&context, &reference);
+    assert_eq!(ordinary["coverage"], "ask_only");
+    assert!(
+        ordinary["next_action"]
+            .as_str()
+            .unwrap()
+            .contains("Ask only")
+    );
     apply(&context, &ordinary["apply_arguments"], true).unwrap();
     let listed = super::super::inspection::rules(&context, None).unwrap();
     let rule = &listed["rules"][0];
     let proposed=propose(&context,&json!({"session_ref":reference,"idempotency_key":"override","scope":scope(),"override_denies":[{"rule_ref":rule["rule_ref"],"branch":"met","rule_digest":rule["rule_digest"]}]})).unwrap();
+    assert_eq!(proposed["coverage"], "named_deny_overrides");
     assert!(
         confirmation(&context, &proposed["apply_arguments"])
             .unwrap()
@@ -811,6 +819,9 @@ fn explicit_deny_override_covers_only_the_named_current_rule() {
     let mut value = denied("custom", "acme-merge", "met");
     handoff(&context, &mut value, Some(&json!({"command":"acme merge"}))).unwrap();
     assert_ne!(value["disposition"], "allowed");
+    assert_eq!(value["session_context"]["session_ref"], reference);
+    assert_eq!(value["session_context"]["offer_hint"], false);
+    assert!(value["session_context"].get("next_action").is_none());
     apply(&context, &proposed["apply_arguments"], true).unwrap();
     let mut value = denied("custom", "acme-merge", "met");
     handoff(&context, &mut value, Some(&json!({"command":"acme merge"}))).unwrap();
@@ -828,12 +839,48 @@ fn explicit_deny_override_covers_only_the_named_current_rule() {
 }
 
 #[test]
+fn session_grant_advice_distinguishes_eligible_ask_from_remapped_or_mixed_requests() {
+    let (_root, context, _) = fixture();
+    let original = json!({"command":"acme merge"});
+    let mut value = receipt(&context, arguments("42"));
+    handoff(&context, &mut value, Some(&original)).unwrap();
+    assert_eq!(value["session_context"]["offer_hint"], true);
+    assert!(
+        value["session_context"]["next_action"]
+            .as_str()
+            .unwrap()
+            .contains("Ask only")
+    );
+
+    for field in ["remapped", "mixed"] {
+        let mut value = receipt(&context, arguments("42"));
+        let operations = value["_shell_analysis"]["operations"]
+            .as_array_mut()
+            .unwrap();
+        if field == "remapped" {
+            operations[0]["policy_request"] = json!({"kind":"file"});
+        } else {
+            let mut denied = operations[0].clone();
+            denied["decision"] = json!("deny");
+            operations.push(denied);
+        }
+        handoff(&context, &mut value, Some(&original)).unwrap();
+        assert_eq!(value["session_context"]["offer_hint"], false, "{field}");
+        assert!(
+            value["session_context"].get("next_action").is_none(),
+            "{field}"
+        );
+    }
+}
+
+#[test]
 fn failed_requirements_and_protected_state_cannot_use_session_grants() {
     let (_root, context, reference) = fixture();
     let proposed = proposal(&context, &reference);
     apply(&context, &proposed["apply_arguments"], true).unwrap();
     for field in [
         "fixed_protection",
+        "_outside_grant_boundary",
         "policy_change",
         "requirements",
         "partial",
@@ -841,6 +888,7 @@ fn failed_requirements_and_protected_state_cannot_use_session_grants() {
         let mut value = receipt(&context, arguments("42"));
         match field {
             "fixed_protection" => value["fixed_protection"] = json!(true),
+            "_outside_grant_boundary" => value["_outside_grant_boundary"] = json!(true),
             "policy_change" => value["policy_change"] = json!(true),
             "requirements" => {
                 value["_shell_analysis"]["operations"][0]["evaluation"]["evaluation"]["requirement_checks"] =
@@ -850,6 +898,7 @@ fn failed_requirements_and_protected_state_cannot_use_session_grants() {
         }
         handoff(&context, &mut value, Some(&json!({"command":"acme merge"}))).unwrap();
         assert_ne!(value["disposition"], "allowed", "{field}");
+        assert_eq!(value["session_context"]["offer_hint"], false, "{field}");
     }
 }
 

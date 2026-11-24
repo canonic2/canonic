@@ -4,6 +4,55 @@ use super::*;
 mod history_controls;
 
 #[test]
+fn administrative_review_large_setup_uses_one_form_and_preserves_native_settings() {
+    for modern in [false, true] {
+        let (server, project) = fixture(Some("codex"));
+        let path = project.root.path().join(".codex/config.toml");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let settings = format!("# {}\n", "unrelated-native-setting".repeat(3000));
+        std::fs::write(&path, &settings).unwrap();
+        let transport = connect(server);
+        let args = json!({"agents":["codex"]});
+        let form = if modern {
+            transport.request(&super::skills::modern(
+                2,
+                "tools/call",
+                json!({"name":"mcp_setup","arguments":args}),
+                json!({"elicitation":{"form":{}}}),
+            ))
+        } else {
+            transport.call(json!(2), "mcp_setup", &args)
+        };
+        let message = if modern {
+            &form["result"]["inputRequests"]["confirmation"]["params"]["message"]
+        } else {
+            &form["params"]["message"]
+        };
+        assert!(
+            message.as_str().is_some_and(|text| text.contains("Codex")
+                && text.len() < 12_000
+                && !text.contains("unrelated-native-setting")),
+            "{form}"
+        );
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), settings);
+        let result = if modern {
+            transport.request(&super::skills::modern(3, "tools/call", json!({"name":"mcp_setup","arguments":args,"requestState":form["result"]["requestState"],"inputResponses":{"confirmation":{"action":"accept"}}}), json!({"elicitation":{"form":{}}})))
+        } else {
+            transport.request(
+                &json!({"jsonrpc":"2.0","id":form["id"],"result":{"action":"accept","content":{}}}),
+            )
+        };
+        assert_eq!(result["result"]["isError"], false, "{result}");
+        assert!(
+            std::fs::read_to_string(path)
+                .unwrap()
+                .contains(settings.trim_end())
+        );
+        assert!(!result.to_string().contains("unrelated-native-setting"));
+    }
+}
+
+#[test]
 fn shield_mode_transport_forms_require_acceptance_to_disable_and_reenable() {
     for modern in [false, true] {
         let (server, _project) = fixture(Some("codex"));
@@ -103,6 +152,36 @@ fn admin_parity_unavailable_and_cancelled_forms_preserve_settings_and_tool_recov
             }
             assert_eq!(settings(&transport, 5), before, "{result}");
         }
+    }
+}
+
+#[test]
+fn enrolled_setup_without_forms_keeps_the_resolved_agent_in_the_terminal_command() {
+    for modern in [false, true] {
+        let (server, project) = fixture(Some("codex"));
+        let transport = Transport::start(server);
+        for message in initialize(&json!({}), "codex") {
+            transport.send(&message);
+        }
+        assert!(transport.receive()["result"].is_object());
+        let response = if modern {
+            transport.request(&super::skills::modern(
+                2,
+                "tools/call",
+                json!({"name":"setup","arguments":{}}),
+                json!({}),
+            ))
+        } else {
+            transport.call(json!(2), "setup", &json!({}))
+        };
+        let error = &response["result"]["structuredContent"]["error"];
+        assert_eq!(error["code"], "approval_unavailable", "{response}");
+        assert_eq!(
+            error["operator_action"],
+            json!({"command":"shield",
+            "argv":["--project",project.review.project_root,"setup","--agent","codex"]})
+        );
+        assert!(!project.root.path().join(".codex/hooks.json").exists());
     }
 }
 

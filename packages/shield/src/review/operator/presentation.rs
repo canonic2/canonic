@@ -11,6 +11,7 @@ use serde_json::Value;
 use std::fmt::Write;
 
 mod activity;
+pub(super) mod admin;
 pub(super) mod errors;
 mod packs;
 mod policy;
@@ -494,6 +495,7 @@ fn render(command: &PublicCommand, value: &Value) -> String {
 fn primary_result(command: &PublicCommand, value: &Value) -> String {
     match command {
         PublicCommand::Init { .. } => setup::initialized(value),
+        PublicCommand::Setup { .. } => setup::project_setup(value),
         PublicCommand::Mcp(_) if value["dry_run"] == true => {
             format!("{}Dry run; nothing was written.\n", review(value))
         }

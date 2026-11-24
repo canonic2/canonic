@@ -83,9 +83,9 @@ pub(super) fn initialize(
         review::initialization::Prepared::new(&project, candidate.clone(), meta, checkpoints)?;
     let mut setup = setup.clone();
     prepared.preview_prefixes(&mut setup, desired);
-    tty.confirm(&json!({"operation":"initialize project","project":project,
+    tty.confirm_admin(&json!({"operation":"initialize project","project":project,
         "policy":candidate,"registry_verification":if verified_main {"signed by the main registry and verified against Shield's pinned key"} else {"project files captured for review; the main registry stays available for discovery"},
-        "integration_setup":setup}))?;
+        "integration_setup":setup}), &project.to_string_lossy())?;
     prepared.commit(&|| Ok(())).map(|(_, receipt)| receipt)
 }
 

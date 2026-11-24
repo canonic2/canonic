@@ -193,6 +193,9 @@ pub(super) fn tools(agent: Option<&str>) -> Value {
         if ["policy_propose","rule_add","rule_edit","session_grant_propose"].contains(&name) { let mut definitions = crate::policy::model::schema::definitions(); definitions["normalized_input"] = input(); schema["$defs"] = definitions; }
         let mutation=mutates(name);
         let mut result_schema = output.clone();
+        if super::super::admin::supports(name) {
+            result_schema["properties"]["error"]["anyOf"][0]["properties"]["operator_action"] = object(json!({"command":{"const":"shield"},"argv":strings(),"choices":arbitrary()}), &["command","argv"]);
+        }
         if ["status", "pack_list", "pack_show"].contains(&name) {
             result_schema["properties"]["data"] = nullable(json!({"type":"object","properties":{
                 "pack_updates":pack_updates_schema(),
@@ -346,6 +349,11 @@ fn setup_preview_schema() -> Value {
 
 fn admin_inventory() -> Vec<Definition> {
     vec![
+        (
+            crate::review::setup::TOOL,
+            crate::review::setup::DESCRIPTION,
+            crate::review::setup::schema,
+        ),
         (
             "enable",
             "Ask the user to resume this project's native Shield checks; requires human confirmation",
@@ -756,7 +764,7 @@ fn session_grant_show() -> Definition {
 fn session_grant_propose() -> Definition {
     (
         "session_grant_propose",
-        "Prepare temporary permission for a known batch or constrained argv family before repeated privileged operations. Inspect session_grant_show first. Default duration is two hours; project policy stays unchanged. Named Deny overrides are explicit, and the user confirms session_grant_approve. Do not repeat declined offers.",
+        "Prepare temporary permission for a bounded argv batch or family. The default grant covers eligible Ask decisions only. A supported met policy Deny requires an explicit override_denies entry for every applied Deny. Follow the denial's recovery for failed checks or other ineligible requests. Inspect session_grant_show first. Default duration is two hours. Project policy stays unchanged. The user confirms session_grant_approve. Do not repeat declined offers.",
         || {
             let definitions = crate::policy::model::schema::definitions();
             let conditions = definitions["conditions"].clone();
@@ -778,7 +786,7 @@ fn session_grant_propose() -> Definition {
 fn pack_configure() -> Definition {
     (
         "pack_configure",
-        "Configure an installed pack with set, unset, override and clear_override, or collect 1-16 variables through a form. Omit edits and variables for guided settings and rule overrides. Form and direct modes cannot be mixed. Prepare an inactive proposal; copy apply_arguments unchanged to policy_apply for approval. Never invent form answers or retry cancellation.",
+        "Configure an installed pack with set, unset, override and clear_override, or collect 1-16 variables through a form. Omit edits and variables to repair declared executable discovery; packs without discovery use guided settings and rule overrides. Discovered exact paths are local and remain inactive until policy_apply approval. Form and direct modes cannot be mixed. Copy apply_arguments unchanged to policy_apply. Never invent form answers or retry cancellation.",
         || {
             let mut schema = object(
                 json!({"reference":string(),"variables":{"type":"array","minItems":1,"maxItems":16,"items":id()},"set":{"type":"object","maxProperties":64},"unset":{"type":"array","maxItems":64,"items":string()},"override":{"type":"object","maxProperties":1024},"clear_override":{"type":"array","maxItems":1024,"items":string()},"layer":layer(),"idempotency_key":id(),"agent_reason":string()}),

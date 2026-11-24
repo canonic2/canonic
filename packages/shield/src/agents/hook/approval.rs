@@ -51,12 +51,25 @@ pub(super) fn in_session(
     {
         return None;
     }
+    let cwd = hook_approval::relative_cwd(root, request.cwd.as_ref());
+    let summary = match request.event {
+        Event::Before => {
+            let summary = summary(request, refusals);
+            let bytes = hook_approval::form_bytes(&summary, &cwd);
+            if bytes > hook_approval::MAX_FORM {
+                oversized(reply, request.tool, bytes);
+                return None;
+            }
+            Some(summary)
+        }
+        Event::Permission => None,
+        Event::Completed | Event::Failed | Event::Ended => return None,
+    };
     let identity = Identity {
         activation_id: first["identity"]["activation_id"].as_str()?,
         policy_revision: first["identity"]["policy_revision"].as_str()?,
         candidate_digest: first["identity"]["candidate_digest"].as_str()?,
     };
-    let cwd = hook_approval::relative_cwd(root, request.cwd.as_ref());
     let input_digest = input_digest(request, refusals)?;
     let key = Key {
         agent: adapter.spec().id,
@@ -69,8 +82,8 @@ pub(super) fn in_session(
         .iter()
         .filter_map(|receipt| receipt["history"]["request_id"].as_str())
         .collect();
-    match request.event {
-        Event::Before => {
+    match summary {
+        Some(summary) => {
             // A failed read is not a missing registration; recording the
             // request below reports it with a retry.
             if enrolled(root, key.agent) == Some(false) {
@@ -83,13 +96,6 @@ pub(super) fn in_session(
                 }
                 return None;
             }
-            let Some(summary) = summary(request, refusals) else {
-                append(
-                    &mut reply.agent_context,
-                    "This request is too long to show the user in full, so it cannot be approved as it is; split it into smaller calls.",
-                );
-                return None;
-            };
             match hook_approval::refused_observed(
                 root,
                 &key,
@@ -112,11 +118,10 @@ pub(super) fn in_session(
             }
         }
         // A later callback of an attempt whose grant was just consumed.
-        Event::Permission => hook_approval::followup_observed(root, &key, &decision_requests)
+        None => hook_approval::followup_observed(root, &key, &decision_requests)
             .ok()
             .filter(|covered| *covered)
             .map(|_| allowed()),
-        Event::Completed | Event::Failed | Event::Ended => None,
     }
 }
 
@@ -147,6 +152,21 @@ fn append(text: &mut Option<String>, addition: &str) {
         Some(existing) if !existing.is_empty() => format!("{existing} {addition}"),
         _ => addition.to_owned(),
     });
+}
+
+fn oversized(reply: &mut Reply, tool: &str, bytes: usize) {
+    let limit = hook_approval::MAX_FORM;
+    let detail = format!(
+        "The full one-time approval form needs {bytes} UTF-8 bytes and the limit is {limit}."
+    );
+    reply.reason.push(' ');
+    reply.reason.push_str(&detail);
+    let next = if tool == "apply_patch" {
+        "Submit smaller complete patches, splitting at file or hunk boundaries while preserving the intended changes."
+    } else {
+        "Split the operation into smaller complete requests if the work can be separated safely."
+    };
+    append(&mut reply.agent_context, &format!("{detail} {next}"));
 }
 
 fn route(reply: &mut Reply, id: &str, others: bool) {
@@ -228,8 +248,8 @@ fn input_digest(request: &Request<'_>, refusals: &[Value]) -> Option<String> {
     }
 }
 
-/// What the form shows, or nothing when it cannot show the action whole.
-fn summary(request: &Request<'_>, refusals: &[Value]) -> Option<Summary> {
+/// What the form shows before admitting a request for one-time approval.
+fn summary(request: &Request<'_>, refusals: &[Value]) -> Summary {
     let mut reasons: Vec<String> = Vec::new();
     let mut deny_rules: Vec<String> = Vec::new();
     for refusal in refusals {
@@ -285,15 +305,14 @@ fn summary(request: &Request<'_>, refusals: &[Value]) -> Option<Summary> {
         );
         action.push_str(&calls.into_iter().collect::<Vec<_>>().join("\n"));
     }
-    let summary = Summary {
+    Summary {
         action,
         reason: reasons.join("; "),
         overrides_deny: refusals.iter().any(|r| r["code"] == "policy-deny"),
         deny_rules,
         settings_change: refusals.iter().any(settings),
         policy_change: refusals.iter().any(|r| r["policy_change"] == true),
-    };
-    hook_approval::fits(&summary, request.cwd.as_ref()).then_some(summary)
+    }
 }
 
 fn reason(refusal: &Value) -> String {

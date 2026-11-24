@@ -986,7 +986,15 @@ impl Rule {
                     "/requirements".into()
                 };
                 let failed: Vec<_> = failures.iter().filter(|(field, _)| field == key).collect();
-                let evidence = evidence::collect(&requirements[key], key, facts, patterns)?;
+                let evidence = evidence::collect(
+                    &requirements[key],
+                    key,
+                    facts,
+                    patterns,
+                    failed
+                        .iter()
+                        .any(|(_, code)| *code == "evidence_unavailable"),
+                )?;
                 if failed.is_empty() {
                     requirement_checks.push(Check {
                         rule_ref: rule_ref.clone(),

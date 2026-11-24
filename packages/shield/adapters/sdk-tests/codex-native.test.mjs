@@ -278,8 +278,8 @@ console.log('{}');\n`);
       assert.ok(events.some(e => e.kind === 'decision' && e.provenance.agent === 'codex' && e.details.decision === 'allow'));
     }
     if (mode === 'fallback-allow') {
-      assert.ok(JSON.stringify(requests).includes('Shield: policy asks for approval; your configured Ask fallback allows this request'),
-        'Codex must accept and deliver the fallback context to the model');
+      assert.doesNotMatch(JSON.stringify(requests), /Shield: policy asks for approval|configured Ask fallback allows|After the task, call suggestion_list/,
+        'Fallback allowance must leave the native call quiet');
       const events = await f.events();
       assert.ok(events.some(e => e.kind === 'decision' && e.provenance.agent === 'codex'
         && e.details.decision === 'ask' && e.details.disposition === 'allowed' && e.details.ask_fallback === 'allow'

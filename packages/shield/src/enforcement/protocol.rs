@@ -357,7 +357,14 @@ fn evaluate_with_original(
     if let (Some(agent), Some(input)) = (native, input.as_ref())
         && !matches!(input.operation, Operation::Completion { .. })
         && code == 0
-        && let Err(reason) = native_gate::resolve(root, agent, &mut value)
+        && let Err(reason) = native_gate::resolve(
+            root,
+            agent,
+            source
+                .as_ref()
+                .map(crate::review::runtime::consumer::NativeSource::access_paths),
+            &mut value,
+        )
     {
         value = failure(Some(&input.request_id), reason);
         code = 2;
@@ -404,6 +411,7 @@ fn finish_response(
     if let Some(fields) = value.as_object_mut() {
         fields.remove("_shell_analysis");
         fields.remove("_codex_covered");
+        fields.remove("_outside_grant_boundary");
         fields.remove("_file_targets");
         fields.remove("_file_access");
         fields.remove("_file_search");
@@ -455,7 +463,17 @@ fn finish_response(
             } else {
                 record(root, input, &value, &observed, original)
             };
-            result.unwrap_or_else(|_| json!({"status":"failed","request_id":null,"event_id":null}))
+            result.unwrap_or_else(|error| {
+                // Preserve a bounded diagnostic category, never OS text or
+                // paths. Keep the closed SDK history-receipt shapes unchanged.
+                stage(match error {
+                    crate::review::Error::Locked => "history_failed_busy",
+                    crate::review::Error::Io(_) => "history_failed_io",
+                    crate::review::Error::Invalid(_) => "history_failed_invalid",
+                    _ => "history_failed_unavailable",
+                });
+                json!({"status":"failed","request_id":null,"event_id":null})
+            })
         }
         _ => json!({"status":"not-requested","request_id":null,"event_id":null}),
     };
@@ -674,7 +692,22 @@ fn evaluate_inner(
         ) => cwd.starts_with(root),
         _ => owns_context(root, &cwd),
     };
-    if !cwd.is_dir() || !valid_scope || cwd.to_str().is_none() {
+    // Shell programs can write relative to their cwd without naming a target.
+    // File and web tools retain their operation-specific policy checks.
+    let approved_external_cwd = native.is_some()
+        && matches!(
+            &input.operation,
+            Operation::Shell { .. } | Operation::File { .. } | Operation::Web { .. }
+        )
+        && !cwd.starts_with(root)
+        && crate::location::Observer::approved_roots(
+            root,
+            &cwd,
+            snapshot.access_paths(),
+            !matches!(&input.operation, Operation::Shell { .. }),
+        )
+        .is_some_and(|roots| roots.iter().any(|path| cwd.starts_with(path)));
+    if !cwd.is_dir() || !(valid_scope || approved_external_cwd) || cwd.to_str().is_none() {
         return (failure(id, "invalid-context"), 2);
     }
     let operation = match &input.operation {

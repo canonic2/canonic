@@ -1005,6 +1005,7 @@ pub(in crate::review) fn status(context: &Context, state: &State) -> Value {
             }
         }
         let published = reporting::host_hooks(root, registered.as_ref(), state, &mut diagnostics);
+        let mcp_only = reporting::mcp_only(root, registered.as_ref(), &mut diagnostics);
         let healthy = diagnostics.is_empty();
         let mut report = json!({
             "binary_inspection":registered.as_ref().map(|registration| json!({
@@ -1013,6 +1014,7 @@ pub(in crate::review) fn status(context: &Context, state: &State) -> Value {
             })),
             "policy_inspection":{"availability":if snapshot.is_some() {"current"}else{"unchecked"},"source_validation":"not-performed","automatic_matching":"checked-on-interception"},
             "host_integration":host_integration,
+            "mcp_only_integrations":mcp_only,
             "legacy_interceptor":legacy_interceptor,
             "mcp_connections":connections,
             "registered_integrations":agents.iter().map(|agent|json!({"agent":agent,"surface":"mcp","status":if degraded.contains(agent) {"degraded"} else {"registered"}})).collect::<Vec<_>>(),

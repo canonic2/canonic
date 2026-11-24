@@ -327,7 +327,8 @@ fn catalog_publishes_every_tool_and_marks_all_state_changes_as_mutations() {
             "session_grant_approve",
             "session_grant_propose",
             "session_grant_reconsider",
-            "session_grant_revoke"
+            "session_grant_revoke",
+            "setup",
         ]
     );
 }
@@ -653,6 +654,10 @@ fn guidance_uses_the_enrolled_agent_never_client_metadata() {
             assert!(instructions.contains(name), "{name}");
         }
         let supports_approval = matches!(agent, Some("codex" | "claude"));
+        assert_eq!(
+            instructions.contains("Before submitting a large patch that needs approval"),
+            supports_approval
+        );
         if supports_approval {
             assert!(instructions.contains("all direct packs, including pinned packs"));
             assert!(

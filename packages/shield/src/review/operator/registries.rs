@@ -22,7 +22,7 @@ pub(super) fn mutate(
             "select a project to review a registry's user-wide delegated trust",
         ))?;
         let prepared = crate::review::registry_trust::Prepared::new(context, name, &|| Ok(()))?;
-        tty.confirm(&prepared.review())?;
+        tty.confirm_admin(&prepared.review(), &context.project_root)?;
         return prepared.commit(context, &|| Ok(()));
     }
     let change = match &input.command {
@@ -37,6 +37,16 @@ pub(super) fn mutate(
     if let Some(receipt) = prepared.committed_result() {
         return Ok(receipt);
     }
-    tty.confirm(&prepared.review())?;
+    let view = prepared.review();
+    let current;
+    let project = if let Some(context) = context {
+        context.project_root.as_str()
+    } else {
+        current = std::env::current_dir()?;
+        current
+            .to_str()
+            .ok_or(Error::Invalid("review directory must be UTF-8"))?
+    };
+    tty.confirm_admin(&view, project)?;
     prepared.commit(context, &|| Ok(()))
 }

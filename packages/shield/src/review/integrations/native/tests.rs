@@ -1,6 +1,159 @@
 //! Adapter-owned hook and MCP configuration reconciliation.
 use super::*;
 
+#[test]
+fn unsupported_unregistered_opencode_settings_do_not_degrade_coverage() {
+    let root = assert_fs::TempDir::new().unwrap();
+    std::fs::write(
+        root.path().join("opencode.json"),
+        r#"{"mcp":{"servers":{}}}"#,
+    )
+    .unwrap();
+    let mut diagnostics = Vec::new();
+    assert_eq!(
+        super::super::reporting::mcp_only(root.path(), None, &mut diagnostics),
+        [] as [serde_json::Value; 0]
+    );
+    assert_eq!(diagnostics, [] as [&str; 0]);
+}
+
+fn opencode_removal(root: &Path, installed: &Installation) -> Vec<Change> {
+    let mut removal = Vec::new();
+    let remaining = prepare(
+        root,
+        "opencode",
+        Some(installed),
+        None,
+        &[],
+        &mut removal,
+        false,
+    )
+    .unwrap();
+    assert!(remaining.is_none());
+    removal
+}
+
+#[test]
+fn opencode_borrows_exact_published_mcp_without_rewriting_or_removing_it() {
+    let root = assert_fs::TempDir::new().unwrap();
+    let binary = std::env::current_exe().unwrap();
+    let entry = serde_json::json!({"type":"local","enabled":true,"command":[binary,"mcp","serve","--project",".","--agent","opencode"]});
+    let original = format!(
+        "{{\n  \"mcp\": {{\"shield\": {entry}, \"acme\": {{\"type\":\"remote\",\"url\":\"https://example.com/mcp\"}}}},\n  \"theme\": \"acme\"\n}}\n"
+    );
+    std::fs::write(root.path().join("opencode.json"), &original).unwrap();
+    let mut changes = Vec::new();
+    let installed = prepare(
+        root.path(),
+        "opencode",
+        None,
+        Some(&binary),
+        &[],
+        &mut changes,
+        false,
+    )
+    .unwrap()
+    .unwrap();
+    assert!(installed.mcp_borrowed);
+    let dependency = changes
+        .iter()
+        .find(|change| change.path == "opencode.json")
+        .unwrap();
+    assert_eq!(dependency.before, dependency.after);
+    // Preview is read-only; publication checks even this unchanged dependency.
+    assert!(!root.path().join(".opencode/plugins/shield.js").exists());
+    std::fs::write(root.path().join("opencode.json"), "{}").unwrap();
+    assert!(files::validate_before(root.path(), &changes).is_err());
+    std::fs::write(root.path().join("opencode.json"), &original).unwrap();
+    files::publish(root.path(), &changes).unwrap();
+    assert!(root.path().join(".opencode/plugins/shield.js").is_file());
+    let removal = opencode_removal(root.path(), &installed);
+    files::publish(root.path(), &removal).unwrap();
+    assert_eq!(
+        std::fs::read_to_string(root.path().join("opencode.json")).unwrap(),
+        original
+    );
+    assert!(!root.path().join(".opencode/plugins/shield.js").exists());
+    let mut diagnostics = Vec::new();
+    let rows = super::super::reporting::mcp_only(root.path(), None, &mut diagnostics);
+    assert_eq!(rows[0]["status"], "plugin-not-registered");
+    assert!(diagnostics[0].contains("MCP access alone"));
+    files::publish(root.path(), &changes).unwrap();
+    let publisher_edited = "{\n  \"theme\": \"acme\"\n}\n";
+    std::fs::write(root.path().join("opencode.json"), publisher_edited).unwrap();
+    assert!(
+        prepare(
+            root.path(),
+            "opencode",
+            Some(&installed),
+            Some(&binary),
+            &[],
+            &mut Vec::new(),
+            false
+        )
+        .is_err()
+    );
+    let mut diagnostics = Vec::new();
+    diagnose(
+        root.path(),
+        "opencode",
+        &binary,
+        &installed,
+        &mut diagnostics,
+    )
+    .unwrap();
+    assert!(diagnostics.contains(&"borrowed Shield MCP entry is missing"));
+    let removal = opencode_removal(root.path(), &installed);
+    assert!(removal.iter().all(|change| change.path != "opencode.json"));
+    files::publish(root.path(), &removal).unwrap();
+    assert_eq!(
+        std::fs::read_to_string(root.path().join("opencode.json")).unwrap(),
+        publisher_edited
+    );
+    assert!(!root.path().join(".opencode/plugins/shield.js").exists());
+}
+
+#[test]
+fn opencode_borrowing_rejects_changed_launchers_environment_and_disabled_entries() {
+    let root = assert_fs::TempDir::new().unwrap();
+    let binary = std::env::current_exe().unwrap();
+    let adapter = lookup("opencode").unwrap();
+    let entry = serde_json::json!({"type":"local","enabled":true,"command":[binary,"mcp","serve","--project",".","--agent","opencode"]});
+    for (pointer, replacement) in [
+        ("/command/0", serde_json::json!("acme-wrapper")),
+        ("/command/4", serde_json::json!("/outside/project")),
+        ("/command/6", serde_json::json!("codex")),
+        ("/enabled", serde_json::json!(false)),
+        ("/type", serde_json::json!("remote")),
+    ] {
+        let mut changed = entry.clone();
+        *changed.pointer_mut(pointer).unwrap() = replacement;
+        assert!(
+            adapter
+                .borrow_mcp_entry(
+                    &serde_json::json!({"mcp":{"shield":changed}}).to_string(),
+                    &binary,
+                    root.path()
+                )
+                .unwrap()
+                .is_none(),
+            "{pointer}"
+        );
+    }
+    let mut changed = entry;
+    changed["environment"] = serde_json::json!({"NODE_OPTIONS":"--require ./acme.js"});
+    assert!(
+        adapter
+            .borrow_mcp_entry(
+                &serde_json::json!({"mcp":{"shield":changed}}).to_string(),
+                &binary,
+                root.path()
+            )
+            .unwrap()
+            .is_none()
+    );
+}
+
 #[cfg(not(windows))]
 #[test]
 fn portable_hooks_accept_exact_legacy_box_callbacks_but_reject_duplicates_and_other_roots() {
@@ -110,6 +263,7 @@ fn historical_native_profiles_keep_actual_coverage_without_requiring_advisory_up
             groups,
             mcp: None,
             settings: None,
+            mcp_borrowed: false,
         };
         assert!(compatible_historical_hooks(
             root.path(),

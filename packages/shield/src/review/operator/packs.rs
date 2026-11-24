@@ -10,7 +10,8 @@ use crate::{
         Context, Error,
         inspection::Settings,
         packs::{
-            bind, prepare_add, prepare_configure, prepare_remove, prepare_update, rebuild, unbind,
+            bind, prepare_add_unconfigured as prepare_add, prepare_configure, prepare_remove,
+            prepare_update, rebuild, unbind,
         },
     },
 };
@@ -87,6 +88,13 @@ pub(super) fn configure(
                 setup::apply(artifact, binding, edits)
             });
         }
+        let scope = crate::review::packs::discovery::Scope::for_candidate(
+            &project,
+            &before.candidates["project"],
+        )?;
+        if crate::review::packs::discovery::settings(artifact, settings, &scope)? {
+            return Ok(());
+        }
         let id = policy::Pack::from_retained_yaml(artifact)?.id().to_owned();
         let questions = !policy::declarations(artifact)?.is_empty();
         let mut resume = false;
@@ -152,6 +160,7 @@ pub(super) fn settle(
         .collect();
     let artifacts: Vec<String> = serde_json::from_value(candidate["packs"].clone())
         .map_err(|_| Error::Invalid("pack artifacts missing"))?;
+    let scope = crate::review::packs::discovery::Scope::for_candidate(project, &candidate)?;
     let rows = meta["installed"]
         .as_array_mut()
         .ok_or(Error::Invalid("installed packs missing"))?;
@@ -180,13 +189,15 @@ pub(super) fn settle(
             settings.edit(edits.local, |binding| {
                 setup::apply(&artifacts[index], binding, edits)
             })?;
+            crate::review::packs::discovery::settings(&artifacts[index], settings, &scope)?;
             edited = true;
             index += 1;
             continue;
         }
+        crate::review::packs::discovery::settings(&artifacts[index], settings, &scope)?;
         let options = setup::Options {
             scope: if fresh && direct && edits.is_empty() {
-                setup::Walk::All
+                setup::Walk::New
             } else {
                 setup::Walk::Missing
             },

@@ -404,6 +404,12 @@ impl Operation {
             _ => None,
         }
     }
+    pub(crate) fn interpreter_needs_review(&self) -> bool {
+        matches!(&self.data, Data::Invocation { detail, .. } if matches!(
+            detail.as_ref(),
+            Invocation::Literal { interpreter_needs_review: true, .. }
+        ))
+    }
     pub(crate) fn policy_request(&self) -> Option<&PolicyRequest> {
         match &self.data {
             Data::Invocation { detail, .. } => match detail.as_ref() {
@@ -463,6 +469,7 @@ pub(super) enum Data {
 }
 pub(super) enum Invocation {
     Literal {
+        interpreter_needs_review: bool,
         effects: Option<Box<effects::Hints>>,
         evaluation_model: &'static str,
         context: Facts,

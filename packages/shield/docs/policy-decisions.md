@@ -88,6 +88,17 @@ choice. With Allow, valid unmatched requests and explicit Ask rules can proceed.
 The policy result remains Ask, and history does not record that as individual
 operator approval. Codex's own sandbox and approvals still apply.
 
+Shield evaluates file edits and shell invocations separately. A shell command
+can match an Allow rule and still reach Ask if it runs code Shield cannot
+inspect, such as a direct Node script. In this case Shield identifies shell
+analysis as the reason for Ask. Use a shell preview to see that decision when
+checking a command an agent would submit to its shell tool.
+
+Ordinary repository diffs can show tracked agent settings. Git comparisons
+that read filesystem operands directly use the usual file-read protections.
+Raw directory comparisons require narrowing to specific files because they
+can descend into ignored state.
+
 Some requests still block: protection failures, invalid mapped requests, requests
 requiring a rewrite, and Asks fully covered by Shield's Codex prefix rules.
 Unmodeled Codex internal tools retain host permissions without a Shield decision.

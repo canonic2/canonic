@@ -28,9 +28,33 @@ pub(super) fn public(row: &Record, state: &State, now: u64) -> Value {
         .scope_checks
         .iter()
         .any(|check| check["status"] != "clear_at_preparation");
+    let ask_only = row.overrides.as_array().is_none_or(Vec::is_empty);
+    let coverage = if ask_only {
+        "ask_only"
+    } else {
+        "named_deny_overrides"
+    };
+    let next_action = match status {
+        "pending" if limited => {
+            "Inspect scope_checks and review before session_grant_approve: some exact Git alternatives have protected-file or context limitations that this grant cannot override."
+        }
+        "pending" if ask_only => {
+            "This proposal covers Ask only. If that covers the intended batch, pass apply_arguments unchanged to session_grant_approve for the user's review. For Deny, follow the refusal's recovery guidance."
+        }
+        "pending" => {
+            "This proposal explicitly overrides the named Deny rules within its scope. Pass apply_arguments unchanged to session_grant_approve for the user's review."
+        }
+        "active" => "Use covered native commands; project policy is unchanged.",
+        "declined" => {
+            "Do not offer this scope again automatically. Only if the person explicitly asks to reconsider, call session_grant_reconsider with this proposal_id, candidate_digest and a fresh idempotency_key; then obtain fresh human confirmation."
+        }
+        _ => {
+            "This authorization is unavailable. Inspect current policy and obtain fresh confirmation only if still needed."
+        }
+    };
     json!({"proposal_id":row.id,"reconsiders_proposal_id":row.reconsiders,"reconsiders_candidate_digest":row.reconsiders_digest,"grant_id":grant.map(|g|&g.id),"session_ref":row.session.reference,
         "target":{"project":state.project_root,"agent":row.session.agent,"session_id":row.session.session_id},
-        "candidate_digest":row.digest,"scope":row.scope,"scope_checks":row.scope_checks,"override_denies":row.overrides,"duration_seconds":row.duration,
+        "candidate_digest":row.digest,"scope":row.scope,"scope_checks":row.scope_checks,"override_denies":row.overrides,"coverage":coverage,"duration_seconds":row.duration,
         "provenance":row.provenance,"created_at_ms":row.created,
         "proposal_status":if grant.is_some(){"issued"}else{status},"grant_status":grant.map(|_|status),
         "issued_at_ms":grant.map(|g|g.issued),"expires_at_ms":grant.map(|g|g.expires),
@@ -43,7 +67,7 @@ pub(super) fn public(row: &Record, state: &State, now: u64) -> Value {
         "session_binding":"host-reported","mcp_session_association":if row.provenance["session_id"].is_null(){"unavailable"}else{"host-reported"},
         "review":message(row,&state.project_root,now).ok(),
         "apply_arguments":{"proposal_id":row.id,"candidate_digest":row.digest},
-        "next_action":if status=="pending" && limited {"Inspect scope_checks and review before session_grant_approve: some exact Git alternatives have protected-file or context limitations that this grant cannot override."}else if status=="pending"{"Call session_grant_approve with apply_arguments unchanged; the user confirms Shield's form."}else if status=="active"{"Use covered native commands; project policy is unchanged."}else if status=="declined"{"Do not offer this scope again automatically. Only if the person explicitly asks to reconsider, call session_grant_reconsider with this proposal_id, candidate_digest and a fresh idempotency_key; then obtain fresh human confirmation."}else{"This authorization is unavailable. Inspect current policy and obtain fresh confirmation only if still needed."}})
+        "next_action":next_action})
 }
 
 pub(super) fn message(row: &Record, project_root: &str, now: u64) -> Result<String, Error> {

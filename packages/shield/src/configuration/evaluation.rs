@@ -1,6 +1,7 @@
 //! Connects captured project candidates to the shared pure policy evaluator.
 
 use super::{Effective, Snapshot, compose};
+use crate::policy::rules::directories::{self, DirectoryOption};
 use crate::policy::{self, CustomRules, Decision, Error, Pack, Profile, Request, Scope};
 use serde::Serialize;
 use std::sync::Arc;
@@ -331,9 +332,6 @@ impl Evaluator {
             cwd: context.cwd.clone(),
             project: project.into(),
         };
-        let observer = crate::location::Observer::new(input, project, &context.cwd, executable)
-            .with_access_paths(self.effective.access_paths())
-            .with_working_files(context.working_files.as_ref());
         let facts = policy::rules::Facts {
             input,
             context,
@@ -341,19 +339,70 @@ impl Evaluator {
             now,
             known_cwd: true,
             known_arguments: true,
-            locations: Some(&observer),
+            locations: None,
             container_read: None,
             effects: None,
         };
-        let mut evaluation = self
-            .plan
-            .evaluate_input_mcp(&request, &facts, resolved, checkpoint)?;
-        self.constrain_mcp(&mut evaluation, input, &request, resolved, checkpoint)?;
-        let complete = !matches!(input, Input::Unknown { .. } | Input::Shell { .. })
-            && !self.plan.semantic()
-            && observer.complete();
+        let (evaluation, complete) =
+            self.evaluate_diagnostic_input(&request, facts, resolved, checkpoint)?;
+        if let Input::Argv { original_input, .. } = input
+            && let Some(normalized) =
+                directory_fallback(&request, &evaluation, self.directory_options())
+        {
+            let matched_input = Input::Argv {
+                executable: normalized.executable.clone(),
+                arguments: normalized.arguments.clone(),
+                original_input: original_input.clone(),
+            };
+            let matched_context = policy::resolution::normalized::Context {
+                cwd: normalized.cwd.clone(),
+                ..context.clone()
+            };
+            let (evaluation, complete) = self.evaluate_diagnostic_input(
+                &normalized,
+                policy::rules::Facts {
+                    input: &matched_input,
+                    context: &matched_context,
+                    ..facts
+                },
+                None,
+                checkpoint,
+            )?;
+            return Ok(NormalizedEvaluation::new(input, evaluation, complete)
+                .with_directory_request(normalized));
+        }
         let value = NormalizedEvaluation::new(input, evaluation, complete);
         self.shell_result(input, context, project, value, checkpoint)
+    }
+
+    fn evaluate_diagnostic_input(
+        &self,
+        request: &Request,
+        facts: policy::rules::Facts<'_>,
+        resolved: Option<&policy::resolution::compiled::ResolvedMcp>,
+        checkpoint: &dyn Fn() -> Result<(), Error>,
+    ) -> Result<(policy::Evaluation, bool), Error> {
+        use policy::resolution::normalized::Input;
+        let observer = crate::location::Observer::new(
+            facts.input,
+            &request.project,
+            &facts.context.cwd,
+            facts.executable,
+        )
+        .with_access_paths(self.effective.access_paths())
+        .with_working_files(facts.context.working_files.as_ref());
+        let facts = policy::rules::Facts {
+            locations: Some(&observer),
+            ..facts
+        };
+        let mut evaluation = self
+            .plan
+            .evaluate_input_mcp(request, &facts, resolved, checkpoint)?;
+        self.constrain_mcp(&mut evaluation, facts.input, request, resolved, checkpoint)?;
+        let complete = !matches!(facts.input, Input::Unknown { .. } | Input::Shell { .. })
+            && !self.plan.semantic()
+            && observer.complete();
+        Ok((evaluation, complete))
     }
 
     // Both diagnostics and native handoff resolve the complete request and its
@@ -482,7 +531,7 @@ impl Evaluator {
     }
 
     /// Directory options the selected packs and custom rules declare.
-    pub(crate) fn directory_options(&self) -> &[policy::rules::directories::DirectoryOption] {
+    pub(crate) fn directory_options(&self) -> &[DirectoryOption] {
         self.plan.directory_options()
     }
 
@@ -563,10 +612,6 @@ impl Evaluator {
         self.evaluate_known(request, checkpoint, known_cwd, false, None)
     }
 
-    /// When no rule decides the command as written, other than a pack's
-    /// yielding fallback, a declared directory option lets it be matched as the
-    /// same command run from the folder the option chose. Explicit rules for the
-    /// written form keep deciding it.
     fn evaluate_known(
         &self,
         request: &Request,
@@ -584,9 +629,8 @@ impl Evaluator {
             false,
         )?;
         if known_cwd
-            && written.fallback_only_ask()
             && let Some(normalized) =
-                policy::rules::directories::normalize(request, self.directory_options())
+                directory_fallback(request, written.evaluation(), self.directory_options())
         {
             let mut result = self.evaluate_written(
                 &normalized,
@@ -647,6 +691,20 @@ impl Evaluator {
     }
 }
 
+/// A declared directory option can retry an unmatched or yielding Ask.
+/// An explicit decision for the submitted argv still takes precedence.
+fn directory_fallback(
+    request: &Request,
+    written: &policy::Evaluation,
+    options: &[DirectoryOption],
+) -> Option<Request> {
+    if written.fallback_only_ask() {
+        directories::normalize(request, options)
+    } else {
+        None
+    }
+}
+
 /// Evaluate retained project artifacts and custom rules.
 /// No files are read and no scope labels are authenticated by this operation.
 ///
@@ -679,7 +737,7 @@ pub(super) struct Prepared<'a> {
     pub(super) effective: Effective,
     pub(super) packs: Vec<(&'a Pack, Profile)>,
     pub(super) custom: Vec<&'a CustomRules>,
-    pub(super) directory_options: Vec<policy::rules::directories::DirectoryOption>,
+    pub(super) directory_options: Vec<DirectoryOption>,
 }
 
 impl<'a> Prepared<'a> {
@@ -699,7 +757,7 @@ impl<'a> Prepared<'a> {
             packs.push((pack, profile));
         }
         let custom: Vec<_> = snapshot.custom.iter().collect();
-        let directory_options = policy::rules::directories::selected(&packs, &custom)?;
+        let directory_options = directories::selected(&packs, &custom)?;
         Ok(Self {
             effective,
             packs,
@@ -717,10 +775,7 @@ impl<'a> Prepared<'a> {
     /// directory option decided.
     fn decide(&self, request: &Request) -> Result<(policy::Evaluation, Option<Request>), Error> {
         let written = policy::evaluate_selected(&self.packs, &self.custom, request)?;
-        if written.fallback_only_ask()
-            && let Some(normalized) =
-                policy::rules::directories::normalize(request, &self.directory_options)
-        {
+        if let Some(normalized) = directory_fallback(request, &written, &self.directory_options) {
             let evaluation = policy::evaluate_selected(&self.packs, &self.custom, &normalized)?;
             return Ok((evaluation, Some(normalized)));
         }

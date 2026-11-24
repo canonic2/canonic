@@ -12,7 +12,7 @@ pub(crate) use sdk::{Sdk, SdkCommand};
     version,
     about = "Project policy and approval for AI agents",
     arg_required_else_help = true,
-    after_help = "Start a project:  shield init\nConfigure agents: shield mcp setup\nInspect policy:   shield status  /  shield policy show  /  shield rule list\nFind packs:       shield pack search <query>  /  shield pack info <reference>\nReview requests:  shield request list  /  shield request approve <request>\nStructured data:  add --json to inspection commands\nTerminal color:   NO_COLOR disables color"
+    after_help = "Set up or repair: shield setup\nInspect policy:   shield status  /  shield policy show  /  shield rule list\nFind packs:       shield pack search <query>  /  shield pack info <reference>\nReview requests:  shield request list  /  shield request approve <request>\nStructured data:  add --json to inspection commands\nTerminal color:   NO_COLOR disables color"
 )]
 pub struct Cli {
     /// Select a project; otherwise discover the nearest enrolled ancestor.
@@ -41,6 +41,15 @@ pub struct Cli {
 /// Everyday operations, with one confirmation per mutation.
 #[derive(Subcommand)]
 pub enum PublicCommand {
+    /// Set up or repair Shield, reusing saved agent and policy choices.
+    Setup {
+        /// Select a native agent, hub or box explicitly. Repeat to select several.
+        #[arg(long = "agent", value_parser = integration_names())]
+        agents: Vec<String>,
+        /// Baseline profile for a new project. Defaults to Recommended.
+        #[arg(long, value_enum)]
+        profile: Option<Profile>,
+    },
     /// Create this project's Shield policy and optionally set up agents, after confirmation.
     Init {
         /// Agent to set up with project hooks and MCP, or hub or box for a Hub or Box definition; repeat for several. Omission asks.
@@ -208,9 +217,11 @@ pub enum McpCommand {
 
 /// Agent integration selection.
 #[derive(Args)]
+// These are independent CLI switches. Clap enforces the relationships between them.
+#[allow(clippy::struct_excessive_bools)]
 pub struct Setup {
     /// Review conflicting pending setup or cancel that interrupted publication.
-    #[arg(long, value_enum, conflicts_with_all = ["agents", "remove", "reset_tool_permissions"])]
+    #[arg(long, value_enum, conflicts_with_all = ["agents", "remove", "reset_tool_permissions", "repair"])]
     pub pending: Option<PendingSetup>,
     /// Agent to set up or remove, or hub or box for a Hub or Box MCP definition; repeat for several. Omission asks.
     #[arg(long = "agent", value_parser = integration_names())]
@@ -224,6 +235,9 @@ pub struct Setup {
     /// Start from current tool permission defaults instead of the saved selection.
     #[arg(long, conflicts_with = "remove")]
     pub reset_tool_permissions: bool,
+    /// Reconcile conflicting Shield entries for explicitly selected Claude or Codex agents.
+    #[arg(long, requires = "agents", conflicts_with_all = ["remove", "reset_tool_permissions"])]
+    pub repair: bool,
     /// Show the review without writing anything.
     #[arg(long)]
     pub dry_run: bool,
@@ -831,7 +845,7 @@ mod mcp_setup_tests {
             vec!["shield", "mcp", "setup", "all"],
             vec!["shield", "init", "--agent", "kimi"],
             vec!["shield", "init", "--agent", "codex", "--no-setup"],
-            vec!["shield", "setup"],
+            vec!["shield", "setup", "--agent", "kimi"],
         ] {
             assert!(Cli::try_parse_from(&args).is_err(), "{args:?}");
         }
@@ -842,6 +856,7 @@ mod mcp_setup_tests {
         };
         assert_eq!(agents, ["codex", "claude"]);
         assert!(Cli::try_parse_from(["shield", "init", "--no-setup"]).is_ok());
+        assert!(Cli::try_parse_from(["shield", "setup"]).is_ok());
     }
 
     #[test]

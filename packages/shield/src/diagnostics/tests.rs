@@ -7,6 +7,30 @@ fn flush(log: &Log) {
 }
 
 #[test]
+fn oversized_hook_input_records_size_without_payload() {
+    let root = assert_fs::TempDir::new().unwrap();
+    let cli = Cli::parse_from([
+        "shield",
+        "--debug-log-dir",
+        root.path().to_str().unwrap(),
+        "status",
+    ]);
+    let log = Log::open(&cli);
+    let truncated = br#"{"tool_response":"acme-private-result"#;
+    log.hook_input("codex", truncated, true, true);
+    flush(&log);
+    let text = std::fs::read_to_string(log.path().unwrap()).unwrap();
+    let input = text
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).unwrap())
+        .find(|record| record["event"] == "hook_input")
+        .unwrap();
+    assert_eq!(input["fields"]["oversized"], true);
+    assert_eq!(input["fields"]["captured_bytes"], truncated.len());
+    assert!(!text.contains("acme-private-result"));
+}
+
+#[test]
 fn hook_and_mcp_metadata_preserve_correlation_without_payloads() {
     let root = assert_fs::TempDir::new().unwrap();
     let cli = Cli::parse_from([

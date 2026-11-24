@@ -85,15 +85,14 @@ fn signed_source(registry: &SignedRegistry, identity: &str) -> Source {
     .unwrap()
 }
 
-fn reviewed(form: &Value, modern: bool) -> Value {
-    let message = if modern {
+fn reviewed(form: &Value, modern: bool) -> &str {
+    if modern {
         &form["result"]["inputRequests"]["confirmation"]["params"]["message"]
     } else {
         &form["params"]["message"]
     }
     .as_str()
-    .unwrap();
-    serde_json::from_str(message.split_once('\n').unwrap().1).unwrap()
+    .unwrap()
 }
 
 fn assert_trust_form(form: &Value, source: &Source, modern: bool) {
@@ -112,23 +111,16 @@ fn assert_trust_form(form: &Value, source: &Source, modern: bool) {
     );
     let review = reviewed(form, modern);
     let key = canonic_registry_kit::digest::decode(source.key().unwrap(), 32).unwrap();
-    assert_eq!(review["trust"]["canonical_location"], source.location());
-    assert_eq!(review["trust"]["source_identity"], source.identity());
-    assert_eq!(
-        review["trust"]["registry_identity"],
-        source.registry_id().unwrap()
-    );
-    assert_eq!(
-        review["trust"]["signing_key_fingerprint_sha256"],
-        canonic_registry_kit::digest::sha256_hex(&key)
-    );
-    assert!(
-        review["trust"]["basis"]
-            .as_str()
-            .unwrap()
-            .contains("Trust on first use")
-    );
-    assert_eq!(review["scope"], "project");
+    for expected in [
+        source.location(),
+        source.identity(),
+        source.registry_id().unwrap(),
+        &canonic_registry_kit::digest::sha256_hex(&key),
+        "Trust on first use",
+        "project scope",
+    ] {
+        assert!(review.contains(expected), "missing {expected}: {review}");
+    }
 }
 
 fn enroll(transport: &Transport, alias: &str, source: &Source, modern: bool) {
@@ -431,13 +423,12 @@ fn registry_enrollment_user_scope_child() {
         let before = project.revision();
         for action in ["decline", "accept"] {
             let form = begin(&transport, "registry_add", &args, modern);
-            let review = reviewed(&form, modern);
-            let text = review.to_string();
+            let text = reviewed(&form, modern);
             assert!(
-                text.contains("other projects") && text.contains("unsigned catalog"),
+                text.contains("across projects") && text.contains("unsigned catalog"),
                 "{form}"
             );
-            assert_eq!(review["trust"]["canonical_location"], json!(directory));
+            assert!(text.contains(directory.to_str().unwrap()), "{text}");
             assert!(sources(&transport)["local"].is_null());
             let result = answer(&transport, "registry_add", &args, &form, action, modern);
             if action == "accept" {
@@ -513,10 +504,19 @@ fn global_signing_key_replacement(transport: &Transport, modern: bool) {
     for action in ["decline", "accept"] {
         let form = begin(transport, "registry_add", &args, modern);
         let review = reviewed(&form, modern);
-        assert_eq!(review["change"], "replace");
-        assert_eq!(review["previous_source"]["key"], initial["source"]["key"]);
-        assert_eq!(review["source"]["key"], changed.public_hex());
-        assert_ne!(review["source"]["identity"], initial["source"]["identity"]);
+        let previous_key =
+            canonic_registry_kit::digest::decode(initial["source"]["key"].as_str().unwrap(), 32)
+                .unwrap();
+        let new_key = canonic_registry_kit::digest::decode(&changed.public_hex(), 32).unwrap();
+        assert!(review.contains("Replace registry signed"), "{review}");
+        assert!(
+            review.contains(&canonic_registry_kit::digest::sha256_hex(&previous_key)),
+            "{review}"
+        );
+        assert!(
+            review.contains(&canonic_registry_kit::digest::sha256_hex(&new_key)),
+            "{review}"
+        );
         assert_eq!(
             sources(transport)["signed"]["key"],
             initial["source"]["key"]

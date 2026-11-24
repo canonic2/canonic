@@ -73,6 +73,15 @@ fn guided_removal_bounds_complete_choices_and_selected_sets_before_preparation()
         &|| Ok(()),
     );
     assert!(valid["error"].is_null(), "{valid}");
+    let arguments = &valid["data"]["apply_arguments"];
+    assert_eq!(arguments["changes"].as_array().unwrap().len(), 16);
+    let shown = invoke(
+        &context,
+        &connection,
+        "policy_show",
+        json!({"proposal_id":valid["data"]["proposal_id"]}),
+    );
+    assert_eq!(shown["data"]["apply_arguments"], *arguments);
     assert_eq!(
         Store::open(root.path())
             .unwrap()

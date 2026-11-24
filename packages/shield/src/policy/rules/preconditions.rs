@@ -226,7 +226,13 @@ impl Precondition {
                     code,
                     branch: "unmet",
                     applied: false,
-                    evidence: super::evidence::collect(&alternative[&key], &key, facts, patterns)?,
+                    evidence: super::evidence::collect(
+                        &alternative[&key],
+                        &key,
+                        facts,
+                        patterns,
+                        code == "evidence_unavailable",
+                    )?,
                     private_input: false,
                 });
             }

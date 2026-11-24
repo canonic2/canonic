@@ -5,6 +5,9 @@ use crate::mcp::tests::{Transport, initialize, test_options};
 fn first_run_setup_uses_isolated_agent_homes() {
     for fixture in [
         "first_run_initialization_confirms_then_uses_normal_tools_on_the_same_connection",
+        "project_setup_detects_hub_and_repeats_without_confirmation",
+        "project_setup_without_forms_returns_the_operator_action",
+        "project_setup_with_large_native_settings_keeps_the_review_short",
         "first_run_decline_and_unavailable_confirmation_leave_no_shield_files",
         "first_run_modern_confirmations_bind_exact_arguments_and_are_single_use",
         "first_run_preserves_policy_that_appears_during_confirmation",
@@ -83,7 +86,7 @@ fn fresh_at(
         transport.request(&hello)["result"]["instructions"]
             .as_str()
             .expect("bootstrap instructions")
-            .contains("call init")
+            .contains("Call setup")
     );
     transport.send(&initialized);
     (root, transport)
@@ -127,6 +130,85 @@ fn first_run_refuses_home_and_ancestors() {
 
 fn data(reply: &Value) -> &Value {
     &reply["result"]["structuredContent"]
+}
+
+#[test]
+#[ignore = "run by parent with isolated agent configuration homes"]
+fn project_setup_detects_hub_and_repeats_without_confirmation() {
+    let (root, transport) = fresh(&json!({"elicitation":{"form":{}}}));
+    let form = transport.call(json!(2), "setup", &json!({}));
+    assert_eq!(form["method"], "elicitation/create", "{form}");
+    assert!(!root.path().join(".shield").exists());
+    transport.send(&json!({"jsonrpc":"2.0","id":form["id"],"result":{"action":"accept","content":{"confirm":true}}}));
+    let reply = transport.receive();
+    let result = &data(&reply)["data"];
+    assert_eq!(result["setup_status"], "initialized", "{reply}");
+    assert_eq!(result["next"]["server"], "hub");
+    assert_eq!(result["next"]["tool"], "setup");
+    let definition = root.path().join(".hub/mcp/shield.yml");
+    let before = std::fs::read(&definition).unwrap();
+    assert!(!root.path().join(".codex/hooks.json").exists());
+    let repeated = transport.call(json!(3), "setup", &json!({}));
+    assert_eq!(
+        data(&repeated)["data"]["setup_status"],
+        "unchanged",
+        "{repeated}"
+    );
+    assert_eq!(data(&repeated)["data"]["next"], result["next"]);
+    assert_eq!(std::fs::read(definition).unwrap(), before);
+    transport.close().1.unwrap();
+}
+
+#[test]
+#[ignore = "run by parent with isolated agent configuration homes"]
+fn project_setup_without_forms_returns_the_operator_action() {
+    let (root, transport) = fresh(&json!({}));
+    let reply = transport.call(
+        json!(2),
+        "setup",
+        &json!({"agents":["hub"],"profile":"strict"}),
+    );
+    assert_eq!(
+        data(&reply)["error"]["code"],
+        "approval_unavailable",
+        "{reply}"
+    );
+    assert_eq!(
+        data(&reply)["error"]["operator_action"],
+        json!({"command":"shield","argv":["--project",root.path().canonicalize().unwrap(),"setup","--agent","hub","--profile","strict"]})
+    );
+    assert!(!root.path().join(".shield").exists());
+    assert!(!root.path().join(".hub/mcp/shield.yml").exists());
+    transport.close().1.unwrap();
+}
+
+#[test]
+#[ignore = "run by parent with isolated agent configuration homes"]
+fn project_setup_with_large_native_settings_keeps_the_review_short() {
+    let (root, transport) = fresh(&json!({"elicitation":{"form":{}}}));
+    let path = root.path().join(".claude/settings.local.json");
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let padding = "fixture setting".repeat(6000);
+    std::fs::write(&path, json!({"env":{"ACME_PADDING":padding}}).to_string()).unwrap();
+    let form = transport.call(json!(2), "setup", &json!({"agents":["claude"]}));
+    assert_eq!(form["method"], "elicitation/create", "{form}");
+    assert!(
+        form.to_string().len() < 12_000,
+        "{} bytes",
+        form.to_string().len()
+    );
+    assert!(!form.to_string().contains("ACME_PADDING"));
+    transport.send(&json!({"jsonrpc":"2.0","id":form["id"],"result":{"action":"accept","content":{"confirm":true}}}));
+    let reply = transport.receive();
+    assert_eq!(
+        data(&reply)["data"]["setup_status"],
+        "initialized",
+        "{reply}"
+    );
+    let settings: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    assert_eq!(settings["env"]["ACME_PADDING"], padding);
+    assert!(!root.path().join(".hub/mcp/shield.yml").exists());
+    transport.close().1.unwrap();
 }
 
 #[test]

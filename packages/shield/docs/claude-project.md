@@ -283,8 +283,9 @@ accept its [one-time request](project-review.md#allowing-one-blocked-request) in
 the conversation; change configurable protection with
 [`shield protection set`](project-review.md#protected-files).
 
-Agents can request command help, such as `shield protection --help`, under
-ordinary command policy. Help requests consist of plain lowercase words followed
+Agents can request `shield --version` or `shield -V` with no other arguments,
+and command help such as `shield protection --help`, under ordinary command
+policy. Help requests consist of plain lowercase words followed
 by `--help` or `-h`, without other options or paths. Operator actions remain
 blocked through agent shell tools. Agents inspect policy through MCP,
 prepare proposals, and submit `policy_apply` with the returned
@@ -437,8 +438,9 @@ final review shows it without a separate picker. Allow includes unmatched
 commands and explicit Ask rules; Deny, invalid requests and protection failures
 still block, and so does an Ask on a command a Shield prefix rule covers, which
 Codex would run outside its sandbox without asking. Repeating `shield mcp setup --agent codex`
-preserves a saved Block or Allow choice. History retains
-policy Ask and the configured handoff, without recording individual approval.
+preserves a saved Block or Allow choice. Automatic allowance lets the tool call
+proceed quietly. History retains the policy Ask, its reasons and the configured
+handoff. Use `suggestion_list` to inspect recorded requests for reusable policy.
 Automatic Ask allowance is suspended while a confirmed setup plan needs repair;
 run `shield mcp setup` to finish that plan.
 

@@ -56,6 +56,67 @@ fn coverage(context: &Context) -> Value {
 }
 
 #[test]
+fn hub_opencode_plugin_setup_preserves_host_definition_and_published_mcp() {
+    let (root, context) = fixture();
+    fs::create_dir_all(root.path().join(".hub")).unwrap();
+    fs::write(root.path().join(".hub/config.yml"), "schema_version: 1\n").unwrap();
+    setup(&context, choice(&["hub"])).unwrap();
+    let host_before = fs::read(root.path().join(HUB.path)).unwrap();
+    let binary = std::env::current_exe().unwrap().canonicalize().unwrap();
+    let published = json!({"mcp":{"shield":{"type":"local","command":[binary,"mcp","serve","--project",".","--agent","opencode"],"enabled":true},"acme":{"type":"remote","url":"https://example.com/mcp"}},"theme":"acme"}).to_string();
+    fs::write(root.path().join("opencode.json"), &published).unwrap();
+    assert_eq!(
+        coverage(&context)["mcp_only_integrations"][0]["agent"],
+        "opencode"
+    );
+    let before = meta(&context);
+    let plan = prepare(root.path(), &before, choice(&["opencode"]))
+        .unwrap()
+        .unwrap();
+    let preview = crate::review::integrations::setup::preview(root.path(), Some(&plan));
+    assert_eq!(preview["agents"][0]["mcp_ownership"], "external");
+    assert!(
+        super::super::presentation::review(&preview)
+            .contains("Preserve the external MCP entry unchanged")
+    );
+    assert!(!root.path().join(".opencode/plugins/shield.js").exists());
+    apply(&context, &before, &plan).unwrap();
+    assert_eq!(
+        coverage(&context)["mcp_only_integrations"]
+            .as_array()
+            .unwrap()
+            .as_slice(),
+        [] as [serde_json::Value; 0]
+    );
+    assert_eq!(fs::read(root.path().join(HUB.path)).unwrap(), host_before);
+    let repeat = crate::review::admin::prepare(&context, "setup", &json!({}), &|| Ok(())).unwrap();
+    let receipt = repeat.commit(&context, &|| Ok(())).unwrap();
+    assert!(receipt["setup_error"].is_null(), "{receipt}");
+    let repeat = crate::review::admin::prepare(&context, "setup", &json!({}), &|| Ok(())).unwrap();
+    assert_eq!(
+        repeat.committed_result().unwrap()["setup_status"],
+        "unchanged"
+    );
+    assert!(root.path().join(".opencode/plugins/shield.js").is_file());
+    assert_eq!(
+        fs::read_to_string(root.path().join("opencode.json")).unwrap(),
+        published
+    );
+    setup(&context, removal(&["opencode"])).unwrap();
+    assert_eq!(
+        fs::read_to_string(root.path().join("opencode.json")).unwrap(),
+        published
+    );
+    assert!(
+        registration(&meta(&context))
+            .unwrap()
+            .unwrap()
+            .definition
+            .is_some()
+    );
+}
+
+#[test]
 fn box_portability_copy_keeps_its_registration_and_local_pin() {
     let (root, context) = fixture();
     box_project(root.path());

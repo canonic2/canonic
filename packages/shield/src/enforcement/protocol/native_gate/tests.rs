@@ -21,14 +21,17 @@ fn unavailable_path_evidence_does_not_offer_another_folder_grant() {
         }]}
     });
     // Establish that the same modeled outside read normally offers access.
-    assert!(outside(&value, &project, &project).is_some());
+    let grants = crate::configuration::AccessPaths::default();
+    let outside = |value: &Value| unapproved_outside(value, &project, &project, None, &grants);
+    assert!(outside(&value).is_some());
     value["_observation"]["evaluation"]["explanation"]["requirement_checks"] = json!([
-        {"code":"evidence_unavailable","operation_ref":"shell:0:0-9"}
+        {"code":"evidence_unavailable","operation_ref":"shell:0:0-9","status":"unknown"},
+        {"code":"location_outside","operation_ref":"shell:0:0-9","status":"failed"}
     ]);
-    assert!(outside(&value, &project, &project).is_none());
-    value["_observation"]["evaluation"]["explanation"]["requirement_checks"][0]["code"] =
-        json!("location_outside");
-    assert!(outside(&value, &project, &project).is_some());
+    assert!(outside(&value).is_none());
+    value["_observation"]["evaluation"]["explanation"]["requirement_checks"] =
+        json!([{"code":"location_outside","operation_ref":"shell:0:0-9","status":"failed"}]);
+    assert!(outside(&value).is_some());
 }
 
 #[test]
@@ -170,6 +173,7 @@ fn a_busy_protection_check_reports_contention_instead_of_invalid_authorization()
                 context_complete: true,
                 working_files: None,
             },
+            None,
             &mut receipt
         ),
         Err("runtime-busy")

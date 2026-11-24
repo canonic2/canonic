@@ -38,6 +38,7 @@ pub(crate) mod runtime;
 pub(crate) mod sdk_read;
 pub(crate) mod session_grants;
 mod settings;
+pub(crate) mod setup;
 mod storage;
 #[cfg(test)]
 mod tests;

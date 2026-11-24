@@ -108,7 +108,7 @@ impl Prepared {
             "effect":if self.enabled {"Native hooks resume active policy checks."} else {"Native hooks pause policy decisions while retaining protected-file and operator-command guards. Other requests defer to the agent's own permissions and sandbox; Shield does not approve them."},
             "state_trust":self.enabled.then_some("Resuming trusts the saved local policy and authority state, including any edits made while paused outside intercepted requests. Hooks do not authenticate those edits or isolate same-user processes."),
             "preserved":"Policy, packs, history, grants and agent registrations are retained. Shield MCP remains available and administrative changes still require human confirmation. Explicit checked execution and SDK consumers continue to enforce policy.",
-            "files":self.files.iter().map(|file|json!({"path":file.path,"change":if self.enabled {"restore policy permission rules"} else {"remove policy permission rules"}})).collect::<Vec<_>>(),
+            "files":self.files.iter().map(|file|json!({"path":file.path,"before":file.before,"after":file.after,"change":if self.enabled {"restore policy permission rules"} else {"remove policy permission rules"}})).collect::<Vec<_>>(),
             "restart":"Restart connected agents to refresh cached permission rules. Native hooks read the setting on their next invocation."})
     }
 

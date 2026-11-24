@@ -19,11 +19,143 @@ mod rule_proposals;
 mod suggestion_workflow;
 mod sweep_cost;
 use super::*;
+
+#[test]
+fn executable_discovery_review_keeps_approval_arguments_below_host_output_limits() {
+    let arguments = json!({"reference":"acme-review","change":"Configure Rust executables"});
+    let mut data = json!({"apply_arguments":arguments,"proposal_id":"acme-proposal",
+        "comparison":{"feedback_changes":"x".repeat(80 * 1024)},
+        "rules":{"rules":"y".repeat(20 * 1024)},
+        "report_resources":[{"uri":"shield-review://acme/comparison"}]});
+    bound_policy_result(&mut data).unwrap();
+    assert!(crate::json::fits(&data, 16 * 1024));
+    assert_eq!(data["apply_arguments"], arguments);
+    assert_eq!(
+        data["report_resources"][0]["uri"],
+        "shield-review://acme/comparison"
+    );
+    assert_eq!(data["missing"], json!(["rules", "comparison"]));
+}
+
+#[test]
+fn an_oversized_policy_batch_leaves_the_existing_review_pending() {
+    let (root, context, connection) = fixture();
+    let existing = proposal(&context, &connection, "existing-review");
+    let id = existing["data"]["proposal_id"].as_str().unwrap();
+    let changes: Vec<_> = (0..12)
+        .map(|index| {
+            let mut rule = rule(&format!("acme-rule-{index}"), "allow");
+            rule["reason"] = json!("Allow this Acme read for the reviewed operation. ".repeat(48));
+            json!({"kind":"rule_add","rule":rule})
+        })
+        .collect();
+    let oversized = invoke(
+        &context,
+        &connection,
+        "policy_propose",
+        json!({"changes":changes,"idempotency_key":"oversized-review"}),
+    );
+    assert_eq!(
+        oversized["error"]["code"], "proposal_review_too_large",
+        "{oversized}"
+    );
+    assert!(
+        oversized["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("smaller proposals")
+    );
+    let state = Store::open(root.path()).unwrap().read_checkpoint().unwrap();
+    assert_eq!(state.proposals.len(), 1);
+    assert_eq!(state.proposals[0].id, id);
+    assert_eq!(state.proposals[0].status, "pending");
+    let shown = invoke(
+        &context,
+        &connection,
+        "policy_show",
+        json!({"proposal_id":id}),
+    );
+    assert_eq!(
+        shown["data"]["apply_arguments"],
+        existing["data"]["apply_arguments"]
+    );
+}
 use crate::{
     configuration::Bundle,
     review::{self, storage::Store},
 };
 use std::{collections::BTreeMap, path::Path};
+
+#[test]
+fn policy_show_retains_authorization_event_pages_over_the_inline_approval_limit() {
+    let (root, context, connection) = fixture();
+    let result = proposal(&context, &connection, "acme-paged-review");
+    let id = result["data"]["proposal_id"].as_str().unwrap();
+    let expected = Store::open(root.path())
+        .unwrap()
+        .update_checkpoint(&context, &|| Ok(()), |state| {
+            let source = state
+                .authorization_events
+                .iter()
+                .find(|event| event["links"]["proposal_id"] == id)
+                .unwrap()
+                .clone();
+            for _ in 0..8 {
+                let mut event = source.clone();
+                event["event_id"] = json!(state.id("event"));
+                event["details"]["fixture"] = json!("Acme review evidence. ".repeat(200));
+                state.authorization_events.push(event);
+            }
+            Ok(json!(
+                state
+                    .authorization_events
+                    .iter()
+                    .filter(|event| event["links"]["proposal_id"] == id)
+                    .map(|event| event["event_id"].as_str().unwrap())
+                    .collect::<std::collections::BTreeSet<_>>()
+            ))
+        })
+        .unwrap();
+    let mut args = json!({"proposal_id":id,"section":"authorization_events","limit":6});
+    let mut seen = Vec::new();
+    for page in 0..2 {
+        let shown = invoke(&context, &connection, "policy_show", args.clone());
+        assert!(shown["error"].is_null(), "{shown}");
+        let data = &shown["data"];
+        let events = data["authorization_events"].as_array().unwrap();
+        if page == 0 {
+            assert!(!crate::json::fits(data, 16 * 1024));
+            assert_eq!(events.len(), 6);
+            assert!(data["next_cursor"].is_string());
+            args["cursor"] = data["next_cursor"].clone();
+        } else {
+            assert!(data["next_cursor"].is_null());
+        }
+        seen.extend(
+            events
+                .iter()
+                .map(|event| event["event_id"].as_str().unwrap().to_owned()),
+        );
+    }
+    seen.sort();
+    assert_eq!(json!(seen), expected);
+}
+
+#[test]
+fn terminal_history_handoff_omits_null_options_and_parses_with_clap() {
+    use clap::Parser;
+    let (_root, context, _) = fixture();
+    let action = operator_action(
+        &context,
+        "history_configure",
+        &json!({"enabled":false,"limit":null}),
+    )
+    .unwrap();
+    let argv = action["argv"].as_array().unwrap();
+    assert!(!argv.contains(&json!("--limit")));
+    let invocation = std::iter::once("shield").chain(argv.iter().map(|arg| arg.as_str().unwrap()));
+    crate::cli::Cli::try_parse_from(invocation).unwrap();
+}
 
 fn fixture() -> (assert_fs::TempDir, Context, Connection) {
     fixture_with(&Bundle::capture(r#"{"schema_version":1,"packs":[]}"#, &[], None).unwrap())
@@ -306,6 +438,33 @@ fn invoke(context: &Context, connection: &Connection, name: &str, args: Value) -
     let result = call(context, connection, name, &args, &|| Ok(()));
     drop(args);
     result
+}
+
+#[test]
+fn opencode_mcp_setup_preview_accepts_a_matching_external_entry_without_writes() {
+    let (root, mut context, connection) = fixture();
+    context.agent = Some("opencode".into());
+    let binary = std::env::current_exe().unwrap().canonicalize().unwrap();
+    let source = json!({"mcp":{"shield":{"type":"local","command":[binary,"mcp","serve","--project",".","--agent","opencode"],"enabled":true},"acme":{"type":"remote","url":"https://example.com/mcp"}}}).to_string();
+    std::fs::write(root.path().join("opencode.json"), &source).unwrap();
+    // The MCP preview alias maps to this canonical read-only administrative call.
+    let result = invoke(
+        &context,
+        &connection,
+        "mcp_setup",
+        json!({"agents":["opencode"],"dry_run":true}),
+    );
+    assert!(result["error"].is_null(), "{result}");
+    assert!(
+        result["data"].to_string().contains("mcp_ownership"),
+        "{result}"
+    );
+    assert!(result["data"].to_string().contains("external"), "{result}");
+    assert_eq!(
+        std::fs::read_to_string(root.path().join("opencode.json")).unwrap(),
+        source
+    );
+    assert!(!root.path().join(".opencode/plugins/shield.js").exists());
 }
 fn rule(id: &str, decision: &str) -> Value {
     json!({"id":id,"decision":decision,"conditions":{"domain":"argv","executable":"acme","arguments":{"kind":"exact","values":["read"]}},"reason":"Acme review"})
@@ -791,6 +950,37 @@ fn dependency_updates_prune_dependencies_no_longer_declared_by_selected_releases
 }
 
 #[test]
+fn unqualified_pack_update_keeps_its_nondefault_registry() {
+    let (root, context, connection) = fixture();
+    let source = dependency_registry(&root, &context, &json!([]), false);
+    assert_ne!(
+        review::registries::effective(Some(&context))
+            .unwrap()
+            .default_alias(),
+        "acme-dependencies"
+    );
+    commit_pack_change(
+        &context,
+        &connection,
+        json!({"kind":"pack_add","reference":"acme-dependencies/acme/child"}),
+        "add-nondefault-child",
+    );
+    let store = Store::open(root.path()).unwrap();
+    let before = store.read().unwrap().operator["installed"][0].clone();
+    registry_release(&source, "acme/child", "1.1.0", None);
+    commit_pack_change(
+        &context,
+        &connection,
+        json!({"kind":"pack_update","reference":"child"}),
+        "update-unique-child",
+    );
+    let after = store.read().unwrap().operator["installed"][0].clone();
+    assert_eq!(after["version"], "1.1.0");
+    assert_eq!(after["selector"], before["selector"]);
+    assert_eq!(after["source_identity"], before["source_identity"]);
+}
+
+#[test]
 fn dependency_updates_honor_pinned_parents_shared_constraints_and_explicit_dependency_updates() {
     let (root, context, connection) = fixture();
     let source = dependency_registry(
@@ -1247,6 +1437,7 @@ fn inventory_has_only_canonical_tools_and_no_operator_or_completion_authority() 
     assert_eq!(
         names,
         vec![
+            "setup",
             "enable",
             "disable",
             "protection_set",
@@ -1380,9 +1571,13 @@ fn diagnostics_create_no_action_or_history_and_handles_remain_frozen_after_commi
     context.surface = "cli".into();
     review::operator::commit_proposal_fixture(&context, id).unwrap();
     context.surface = "mcp".into();
-    assert_eq!(
-        invoke(&context, &connection, "policy_evaluate", request(&context))["data"]["decision"],
-        "allow"
+    let active = invoke(&context, &connection, "policy_evaluate", request(&context));
+    assert_eq!(active["data"]["decision"], "allow");
+    assert!(
+        active["data"]["next_action"]
+            .as_str()
+            .unwrap()
+            .contains("check shell analysis")
     );
     let mut old = request(&context);
     old["candidate_id"] = initial;

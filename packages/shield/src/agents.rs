@@ -23,6 +23,7 @@ pub(crate) use hook::finalize_native;
 pub(crate) use hook::run;
 #[cfg(test)]
 pub(crate) use hook::translate_event;
+pub(crate) use working_files::temporary_candidates;
 
 pub(crate) static ADAPTERS: &[&dyn AgentAdapter] = &[
     &claude_code::ClaudeCode,
@@ -377,6 +378,16 @@ pub(crate) trait AgentAdapter: Sync {
         desired: Option<&str>,
     ) -> Result<String, crate::review::Error> {
         self.merge_mcp(before, None, desired)
+    }
+    /// An exact compatible launcher another publisher retains. Setup reviews
+    /// and checks it, but never rewrites or removes it.
+    fn borrow_mcp_entry(
+        &self,
+        _source: &str,
+        _binary: &Path,
+        _root: &Path,
+    ) -> Result<Option<String>, crate::review::Error> {
+        Ok(None)
     }
     /// Reconcile adapter settings; `approved` lists the Shield tools allowed
     /// without asking when installing, and is `None` when removing.

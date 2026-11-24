@@ -18,7 +18,7 @@ CLI retains `--dry-run`.
 
 | You want to… | Start here |
 | --- | --- |
-| Set up Shield, including through Hub | Ask the agent to follow the bundled `project-setup` skill. A fresh project connection offers `init`; later integration changes use `mcp_setup`. |
+| Set up or repair Shield | Call `setup` on a fresh or enrolled connection. Follow the returned publication or reload action. |
 | Check the active policy and setup | `status`, then `doctor` if needed. |
 | Find a suitable pack | `pack_search`, then `pack_info` to inspect a result. |
 | Understand an existing rule | `rule_list` with its owner-qualified reference. |
@@ -32,14 +32,13 @@ For a pack walkthrough, see [reviewing an available pack](#reviewing-an-availabl
 ## Connect the server
 
 Register MCP together with native hooks through the operator CLI. Run
-`shield init` in your project, then add your chosen agent if you did not select
-it during initialization:
+`shield setup` in your project. To choose explicitly, pass the agent's ID:
 
 ```sh
-shield mcp setup --agent claude
+shield setup --agent claude
 ```
 
-Use `shield mcp setup --agent codex` for Codex. Restart and trust the agent as described in
+Use `shield setup --agent codex` for Codex. Restart and trust the agent as described in
 [your first project](getting-started.md#2-load-the-agent-integration). The
 server uses that project's confirmed active policy. You do not need to start
 it manually when using these registrations.
@@ -49,17 +48,19 @@ For client implementation, see [transport details](#responses-and-transport-life
 ### Initialize from an agent session
 
 A project connection launched with `shield mcp serve` also works before the
-project has Shield configuration. It offers an `init` tool. The agent supplies
-the integrations and an optional baseline profile, then you review and confirm
-the captured setup in the host. Recommended is the default profile. A failed
+project has Shield configuration. Call `setup` with no arguments to use the
+detected publisher or agent and the Recommended baseline. Supply `agents` to
+choose targets and `profile` to change the initial baseline. Review and confirm
+the captured setup in the host. A failed
 baseline download, declined review or unavailable confirmation initializes
-nothing. The normal tools become usable on the same connection after acceptance.
+nothing. When confirmation is unavailable, `error.operator_action` gives the
+terminal command for the user to run. The normal tools become usable on the
+same connection after acceptance.
 Existing or malformed project state retains its normal inspection and repair
 path; first-run setup does not overwrite it.
 
-For Hub, initialize its project and publish its agent configuration first, then
-call Shield `init` with `agents: ["hub"]`. Call Hub `setup` again to publish
-Shield's definition and hooks. For direct setup use native IDs, for example
+For a Hub project, call Shield `setup`, then follow its `next` action to call
+Hub `setup` for publication. For direct setup use native IDs, for example
 `agents: ["claude", "codex"]`. Reload affected agents to load new hooks.
 An existing MCP connection lets the agent finish configuration in-session;
 adding a connection to a running host may require a host reload before its tools
@@ -72,7 +73,7 @@ appear. `--skills-only` remains static discovery and cannot initialize a project
 | Policy and rules | `policy_show`, `rule_list`, `rule_add`, `rule_edit`, `rule_remove`, `suggestion_list`, `review_defer`, `policy_propose`, `policy_apply`, `policy_withdraw`, `policy_defer`, `policy_draft_list`, `policy_draft_remove`, `policy_reject` |
 | Approvals and history | `request_list`, `request_show`, `request_approve`, `request_deny`, `history_list`, `history_show`, `history_configure` |
 | Session grants | `session_grant_list`, `session_grant_show`, `session_grant_propose`, `session_grant_reconsider`, `session_grant_approve`, `session_grant_revoke` |
-| Administration | `enable`, `disable`, `protection_set`, `mcp_setup` |
+| Administration | `setup`, `enable`, `disable`, `protection_set`, `mcp_setup` |
 | Diagnostics | `policy_evaluate`, `policy_compare` |
 | Documentation | `docs_list`, `docs_search`, `docs_read` |
 
@@ -112,9 +113,11 @@ page suggestions with `shield suggestion list` and deferred intent with
 
 ## Administration and recovery
 
-Administrative tools show the person an exact captured review through the host.
-Tool permission and a chat response cannot confirm the change. Stale reviews
-refuse; inspect the result before requesting a fresh review.
+Administrative tools show one short review of a captured plan. Tool permission
+and a chat response cannot confirm the change. If the summary exceeds the form
+limit or private settings need inspection, ask the user to run
+`error.operator_action`. The operator can select **Inspect details** for the
+exact capture. Stale reviews require a fresh decision.
 
 - `protection_set` changes protected-file access choices. Supply one or both of
   `agent_settings_read` (`ask`/`allow`) and `agent_settings_change`
@@ -744,11 +747,12 @@ fresh preparation and immediate approval.
 
 ## Rule suggestions
 
-After completing a task, call `suggestion_list` with the hook-reported
-`session_id`. It lists recorded policy Ask requests in retained history,
-including the reason, count, any pack request for a project rule, and observed
+Use `suggestion_list` to inspect recurring permission requests or when the user
+asks about reusable policy. Supply `session_id` when selecting a session. The
+list includes requests allowed quietly by the configured fallback. Each row
+shows the reason, count, any pack request for a project rule, and observed
 `request.executable`, `arguments`, and optional `cwd`. Each command in a
-compound request appears separately. Command rows supply evidence, not rule drafts.
+compound request appears separately. Command rows supply evidence for drafting rules.
 
 Check `coverage` before treating the list as complete. Disabled, unavailable,
 evicted or scan-limited history can leave missing evidence. Partial command

@@ -29,7 +29,7 @@ pack from Shield's main registry, so you need network access.
 ## 1. Initialize the project
 
 If Shield's MCP tools are already connected to your agent, ask it to set up
-Shield. In a fresh project it can use `init`, show you the setup review and
+Shield. In a fresh project it can use `setup`, show you the setup review and
 continue configuration on the same connection after you accept. For a combined
 Hub and Shield setup, the agent initializes Hub, registers the existing project,
 configures Shield through Hub and publishes its hooks. Reload the affected agent
@@ -38,16 +38,13 @@ to load new registrations. See [agent setup](project-mcp.md#initialize-from-an-a
 From the project directory, run:
 
 ```sh
-shield init
+shield setup
 ```
 
-Shield asks you to choose a profile for the **baseline**, its default pack of
-permission rules. Recommended is preselected. A profile selects the pack's
-decisions; it does not change your agent's sandbox.
-
-At the agent selection, use Space to mark the agents to configure, then Enter to
-continue. Agents whose commands are on your path are preselected. Enter with
-none marked skips agent setup; you can add it later.
+Shield uses Recommended for the **baseline**, its default pack of permission
+rules. It picks the project's publisher, such as Hub, or a single detected
+agent. If several agents are detected, choose with `--agent`. Repeat the flag
+to connect more than one.
 
 Review the packs, agent settings, and Shield binary path, then confirm. Shield
 saves the active policy and creates `.shield/` for policy files and private
@@ -58,20 +55,23 @@ Cancel leaves the project unchanged; a failed baseline download
 or verification leaves a new project unenrolled.
 
 For a first setup with a different baseline profile, use
-`shield init --profile strict`. To start without adding the default baseline,
+`shield setup --profile strict`. To start without adding the default baseline,
 use `shield init --no-baseline`. An empty policy returns Ask for unmatched requests.
 
 ## 2. Load the agent integration
 
-If you selected an agent during initialization, its registrations are already
-installed. To add one later, choose the command for your agent:
+If setup returns a Hub publication action, run `hub setup` in the same project
+and review the agent publication there. Shield supplies the definition and Hub
+publishes it. With a direct agent setup, Shield installs the registrations.
+Run `shield setup` again to reuse your saved choices and repair the registration.
+Use an explicit selection to add an agent later:
 
 ```sh
-shield mcp setup --agent claude
+shield setup --agent claude
 ```
 
 ```sh
-shield mcp setup --agent codex
+shield setup --agent codex
 ```
 
 Each command installs hooks and MCP tools for that agent after review, keeping

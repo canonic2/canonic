@@ -109,14 +109,34 @@ pub(crate) fn failure(explanation: &Value) -> Option<String> {
 /// A short recovery step that remains useful when a host shows only its tool
 /// error. Structured evidence retains the operand; raw OS errors are not echoed.
 pub(crate) fn resource_failure(explanation: &Value) -> Option<String> {
-    let check = explanation["requirement_checks"].as_array()?.first()?;
-    if check["code"] != "evidence_unavailable" {
-        return None;
-    }
+    let check = explanation["requirement_checks"]
+        .as_array()?
+        .iter()
+        .find(|check| {
+            check["code"] == "evidence_unavailable" && check["evidence"]["resource"].is_object()
+        })?;
     let resource = &check["evidence"]["resource"];
     let path = resource["path"].as_str()?;
     if path.is_empty() || path.len() > 512 || path.chars().any(|c| c.is_control() || c == '`') {
         return None;
+    }
+    if resource["kind"] == "file" {
+        let check = match resource["code"].as_str()? {
+            "target_unresolved" => {
+                "could not be resolved. Check that its parent components are directories and that any links resolve."
+            }
+            "roots_unverified" => {
+                "could not be checked against the rule's allowed paths. Verify that the configured access paths can be resolved and inspected."
+            }
+            "exclusions_unverified" => {
+                "could not be checked against the rule's excluded paths. Verify that those paths can be resolved and inspected."
+            }
+            "exclusion_identity_unverified" => {
+                "could not be compared with the rule's excluded entries. Check filesystem access to the target and excluded paths."
+            }
+            _ => return None,
+        };
+        return Some(format!("File target `{path}` {check}"));
     }
     let detail = match resource["code"].as_str()? {
         "permission_denied" => {
@@ -178,16 +198,18 @@ fn closest<'a>(explanation: &Value, guidance: &'a Value) -> Option<&'a str> {
         .max_by_key(|alternative| shared(alternative))
 }
 
-/// The rule that denied the request and its reason, for a Deny that carries no
-/// guidance or failed requirement of its own.
-fn denying_rule(explanation: &Value) -> Option<String> {
-    if explanation["decision"] != "deny" {
-        return None;
-    }
+/// Explain a matched Ask or Deny when the rule supplies no tailored guidance.
+fn deciding_rule(explanation: &Value) -> Option<String> {
+    let decision = explanation["decision"].as_str()?;
+    let outcome = match decision {
+        "deny" => "denies this request",
+        "ask" => "requires approval for this request",
+        _ => return None,
+    };
     let rule = explanation["matches"]
         .as_array()?
         .iter()
-        .find(|m| m["applied"] == true && m["decision"] == "deny")?;
+        .find(|m| m["applied"] == true && m["decision"] == decision)?;
     let id = rule["rule_id"].as_str()?;
     let reason: String = rule["reason"]
         .as_str()
@@ -197,13 +219,13 @@ fn denying_rule(explanation: &Value) -> Option<String> {
         .collect();
     let reason = reason.trim().trim_end_matches('.');
     Some(if reason.is_empty() {
-        format!("Rule `{id}` denies this request.")
+        format!("Rule `{id}` {outcome}.")
     } else {
-        format!("Rule `{id}` denies this request: {reason}.")
+        format!("Rule `{id}` {outcome}: {reason}.")
     })
 }
 
-/// Rule guidance or a failed requirement, without the denying rule fallback.
+/// Rule guidance or a failed requirement, without the deciding rule fallback.
 pub(crate) fn guidance_detail(explanation: &Value) -> Option<String> {
     detail_from(explanation, false)
 }
@@ -221,7 +243,7 @@ fn detail_from(explanation: &Value, rule_fallback: bool) -> Option<String> {
                 .map(str::to_owned)
         })
         .or_else(|| failure(explanation))
-        .or_else(|| rule_fallback.then(|| denying_rule(explanation)).flatten());
+        .or_else(|| rule_fallback.then(|| deciding_rule(explanation)).flatten());
     let alternative = guidance.and_then(|g| closest(explanation, g));
     let mut detail = message.unwrap_or_default();
     if let Some(alternative) = alternative {
@@ -377,7 +399,7 @@ mod tests {
     }
 
     #[test]
-    fn a_plain_deny_names_its_rule_and_reason() {
+    fn plain_ask_and_deny_name_their_rule_and_reason() {
         let mut explanation = json!({"decision":"deny","guidance":[],"requirement_checks":[],
             "matches":[{"source":"pack","rule_id":"npm-config","decision":"deny","applied":true,
                 "reason":"Configuration changes require explicit operator control."}]});
@@ -388,6 +410,12 @@ mod tests {
         assert_eq!(guidance_detail(&explanation), None);
         explanation["decision"] = json!("ask");
         assert_eq!(detail(&explanation), None);
+        explanation["matches"][0]["decision"] = json!("ask");
+        assert_eq!(
+            detail(&explanation).unwrap(),
+            "Rule `npm-config` requires approval for this request: Configuration changes require explicit operator control. Re-evaluate any revised request."
+        );
+        assert_eq!(guidance_detail(&explanation), None);
     }
 
     #[test]

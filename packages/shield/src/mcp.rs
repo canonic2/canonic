@@ -168,7 +168,12 @@ impl Server {
                 return Outcome::Tool(response::tool_result(
                     &call.name,
                     review.agent.as_deref(),
-                    crate::review::mcp::admin_error(&review, &call.name, &error),
+                    crate::review::mcp::admin_form_error(
+                        &review,
+                        &call.name,
+                        &call.arguments,
+                        &error,
+                    ),
                     true,
                     &|| Ok(()),
                 ));
@@ -550,6 +555,7 @@ impl Server {
         let value = crate::review::mcp::setup_resume_status(
             review,
             &self.connection,
+            &call.name,
             resumed.as_ref().err(),
             &|| {
                 context
@@ -772,8 +778,13 @@ fn reply(
     context: &stdio::Context,
     answer: Answer,
 ) -> ToolResult {
+    let mut setup_binding = None;
     let answer = if let Answer::AdminFailed(binding, code) = answer {
-        crate::review::mcp::discard_admin(connection, binding);
+        if call.name == crate::review::setup::TOOL && code == "approval_unavailable" {
+            setup_binding = Some(binding);
+        } else {
+            crate::review::mcp::discard_admin(connection, binding);
+        }
         Answer::Failed(code)
     } else {
         answer
@@ -807,7 +818,7 @@ fn reply(
         if let Answer::AdminAccepted(binding) = answer {
             Some(binding)
         } else {
-            None
+            setup_binding
         },
     );
     if declined && value["data"]["proposal_status"] != "issued" {
@@ -815,7 +826,10 @@ fn reply(
         value["error"] = serde_json::json!({"code":"approval_declined","message":"The session-grant form was declined or cancelled. No permission was issued. Continue under ordinary policy and do not repeat the offer.","operator_route":null});
     }
     if let Answer::Failed(code) = answer
-        && value["error"]["code"] == "operator_review_required"
+        && (value["error"]["code"] == "operator_review_required"
+            || (code == "approval_declined"
+                && call.name == crate::review::setup::TOOL
+                && value["error"]["code"] == "approval_unavailable"))
     {
         let request = ["request_approve", "request_deny", "session_grant_approve"]
             .contains(&call.name.as_str());

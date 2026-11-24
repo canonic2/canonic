@@ -1657,6 +1657,65 @@ fn claude_settings_change_recovers_in_the_session_once() {
 }
 
 #[test]
+fn patch_review_limit_uses_the_exact_form_and_never_offers_oversized_approval() {
+    let (_folder, context) = fixture();
+    let root = Path::new(&context.project_root);
+    let patch = |content: &str| {
+        hook(
+            root,
+            "codex",
+            Event::Before,
+            &json!({
+                "hook_event_name":"PreToolUse","tool_name":"apply_patch","tool_use_id":"acme-patch",
+                "session_id":"acme-session","cwd":root,"tool_input":{
+                    "command":format!("*** Begin Patch\n*** Update File: .codex/config.toml\n@@\n-# Acme\n+{content}\n*** End Patch")
+                }
+            }),
+        )
+    };
+    let confirm = |response: &Value| {
+        let id = offered_id(response).unwrap_or_else(|| panic!("approval not offered: {response}"));
+        review::hook_approval::confirmation(&mcp(root, "codex"), &json!({"request_id":id})).unwrap()
+    };
+    let sample = confirm(&patch("x"));
+    let limit = review::hook_approval::MAX_FORM;
+    let boundary = "x".repeat(limit - sample.len() + 1);
+    assert_eq!(confirm(&patch(&boundary)).len(), limit);
+
+    let too_long = patch(&format!("{boundary}é"));
+    assert_eq!(
+        too_long["hookSpecificOutput"]["permissionDecision"], "deny",
+        "{too_long}"
+    );
+    assert!(offered_id(&too_long).is_none(), "{too_long}");
+    assert!(!reason(&too_long).contains(super::OFFER), "{too_long}");
+    assert!(
+        reason(&too_long).contains(&format!(
+            "needs {} UTF-8 bytes and the limit is {limit}",
+            limit + 2
+        )),
+        "{too_long}"
+    );
+    assert!(
+        agent_context(&too_long).contains("file or hunk boundaries"),
+        "{too_long}"
+    );
+    let listed = review::mcp::call_with_confirmation(
+        &mcp(root, "codex"),
+        &review::mcp::Connection::new("acme-connection".into()),
+        "request_list",
+        &json!({}),
+        &|| Ok(()),
+        false,
+    );
+    assert_eq!(
+        listed["data"]["requests"].as_array().unwrap().len(),
+        2,
+        "{listed}"
+    );
+}
+
+#[test]
 fn grouping_guidance_keeps_the_single_request_route_and_pending_id() {
     let (_root, context) = fixture();
     let root = Path::new(&context.project_root);
@@ -1774,7 +1833,8 @@ fn codex_offers_its_unpromptable_ask_only_when_the_form_shows_it_whole() {
         assert!(offered_id(&refused).is_none(), "{refused}");
         assert!(!reason(&refused).contains(super::OFFER), "{refused}");
         assert!(
-            agent_context(&refused).contains("split it into smaller calls"),
+            agent_context(&refused).contains("Split the operation into smaller complete requests")
+                && agent_context(&refused).contains("12000"),
             "{refused}"
         );
     }

@@ -77,6 +77,7 @@ pub(crate) const CAPABILITIES: &[&str] = &[
     "prefix-leading-v1",
     "command-sets-v1",
     "variables-v1",
+    "executable-discovery-v1",
     "variable-parts-v1",
     "variable-prefixes-v1",
     "variable-list-branches-v1",

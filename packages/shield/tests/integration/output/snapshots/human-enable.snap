@@ -4,6 +4,8 @@ expression: text
 ---
 $ shield enable
 --- terminal
+Shield review for [PROJECT] (project scope)
+
 enable Shield in [PROJECT]
 Currently disabled.
 Native hooks resume active policy checks.

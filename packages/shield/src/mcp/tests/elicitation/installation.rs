@@ -1,5 +1,7 @@
 //! Guided installation retains artifacts and user input across separate approval.
 use super::*;
+#[cfg(unix)]
+mod executable_discovery;
 mod parity;
 
 fn fresh(

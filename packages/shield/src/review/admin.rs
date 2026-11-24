@@ -76,6 +76,12 @@ enum Input {
         #[serde(default)]
         pending: Option<integrations::recovery::Action>,
     },
+    #[serde(rename = "setup")]
+    ProjectSetup {
+        #[serde(default)]
+        agents: Vec<String>,
+        profile: Option<crate::policy::Profile>,
+    },
 }
 
 #[derive(Clone, Copy, Default, Deserialize, PartialEq)]
@@ -96,7 +102,9 @@ enum Operation {
     Setup {
         metadata: Value,
         plan: Option<Box<integrations::Plan>>,
+        project_setup: bool,
     },
+    UnchangedSetup(Value),
     Recovery(Box<integrations::recovery::Prepared>),
 }
 
@@ -116,11 +124,30 @@ impl Prepared {
     pub(super) fn committed_result(&self) -> Option<Value> {
         match &self.operation {
             Operation::Registry(plan, _) => plan.committed_result(),
+            Operation::UnchangedSetup(receipt) => Some(receipt.clone()),
             _ => None,
         }
     }
+    #[cfg(test)]
     pub(super) fn review(&self) -> Value {
         self.review.clone()
+    }
+    pub(super) fn review_ref(&self) -> &Value {
+        &self.review
+    }
+    pub(super) fn setup_operator_action(&self) -> Option<Value> {
+        let Operation::Setup {
+            plan: Some(plan),
+            project_setup: true,
+            ..
+        } = &self.operation
+        else {
+            return None;
+        };
+        Some(super::setup::operator_action(
+            Path::new(&self.root),
+            &json!({"agents":plan.targets.as_ref()?}),
+        ))
     }
     /// A model-visible setup preview never reads protected settings back to
     /// the caller. The exact sources remain private to the human review.
@@ -129,7 +156,7 @@ impl Prepared {
             self.operation,
             Operation::Setup { .. } | Operation::Recovery(_)
         ) {
-            return self.review();
+            return self.review_ref().clone();
         }
         let mut value = serde_json::Map::new();
         for field in [
@@ -174,7 +201,7 @@ impl Prepared {
         value.insert("files".into(), json!(files));
         value.insert(
             "protected_contents".into(),
-            json!("Exact settings are shown only in the human confirmation form."),
+            json!("Exact settings are available through Inspect details in the operator terminal review."),
         );
         Value::Object(value)
     }
@@ -212,13 +239,25 @@ impl Prepared {
             }
             Operation::History(plan) => plan.commit(context, checkpoint),
             Operation::Reject(plan) => plan.commit(context, checkpoint),
-            Operation::Setup { metadata, plan } => integrations::setup::finish_checked(
-                context,
-                &metadata,
-                plan.as_deref(),
-                None,
-                checkpoint,
-            ),
+            Operation::Setup {
+                metadata,
+                plan,
+                project_setup,
+            } => {
+                let receipt = integrations::setup::finish_checked(
+                    context,
+                    &metadata,
+                    plan.as_deref(),
+                    None,
+                    checkpoint,
+                )?;
+                Ok(if project_setup {
+                    super::setup::receipt(Path::new(&context.project_root), receipt, "configured")
+                } else {
+                    receipt
+                })
+            }
+            Operation::UnchangedSetup(receipt) => Ok(receipt),
             Operation::Recovery(plan) => plan.commit(context, checkpoint),
         }?;
         if cross_project && !receipt["setup_error"].is_null() {
@@ -272,6 +311,7 @@ pub(super) fn supports(name: &str) -> bool {
             | "history_configure"
             | "policy_reject"
             | "mcp_setup"
+            | super::setup::TOOL
     )
 }
 
@@ -382,6 +422,7 @@ fn prepare_operation(
             repair_hooks,
             pending,
         )?,
+        Input::ProjectSetup { agents, profile } => project_setup(context, &agents, profile)?,
     })
 }
 
@@ -453,6 +494,55 @@ fn protection(
     let plan = protection::Prepared::new(context, access)?;
     let review = plan.review();
     Ok((Operation::Protection(plan), review))
+}
+
+fn project_setup(
+    context: &Context,
+    agents: &[String],
+    profile: Option<crate::policy::Profile>,
+) -> Result<(Operation, Value), Error> {
+    if profile.is_some() {
+        return Err(Error::Invalid(
+            "setup profiles apply only to a new project; use pack configuration to change the active profile",
+        ));
+    }
+    let root = Path::new(&context.project_root);
+    let state = project::checkpoint(context)?;
+    let metadata = project::metadata(&state);
+    if integrations::pending(&metadata)?.is_some() {
+        return Err(Error::Invalid(if context.surface == "cli" {
+            "an approved setup is pending; run shield setup without options to resume, or use shield mcp setup --pending review to inspect conflicts"
+        } else {
+            "an approved setup is pending; call setup without arguments to resume it, or mcp_setup with pending: review to inspect conflicts"
+        }));
+    }
+    let agents = super::setup::agents(root, &metadata, agents, context.agent.as_deref())?;
+    let choice = IntegrationChoice::Agents(IntegrationChoice::bits(&agents)?);
+    let mut plan =
+        integrations::setup::prepare_with(root, &metadata, choice, false, None, true, false)?;
+    integrations::setup::with_fallbacks(&state.settings, choice, plan.as_mut());
+    let review = integrations::setup::setup_preview(root, plan.as_ref())?;
+    let unchanged = plan.as_ref().is_none_or(|plan| {
+        plan.previous == plan.desired
+            && review["files"]
+                .as_array()
+                .is_some_and(|files| files.iter().all(|file| file["before"] == file["after"]))
+    });
+    if unchanged && review["private_definition_access"].is_null() {
+        let status = project::status_from(context, &state);
+        return Ok((
+            Operation::UnchangedSetup(super::setup::receipt(root, status, "unchanged")),
+            Value::Null,
+        ));
+    }
+    Ok((
+        Operation::Setup {
+            metadata,
+            plan: plan.map(Box::new),
+            project_setup: true,
+        },
+        review,
+    ))
 }
 
 fn setup(
@@ -549,6 +639,7 @@ fn setup(
         Operation::Setup {
             metadata,
             plan: plan.map(Box::new),
+            project_setup: false,
         },
         review,
     ))

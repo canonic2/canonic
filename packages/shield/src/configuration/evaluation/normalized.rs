@@ -17,6 +17,8 @@ pub(crate) struct Evaluation {
     pub(crate) decision: Decision,
     disposition: &'static str,
     normalized_request: Input,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    directory_request: Option<policy::Request>,
     pub(crate) explanation: policy::Evaluation,
     #[serde(serialize_with = "CoverageReport::serialize")]
     pub(crate) analysis_coverage: CoverageReport,
@@ -74,10 +76,16 @@ impl Evaluation {
             decision: explanation.decision,
             disposition: "preview",
             normalized_request: input.clone(),
+            directory_request: None,
             explanation,
             analysis_coverage: CoverageReport::Literal { complete },
             approval_request_id: None,
         }
+    }
+
+    pub(super) fn with_directory_request(mut self, request: policy::Request) -> Self {
+        self.directory_request = Some(request);
+        self
     }
     pub(super) fn shell(&mut self, mut analysis: Report) {
         if self.decision != Decision::Deny
@@ -142,12 +150,14 @@ impl Evaluation {
                         item
                     }),
             );
-            self.explanation
-                .guidance
-                .extend(evaluation.guidance.iter().cloned().map(|mut item| {
-                    item.operation_ref.clone_from(&reference);
-                    item
-                }));
+            if !operation.interpreter_needs_review() {
+                self.explanation
+                    .guidance
+                    .extend(evaluation.guidance.iter().cloned().map(|mut item| {
+                        item.operation_ref.clone_from(&reference);
+                        item
+                    }));
+            }
         }
     }
     fn guidance(&mut self, analysis: &Report) {
@@ -268,6 +278,7 @@ fn reason(
         |message: &str, alternative: &str| (1, message.to_owned(), vec![alternative.to_owned()]);
     let launcher = launcher(operation);
     Some(match operation.coverage {
+        C::Partial if operation.interpreter_needs_review() => (3, "requires shell analysis review because Shield cannot inspect the code the interpreter runs. The arguments match an Allow rule".into(), vec![]),
         _ if authored && !denied && operation.coverage != C::LiteralArgv => return None,
         C::IndirectExecution => (0,"runs further commands that Shield cannot inspect".into(),vec![run_directly(launcher)]),
         C::Partial if launcher.is_some() && unwrapped(operation,operations) => (2,format!("runs its command through `{}`, so the user decides",launcher.unwrap_or_default()),vec![]),
@@ -312,7 +323,11 @@ fn item(
         message: Some(message),
         operation_ref: reference(operation),
         rule_ref: None,
-        source: Some(if rank < 2 { "shield" } else { "decisive" }),
+        source: Some(match rank {
+            0 | 1 => "shield",
+            2 => "decisive",
+            _ => "shell-analysis",
+        }),
         request: None,
         fetch_url: policy::resolution::diagnostics::TextField::Absent,
         private_input,
@@ -357,7 +372,11 @@ fn item(
 }
 fn rule_ask(evaluation: &policy::Evaluation) -> (u8, String, Vec<String>) {
     if evaluation.matches.is_empty() {
-        return (2,"matches no rule, so the user decides".into(),vec!["If it should run without asking, propose a pack or rule that covers it with policy_propose.".into()]);
+        return (
+            2,
+            "matches no rule, so the user decides".into(),
+            vec![crate::proposal_draft::UNMATCHED_RULE.into()],
+        );
     }
     let guidance = evaluation.guidance.first();
     let alternatives = guidance.map_or_default(|item| item.alternatives.clone());

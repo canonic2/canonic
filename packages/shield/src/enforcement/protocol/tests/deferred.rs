@@ -2,6 +2,46 @@
 use super::*;
 
 #[test]
+fn completion_history_failure_retains_a_diagnostic_category() {
+    let root = assert_fs::TempDir::new().unwrap();
+    let bundle =
+        crate::configuration::Bundle::capture("schema_version: 1\npacks: []\n", &[], None).unwrap();
+    let context = crate::review::mcp::initialize_fixture(root.path(), &bundle);
+    let path = root.path().canonicalize().unwrap();
+    let lock = path.join(".shield/state/history.lock");
+    fs::remove_file(&lock).unwrap();
+    fs::create_dir(&lock).unwrap();
+    let input = json!({"protocol_version":1,"request_id":"acme-callback",
+        "expected_project_id":context.project_id,"cwd":path,
+        "operation":{"kind":"completion","delivery_id":"acme-delivery","request_id":null,
+            "status":"completed","operation":{"kind":"shell","source":"git status",
+                "dialect":"posix","dialect_version":null}},
+        "host":{"agent":"codex","session_id":"acme-session","tool_use_id":"acme-call",
+            "event":"PostToolUse","consumer_id":null},"approval_request_id":null});
+    let stages = std::cell::RefCell::new(Vec::new());
+    let (receipt, exit) = evaluate_native(
+        root.path(),
+        &serde_json::to_vec(&input).unwrap(),
+        &json!({}),
+        NativeContext {
+            integration: "codex",
+            approval: NativeApproval::Fallback,
+            context_complete: true,
+            working_files: None,
+        },
+        None,
+        &|stage| stages.borrow_mut().push(stage),
+    );
+    assert_eq!(exit, 0, "{receipt}");
+    assert_eq!(receipt["code"], "completion-observed");
+    assert_eq!(
+        receipt["history"],
+        json!({"status":"failed","request_id":null,"event_id":null})
+    );
+    assert!(stages.borrow().contains(&"history_failed_invalid"));
+}
+
+#[test]
 fn sdk_v2_completion_receipts_defer_links_and_v1_remains_compatible() {
     let root = assert_fs::TempDir::new().unwrap();
     let bundle =

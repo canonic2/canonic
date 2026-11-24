@@ -14,6 +14,51 @@ pub(super) fn deny(code: &str) -> Reply {
     presentation::denial(raw_deny(code), &serde_json::json!({"code":code}))
 }
 
+/// Some policy messages only name a rule. Identify the individual edit when
+/// Codex displays that refusal for the entire patch.
+pub(super) fn name_patch_target(
+    root: &Path,
+    operation: &Value,
+    receipt: &Value,
+    reply: &mut Reply,
+) {
+    if reply.decision == Decision::Allow
+        || receipt["protected_path"].is_string()
+        || receipt["outside_path"]["path"].is_string()
+        || crate::agent_message::resource_failure(&receipt["diagnostics"]).is_some()
+    {
+        return;
+    }
+    let Some(path) = operation["path"].as_str().map(Path::new) else {
+        return;
+    };
+    let Some(path) = path
+        .strip_prefix(root)
+        .unwrap_or(path)
+        .to_str()
+        .filter(|path| {
+            !path.is_empty()
+                && path.len() <= 512
+                && !path.chars().any(|c| c.is_control() || c == '`')
+        })
+    else {
+        return;
+    };
+    let mut evidence = json!(path);
+    crate::evidence::redact(&mut evidence);
+    let path = evidence.as_str().unwrap_or(path);
+    let action = if operation["action"] == "remove" {
+        "removal of"
+    } else {
+        "write to"
+    };
+    let target = format!("Patch {action} `{path}`.");
+    reply.reason = format!("{target} {}", reply.reason);
+    if let Some(context) = &mut reply.agent_context {
+        *context = format!("{target} {context}");
+    }
+}
+
 fn raw_deny(code: &str) -> Reply {
     let reason = match code {
         "policy-deny" => format!("Shield: denied by active policy. Do not work around this; inspect the matching rule with rule_list if useful. {PROPOSE}"),
@@ -27,7 +72,7 @@ fn raw_deny(code: &str) -> Reply {
         "sensitive-read" => "Shield: settings may contain credentials; this callback cannot request read approval. Continue without them unless essential.".to_owned(),
         "policy-file-unknown" => "Shield: this Git command can replace Shield's policy files or its policy writes cannot be determined. Use the exact in-session approval route when offered, or name paths that leave policy files out. Direct policy-file edits require policy_propose.".to_owned(),
         "invalid-host-input" | "invalid-host-event" | "invalid-input" => "Shield: invalid request. Correct the tool input before retrying.".to_owned(),
-        "invalid-context" => "Shield: the session's working directory is not an existing folder inside this Shield project. Work from the project folder, or ask the user to start the session there.".to_owned(),
+        "invalid-context" => "Shield: the working directory is unavailable or outside this project's permitted context. Use an existing project directory or an external directory approved for this tool. An external shell working directory requires write access. Additional folder access requires policy_propose and the user's policy_apply confirmation.".to_owned(),
         "runtime-busy" => "Shield: Shield state is briefly locked; retry the request.".to_owned(),
         "handoff-failed" | "project-changed" => "Shield: current authorization could not be verified. Inspect the status tool and retry only after the user resolves any protection problem.".to_owned(),
         "compiled-cache-unavailable" => "Shield: its compiled policy folder is unusable. Call the doctor tool and ask the user to fix the folder or choose another with shield mcp setup --cache-dir, then retry the original request.".to_owned(),
@@ -302,7 +347,16 @@ fn asked(root: &Path, adapter: &dyn AgentAdapter, receipt: &Value, operation: &V
     if offer.is_some() && generic {
         detail = guidance["message"].as_str();
     }
-    if detail.is_some() || offer.is_some() {
+    if guidance["source"] == "shell-analysis"
+        && let Some(detail) = detail
+    {
+        let host = if adapter.spec().id == "opencode" {
+            " OpenCode V1 cannot prompt from its tool hook."
+        } else {
+            ""
+        };
+        value.reason = format!("Shield: approval required. {detail}{host}");
+    } else if detail.is_some() || offer.is_some() {
         let action = offer.map_or_else(
             || adapter.spec().approval_action.to_owned(),
             |offer| format!("{} {offer}", adapter.spec().approval_action),
@@ -338,6 +392,9 @@ fn draft(
         return Some(offer);
     }
     if outside.is_none() {
+        if guidance["source"] == "shell-analysis" {
+            return None;
+        }
         // Blocked web access retains its immediate operator-review route.
         // Fallback-allowed requests use the later recurrence queue instead.
         if let Some(offer) = web_offer(guidance, operation, entry) {
@@ -370,6 +427,13 @@ pub(super) fn respond(
     operation: &Value,
     session: &str,
 ) -> Option<Reply> {
+    if receipt["code"] == "approval-required"
+        && receipt["decision"] == "ask"
+        && receipt["disposition"] == "allowed"
+        && receipt["ask_fallback"] == "allow"
+    {
+        return Some(permitted(""));
+    }
     let mut reply = if receipt["authorization"]["kind"] == "session_grant"
         && receipt["disposition"] == "allowed"
     {
@@ -379,14 +443,17 @@ pub(super) fn respond(
     };
     if receipt["session_context"]["offer_hint"] == true
         && receipt["fixed_protection"] != true
-        && receipt["code"] != "operator-cli"
+        && matches!(
+            receipt["code"].as_str(),
+            Some("policy-allow" | "approval-required")
+        )
         && receipt["authorization"]["kind"] != "session_grant"
         && !(operation["kind"] == "web" && operation["action"] == "fetch"
             || receipt["diagnostics"]["guidance"][0]["fetch_url"].is_string())
         && let Some(reference) = receipt["session_context"]["session_ref"].as_str()
     {
         let hint = format!(
-            "Session reference: {reference}. For planned repeated privileged operations, inspect session_grant_show, then session_grant_propose for a bounded batch/family and session_grant_approve for the user's form. Do not repeat a declined offer automatically or broaden scope to avoid a refusal. Only the person's explicit request permits session_grant_reconsider followed by fresh human confirmation."
+            "Session reference: {reference}. For repeated eligible Ask decisions, inspect session_grant_show, then use session_grant_propose for a bounded batch and session_grant_approve for the user's form. An ordinary grant covers Ask only. Do not repeat a declined offer or broaden it to avoid a refusal. Reconsider only at the person's explicit request with fresh confirmation."
         );
         reply.agent_context = Some(
             reply
@@ -428,9 +495,6 @@ fn response(
                 .as_str()
                 .unwrap_or_default(),
         ));
-    }
-    if receipt["disposition"] == "allowed" && receipt["ask_fallback"] == "allow" {
-        return Some(fallback_reply(root, adapter, receipt, operation, session));
     }
     let path = receipt["protected_path"]
         .as_str()
@@ -498,18 +562,15 @@ fn policy_denial(
         && let Some(detail) = receipt["diagnostics"]["message"].as_str()
     {
         // An unmet requirement is fixed in the request, not by a new rule.
-        let unmet = receipt["diagnostics"]["requirement_checks"]
+        let checks = receipt["diagnostics"]["requirement_checks"]
             .as_array()
-            .is_some_and(|checks| checks.iter().any(|check| check["status"] != "met"));
+            .map_or_default(Vec::as_slice);
+        let unmet = checks.iter().any(|check| check["status"] != "met");
         // A path outside the approved folders is named; when its folder is
         // narrow, adding that folder is offered as a complete proposal.
-        let unavailable = receipt["diagnostics"]["requirement_checks"]
-            .as_array()
-            .is_some_and(|checks| {
-                checks
-                    .iter()
-                    .any(|check| check["code"] == "evidence_unavailable")
-            });
+        let unavailable = checks
+            .iter()
+            .any(|check| check["code"] == "evidence_unavailable");
         let outside = receipt["outside_path"]["path"].as_str();
         let folder = outside.and_then(|_| {
             draft(
@@ -521,20 +582,41 @@ fn policy_denial(
                 entry,
             )
         });
-        // The offer below replaces a rule's own advice about folders.
-        let why = guidance["message"]
-            .as_str()
-            .unwrap_or(detail)
-            .trim_end_matches('.');
         value.reason = match (outside, folder) {
             (Some(path), Some(offer)) => format!(
-                "Shield: blocked because `{path}` is outside the folders agents may use. {why}. {offer}"
+                "Shield: blocked because `{path}` is outside the folders agents may use. {offer}"
             ),
             (Some(path), None) => format!(
-                "Shield: blocked because `{path}` is outside the folders agents may use. {why}. Its folder would open far more than this request needs, so do not propose it; work inside the project or ask the user."
+                "Shield: blocked because `{path}` is outside the folders agents may use. {}Its folder would open far more than this request needs, so do not propose it. Use a narrower path or ask the user.",
+                guidance["message"]
+                    .as_str()
+                    .map_or_else(String::new, |message| format!("{message} "))
             ),
             (None, _) if unavailable => {
-                "Shield could not complete a required verification. Diagnose the failed requirement and its resource evidence before requesting more permission. Do not infer missing folder access from evidence_unavailable; write access already includes reads. Use the exact one-time approval route if the request is needed during diagnosis.".into()
+                let detail = crate::agent_message::resource_failure(&receipt["diagnostics"])
+                    .unwrap_or_else(|| "Shield could not complete a required verification.".into());
+                let inspect = entry.map_or_else(
+                    || "Inspect the failed requirement in the recorded evaluation".into(),
+                    |id| {
+                        format!(
+                            "Inspect the failed requirement with history_show and entry_id {id}"
+                        )
+                    },
+                );
+                format!(
+                    "{detail} {inspect} before retrying. Another folder approval cannot resolve missing evidence."
+                )
+            }
+            (None, _)
+                if checks
+                    .iter()
+                    .any(|check| check["code"] == "location_outside") =>
+            {
+                let rule = crate::agent_message::denial_detail(&receipt["diagnostics"])
+                    .unwrap_or_else(|| "Inspect the matching rule before retrying.".into());
+                format!(
+                    "Shield: an affected path does not meet the matching rule's location requirement. {rule}"
+                )
             }
             (None, _) if unmet => {
                 format!("Shield: blocked in this form; a revised request can pass. {detail}")
@@ -594,38 +676,6 @@ fn existing_prompt(adapter: &dyn AgentAdapter, event: Event, receipt: &Value) ->
             reason: String::new(),
             agent_context: None,
         })
-}
-
-fn fallback_reply(
-    root: &Path,
-    adapter: &dyn AgentAdapter,
-    receipt: &Value,
-    operation: &Value,
-    session: &str,
-) -> Reply {
-    let guidance = &receipt["diagnostics"]["guidance"][0];
-    let entry = receipt["history"]["request_id"].as_str();
-    let mut reason =
-        "Shield: policy asks for approval; your configured Ask fallback allows this request."
-            .to_owned();
-    if let Some(offer) = packs::offer(root, adapter, guidance, entry) {
-        reason.push(' ');
-        reason.push_str(&offer);
-        return permitted(&reason);
-    }
-    if let Some(detail) = receipt["diagnostics"]["message"].as_str() {
-        reason.push(' ');
-        reason.push_str(detail);
-    }
-    // Asked commands are collected per session; after the task the agent
-    // drafts generic rules for the harmless ones and offers them together,
-    // where a question cannot interrupt the work. Whether a pack asks for a
-    // project rule travels with each suggestion.
-    let _ = operation;
-    permitted(&format!(
-        "{reason} After the task, call suggestion_list with session_id {}. Offer one grouped custom-rule review only for eligible recurring requests or an explicit user request.",
-        json!(session)
-    ))
 }
 
 fn sensitive_prompt(
@@ -757,7 +807,11 @@ mod tests {
         .unwrap();
         let context = reply.agent_context.unwrap();
         assert!(
-            context.contains("write access already includes reads"),
+            context.contains("Another folder approval cannot resolve missing evidence"),
+            "{context}"
+        );
+        assert!(
+            context.contains("Inspect the failed requirement"),
             "{context}"
         );
         assert!(!context.contains("access_path_add"), "{context}");
@@ -863,56 +917,23 @@ mod tests {
     }
 
     #[test]
-    fn automatic_fallback_retains_initial_project_review_guidance() {
+    fn automatic_fallback_suppresses_diagnostics_and_grant_hints() {
         let root = assert_fs::TempDir::new().unwrap();
-        let receipt = serde_json::json!({"diagnostics":{
-            "message":"Inspect script definitions and propose a narrow rule with policy_propose for user review.",
-            "guidance":[{"source":"decisive","request":{"executable":"pnpm","arguments":["run","acme-check"]}}]}});
-        let reply = fallback_reply(
+        let receipt = json!({"code":"approval-required","decision":"ask",
+            "disposition":"allowed","ask_fallback":"allow",
+            "diagnostics":{"message":"Shield cannot inspect the code the interpreter runs."},
+            "session_context":{"offer_hint":true,"session_ref":"acme-session-ref"}});
+        let reply = respond(
             root.path(),
             crate::agents::find("codex").unwrap(),
+            Event::Before,
             &receipt,
-            &serde_json::json!({"kind":"shell"}),
+            &json!({"kind":"shell"}),
             "acme-session",
-        );
+        )
+        .unwrap();
         assert!(reply.decision == Decision::Allow);
-        assert!(reply.reason.contains("configured Ask fallback"));
-        assert!(reply.reason.contains("Inspect script definitions"));
-        assert!(!reply.reason.contains("user approved"));
-    }
-
-    #[test]
-    fn fallback_collects_every_asked_command_for_the_session_suggestions() {
-        let root = assert_fs::TempDir::new().unwrap();
-        let adapter = crate::agents::find("codex").unwrap();
-        let receipt = |rule_ref: Value, alternative: &str| {
-            serde_json::json!({"diagnostics":{"guidance":[
-                {"source":"decisive","request":{"executable":"npm","arguments":["run","dev"]},
-                    "alternatives":[alternative]},
-                {"rule_ref":rule_ref,"alternatives":[alternative]}]}})
-        };
-        let invites = receipt(
-            serde_json::json!({"pack_selector":"acme/node","rule_id":"npm-scripts","scope":"pack"}),
-            "Inspect script definitions. If appropriate, propose a narrow project rule with policy_propose.",
-        );
-        let shell = serde_json::json!({"kind":"shell"});
-        // Every asked command is collected for the end of the task, whether
-        // or not a pack rule invites a rule.
-        let generic = receipt(
-            Value::Null,
-            "If it should run without asking, propose a pack or rule that covers it with policy_propose.",
-        );
-        for receipt in [&invites, &generic] {
-            let collected = fallback_reply(root.path(), adapter, receipt, &shell, "acme-session");
-            assert!(collected.decision == Decision::Allow);
-            assert!(
-                collected
-                    .reason
-                    .contains(r#"call suggestion_list with session_id "acme-session""#),
-                "{}",
-                collected.reason
-            );
-            assert!(!collected.reason.contains("policy_propose with change"));
-        }
+        assert_eq!(reply.reason, "");
+        assert!(reply.agent_context.is_none());
     }
 }

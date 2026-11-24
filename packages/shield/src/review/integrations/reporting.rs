@@ -3,6 +3,36 @@ use super::{Registration, State, agents, json, native};
 use serde_json::Value;
 use std::{collections::BTreeMap, path::Path};
 
+/// A connected administration server is not an enforcement plugin. Inspection
+/// reads one bounded native file and never adopts a publisher's ownership.
+pub(super) fn mcp_only(
+    root: &Path,
+    registered: Option<&Registration>,
+    diagnostics: &mut Vec<&'static str>,
+) -> Vec<Value> {
+    let agent = "opencode";
+    if registered.is_some_and(|r| r.agents.contains_key(agent)) {
+        return Vec::new();
+    }
+    let adapter = agents::find(agent).expect("OpenCode adapter");
+    let found = super::files::read(root, adapter.spec().mcp_path.expect("OpenCode MCP file"))
+        .and_then(|source| {
+            source
+                .map(|source| adapter.has_mcp_entry(&source))
+                .transpose()
+        });
+    match found {
+        Ok(Some(true)) => {
+            diagnostics.push("OpenCode Shield MCP is configured without a registered enforcement plugin; review mcp_setup with agents: [opencode]. MCP access alone does not enforce tool calls");
+            vec![
+                json!({"agent":agent,"surface":"mcp","status":"plugin-not-registered",
+                "setup":{"tool":"mcp_setup","arguments":{"agents":[agent]}},"live_host_verification":"unverified"}),
+            ]
+        }
+        _ => Vec::new(),
+    }
+}
+
 pub(super) fn host_hooks(
     root: &Path,
     registered: Option<&Registration>,

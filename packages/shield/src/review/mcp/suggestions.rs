@@ -47,6 +47,10 @@ fn collected(
                     "pack_requests_rule":proposal_draft::invited(guidance, &item["operation_ref"])});
                 if let Some(web) = web {
                     row["suggested_change"] = web;
+                } else if proposal_draft::check_executable_setting(item)
+                    && let Some(cwd) = &request.literal_cwd
+                {
+                    row["binding_cwd"] = json!(cwd);
                 }
                 capped |= !push(&mut rows, request, &identity, row, context);
             }
@@ -81,9 +85,17 @@ pub(super) fn list_page(context: &Context, args: &Value) -> Result<Value, Error>
     let session = super::text(args, "session_id")?.or(context.session_id.as_deref());
     let (data, state) = collected(context, session);
     let roots = crate::agents::machine_roots(Path::new(&context.project_root));
+    let binding_lookup = super::super::packs::binding_advice::Lookup::default();
     let query = crate::review::page::query(context, "suggestion_list", args);
     crate::review::page::bounded_with("suggestion_list", &query, data, "requests", |mut row| {
-        if row.get("request").is_some() {
+        let binding_cwd = row
+            .as_object_mut()
+            .and_then(|row| row.remove("binding_cwd"));
+        let binding_action = binding_cwd
+            .as_ref()
+            .and_then(Value::as_str)
+            .and_then(|cwd| binding_lookup.action(context, &row["request"], cwd));
+        if binding_action.is_none() && row.get("request").is_some() {
             let portable = if row.get("suggested_change").is_some() {
                 crate::policy::rules::portability::check(&row["suggested_change"]["rule"], &roots)
             } else {
@@ -94,7 +106,13 @@ pub(super) fn list_page(context: &Context, args: &Value) -> Result<Value, Error>
             }
         }
         let mut page = [row];
-        annotate(&mut page, &state, session, context.agent.as_deref());
+        annotate(
+            &mut page,
+            &state,
+            session,
+            context.agent.as_deref(),
+            binding_action.as_ref(),
+        );
         let [row] = page;
         row
     })
@@ -105,6 +123,7 @@ fn annotate(
     state: &Result<crate::review::model::State, Error>,
     session: Option<&str>,
     agent: Option<&str>,
+    binding_action: Option<&Value>,
 ) {
     let offered = state
         .as_ref()
@@ -146,6 +165,7 @@ fn annotate(
                 && row["session_id"].is_string()
                 && row["decided_as"] != "unresolved"
                 && row.get("not_portable").is_none()
+                && binding_action.is_none()
         );
         row["review_status"] = json!(if dismissed {
             "deferred"
@@ -164,6 +184,8 @@ fn annotate(
         } else if row["decided_as"] == "unresolved" {
             json!({"tool":"history_list","arguments":{"entry_id":row["source_entry_id"]},
                 "instruction":"Inspect the recorded source and effects. Partial analysis is evidence, not an executable rule draft."})
+        } else if let Some(action) = binding_action {
+            action.clone()
         } else {
             json!({"instruction":crate::proposal_draft::COMMAND_OFFER,
                 "proposal_context":{"source_entry_id":row["source_entry_id"],"review_ids":[row["review_id"]]},

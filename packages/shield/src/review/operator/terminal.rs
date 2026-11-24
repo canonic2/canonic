@@ -46,9 +46,44 @@ impl Terminal {
     ) -> Result<Step<Vec<String>>, Error> {
         inline::agents(self.host(16)?, choices, marked, remove, back)
     }
-    pub(super) fn confirm_mcp(&mut self, value: &Value) -> Result<(), Error> {
-        self.display(value)?;
-        inline::confirm_mcp(self.host(12)?)
+    pub(super) fn confirm_admin(&mut self, value: &Value, project: &str) -> Result<(), Error> {
+        use super::presentation::admin::{exact_details, review};
+        let (summary, requires_details) = review(value, project).terminal();
+        write!(self.output, "{summary}")?;
+        let cancel = ("cancel", "Cancel", "Leave this change unapplied");
+        let apply = ("apply", "Apply change", "Confirm the reviewed scope");
+        let details = (
+            "details",
+            "Inspect details",
+            "Show the exact captured settings, including private values",
+        );
+        let title = "Review and confirm";
+        let prompt = "Apply the captured change?";
+        let action = if requires_details {
+            self.choose(
+                title,
+                "Inspect the captured details before applying.",
+                &[cancel, details],
+                "cancel",
+            )?
+        } else {
+            self.choose(title, prompt, &[cancel, apply, details], "cancel")?
+        };
+        let action = if action == "details" {
+            writeln!(
+                self.output,
+                "\nExact details for the captured change\n{}\n",
+                exact_details(value)?
+            )?;
+            self.choose(title, prompt, &[cancel, apply], "cancel")?
+        } else {
+            action
+        };
+        if action == "apply" {
+            Ok(())
+        } else {
+            Err(Error::Cancelled)
+        }
     }
     pub(super) fn required(json: bool) -> Result<Self, Error> {
         if json {

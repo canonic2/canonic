@@ -183,7 +183,11 @@ impl AgentAdapter for Codex {
             };
         }
         if r.decision == Decision::Allow {
-            json!({"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":r.reason}})
+            let mut value = json!({"hookSpecificOutput":{"hookEventName":"PreToolUse"}});
+            if !r.reason.is_empty() {
+                value["hookSpecificOutput"]["additionalContext"] = json!(r.reason);
+            }
+            value
         } else {
             let mut value = json!({"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":r.reason}});
             if let Some(context) = &r.agent_context {

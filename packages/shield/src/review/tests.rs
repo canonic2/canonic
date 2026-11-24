@@ -42,7 +42,7 @@ pub(super) fn propose(
         input,
         checkpoint,
         &mut |_, _, _, _| Ok(()),
-        &|row| row.public(),
+        &|row| Ok(row.public()),
     )
 }
 pub(super) fn receipt(context: &Context, id: &str) -> Value {
@@ -137,7 +137,7 @@ fn a_prepared_proposal_refuses_a_concurrently_activated_base() {
             operator::commit_proposal_fixture(&context, other["proposal_id"].as_str().unwrap())?;
             Ok(())
         },
-        &|row| row.public(),
+        &|row| Ok(row.public()),
     );
     assert!(matches!(result, Err(Error::StaleSnapshot)));
     let state = Store::open(root.path()).unwrap().read_checkpoint().unwrap();

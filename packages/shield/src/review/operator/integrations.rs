@@ -31,6 +31,63 @@ pub(super) enum Baseline {
     Selected(crate::policy::Profile),
 }
 
+pub(super) fn project_setup(
+    root: &Path,
+    agents: &[String],
+    profile: Option<crate::policy::Profile>,
+    json_mode: bool,
+    cache_dir: Option<&Path>,
+) -> Result<Value, Error> {
+    let checkpoint = &|| Ok(());
+    if !crate::layout::discovery_root(root) {
+        if !review::setup::first_run_target_allowed(root, std::env::home_dir().as_deref()) {
+            return Err(Error::Invalid(
+                "choose a project folder below or outside your home directory",
+            ));
+        }
+        let agents = review::setup::agents(root, &Value::Null, agents, None)?;
+        let mut terminal = Terminal::required(json_mode)?;
+        terminal.progress("Preparing Shield setup for review…")?;
+        let plan = review::initialization::Onboarding::prepare(
+            root,
+            profile.unwrap_or_default(),
+            &agents,
+        )?;
+        terminal.confirm_admin(plan.review(), &root.to_string_lossy())?;
+        let receipt = plan.commit(checkpoint, "cli", cache_dir)?;
+        return Ok(review::setup::receipt(root, receipt, "initialized"));
+    }
+    if cache_dir.is_some() {
+        return Err(Error::Invalid(
+            "use shield mcp setup --cache-dir to move an existing project's compiled policy folder",
+        ));
+    }
+    let context = review::open(root)?;
+    if agents.is_empty()
+        && profile.is_none()
+        && review::integrations::setup::resume_confirmed(&context)?
+    {
+        return Ok(review::setup::receipt(
+            root,
+            review::project::status(&context)?,
+            "resumed",
+        ));
+    }
+    let mut args = json!({});
+    if !agents.is_empty() {
+        args["agents"] = json!(agents);
+    }
+    if let Some(profile) = profile {
+        args["profile"] = json!(profile);
+    }
+    let plan = review::admin::prepare(&context, review::setup::TOOL, &args, checkpoint)?;
+    if let Some(receipt) = plan.committed_result() {
+        return Ok(receipt);
+    }
+    Terminal::required(json_mode)?.confirm_admin(plan.review_ref(), &context.project_root)?;
+    plan.commit(&context, checkpoint)
+}
+
 pub(super) fn initialize_in_cache(
     start: &Path,
     choice: Option<IntegrationChoice>,
@@ -117,7 +174,7 @@ pub(super) fn recover(
         return Ok(prepared.public_review());
     }
     let mut terminal = Terminal::required(json_mode)?;
-    terminal.confirm_mcp(&prepared.review())?;
+    terminal.confirm_admin(prepared.review_ref(), &context.project_root)?;
     prepared.commit(context, &|| Ok(()))
 }
 
@@ -128,6 +185,24 @@ pub(super) fn setup_review(
     reset_tool_permissions: bool,
 ) -> Result<Value, Error> {
     workflow::review(context, choice, json_mode, reset_tool_permissions)
+}
+
+pub(super) fn repair(
+    context: &Context,
+    options: &crate::cli::public::Setup,
+    json_mode: bool,
+) -> Result<Value, Error> {
+    let prepared = review::admin::prepare(
+        context,
+        "mcp_setup",
+        &json!({"agents":options.agents,"repair":true,"dry_run":options.dry_run}),
+        &|| Ok(()),
+    )?;
+    if options.dry_run {
+        return Ok(prepared.public_review());
+    }
+    Terminal::required(json_mode)?.confirm_admin(prepared.review_ref(), &context.project_root)?;
+    prepared.commit(context, &|| Ok(()))
 }
 
 #[cfg(test)]

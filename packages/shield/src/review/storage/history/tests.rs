@@ -229,7 +229,7 @@ fn busy_history_skips_decisions_and_bounds_completion_retries() {
             Err(Error::Locked)
         ));
     }
-    assert_eq!(request.recorded_count("history.lock_waits"), 9);
+    assert_eq!(request.recorded_count("history.lock_waits"), 500);
     assert_eq!(request.recorded_count("state.checkpoint_reads"), 0);
     assert_eq!(request.recorded_count("history.appended_records"), 0);
     request.finish("dropped");

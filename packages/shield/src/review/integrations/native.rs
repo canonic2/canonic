@@ -12,6 +12,8 @@ use std::path::Path;
 pub(in crate::review) struct Installation {
     pub(in crate::review) groups: HookGroups,
     mcp: Option<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub(in crate::review) mcp_borrowed: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     settings: Option<serde_json::Value>,
 }
@@ -171,6 +173,7 @@ fn installation(
             .mcp_path
             .map(|_| adapter.mcp_entry(binary, root, approved)),
         settings: None,
+        mcp_borrowed: false,
     })
 }
 
@@ -212,6 +215,7 @@ pub(super) fn migrate_owned(
         .groups
         .retain(|event, _| previous.groups.contains_key(event));
     desired.settings.clone_from(&previous.settings);
+    desired.mcp_borrowed = previous.mcp_borrowed;
     let permitted = known_groups(adapter, binary, roots, &desired.groups)?;
     if previous.groups.iter().any(|(event, group)| {
         !permitted
@@ -405,18 +409,25 @@ pub(in crate::review) fn capture_matching(
         groups: adapter.capture_hooks(before.as_deref(), &expected.groups)?,
         mcp: None,
         settings: None,
+        mcp_borrowed: false,
     };
     if let Some(path) = adapter.spec().mcp_path {
         let before = files::read(root, path)?;
         if let Some(bytes) = before.as_deref()
             && adapter.has_mcp_entry(bytes)?
         {
-            captured.mcp.clone_from(&expected.mcp);
+            let borrowed = adapter.borrow_mcp_entry(bytes, binary, root)?;
+            captured.mcp_borrowed = borrowed.is_some();
+            captured.mcp = borrowed.or_else(|| expected.mcp.clone());
         }
         adapter.merge_mcp(
             before.as_deref(),
             captured.mcp.as_deref(),
-            expected.mcp.as_deref(),
+            if captured.mcp_borrowed {
+                captured.mcp.as_deref()
+            } else {
+                expected.mcp.as_deref()
+            },
         )?;
     }
     Ok(
@@ -486,8 +497,33 @@ fn prepare_adapter(
         }
         Ok((desired.is_some() || !settings.source.trim().is_empty()).then_some(settings.source))
     })?;
+    // A borrowed entry belongs to the external publisher. Removing Shield's
+    // hooks has no dependency on the publisher retaining its entry or file.
+    if desired.is_none() && previous.is_some_and(|p| p.mcp_borrowed) {
+        return Ok(None);
+    }
     if let Some(path) = adapter.spec().mcp_path {
         files::edit_optional(root, changes, path, |source| {
+            let borrowed = if let Some(previous) = previous.filter(|p| p.mcp_borrowed) {
+                previous.mcp.clone()
+            } else if previous.is_none() {
+                match source.zip(binary) {
+                    Some((source, binary)) => adapter.borrow_mcp_entry(source, binary, root)?,
+                    None => None,
+                }
+            } else {
+                None
+            };
+            if let Some(entry) = borrowed {
+                // Validate the reserved entry while retaining original file bytes.
+                // The no-op Change binds this dependency to confirmation/recovery.
+                validate_borrowed_mcp(adapter, source, &entry)?;
+                if let Some(desired) = &mut desired {
+                    desired.mcp = Some(entry);
+                    desired.mcp_borrowed = true;
+                }
+                return Ok(source.map(str::to_owned));
+            }
             let new = desired.as_ref().and_then(|p| p.mcp.as_deref());
             let merged = if repair_hooks {
                 adapter.repair_mcp(source, new)?
@@ -500,6 +536,19 @@ fn prepare_adapter(
         })?;
     }
     Ok(desired)
+}
+
+fn validate_borrowed_mcp(
+    adapter: &dyn AgentAdapter,
+    source: Option<&str>,
+    entry: &str,
+) -> Result<(), Error> {
+    if !source.is_some_and(|source| adapter.has_mcp_entry(source).unwrap_or(false)) {
+        return Err(Error::Invalid("borrowed Shield MCP entry is missing"));
+    }
+    adapter
+        .merge_mcp(source, Some(entry), Some(entry))
+        .map(|_| ())
 }
 
 pub(in crate::review) fn diagnose(
@@ -544,6 +593,15 @@ pub(in crate::review) fn diagnose(
         .map(|path| files::read(root, path))
         .transpose()?
         .flatten();
+    if installation.mcp_borrowed
+        && let Some(entry) = installation.mcp.as_deref()
+        && let Err(error) = validate_borrowed_mcp(adapter, extra.as_deref(), entry)
+    {
+        match error {
+            Error::Invalid(reason) => diagnostics.push(reason),
+            other => return Err(other),
+        }
+    }
     adapter.diagnose(
         hooks.as_deref(),
         &installation.groups,

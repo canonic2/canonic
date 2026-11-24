@@ -9,7 +9,7 @@ import { products } from '../../lib/marks.js';
 import { download, github, pages, shieldNav } from '../../lib/shield.js';
 
 const mark = products.find(product => product.name === 'Shield');
-const quickStart = 'shield init\nshield status\nshield doctor';
+const quickStart = 'shield setup\nshield status\nshield doctor';
 const packs = 'shield pack search node\nshield pack add node --profile strict\nshield pack update';
 const install = 'git clone https://github.com/canonic2/canonic.git\ncd canonic/packages/shield\ncargo xtask install';
 const { t, href } = websiteLocale(Astro.url, base);
@@ -37,7 +37,7 @@ const { t, href } = websiteLocale(Astro.url, base);
   <section class="features band">
     <div class="wrap">
       <Feature id="permissions" kicker={t("Project policy")} title={t("Start with rules you can review.")}>
-        <p><TextWithCode text={t('{command} installs a signed baseline pack and connects your agents. Pick a Loose, Recommended or Strict profile, then review and confirm the changes.')} code={{ command: 'shield init' }} /></p>
+        <p><TextWithCode text={t('{command} installs a signed baseline pack and connects your agents. Pick a Loose, Recommended or Strict profile, then review and confirm the changes.')} code={{ command: 'shield setup' }} /></p>
         <p>{t('Add permission packs for the tools you use, or write precise YAML or JSON rules for commands, arguments, paths and web addresses. Agents can propose rules; changes need your confirmation.')}</p>
         <div class="feature-media" slot="media"><CodeBlock file={t('Permission packs')} code={packs} copies="the permission-pack commands" /></div>
       </Feature>

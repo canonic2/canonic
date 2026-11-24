@@ -1,5 +1,4 @@
 //! Canonical project MCP tools with connection-owned diagnostic and paging evidence.
-mod admin_pages;
 mod apply;
 mod confirmation;
 
@@ -275,6 +274,7 @@ const SESSION_CONFIRMATION: Refusal = Refusal {
 /// A shared review error, or an MCP refusal with its own recovery.
 enum Failure {
     Review(Error),
+    SetupApprovalRequired(Value),
     Refused(&'static Refusal),
     /// Deferrals survive reconnects, so the bound refuses instead of forgetting one.
     DeferralsFull,
@@ -293,7 +293,7 @@ impl From<crate::policy::Error> for Failure {
 
 /// A retained administrative plan, kept until it is answered, discarded or its
 /// connection ends; age never discards it.
-type AdminReview = (String, super::admin::Prepared, Option<admin_pages::Pages>);
+type AdminReview = (String, super::admin::Prepared);
 
 pub(crate) struct Connection {
     owner: Mutex<Option<super::proposal_lifecycle::Lease>>,
@@ -382,6 +382,7 @@ fn admin_key(name: &str, args: &Value) -> String {
 /// Explicit conflict review/cancellation must inspect that plan before writes.
 pub(crate) fn resume_setup(context: &Context, name: &str, args: &Value) -> Result<bool, Error> {
     if !schemas::mutates(name)
+        || (name == super::setup::TOOL && !setup_resume_only(name, args))
         || (name == "mcp_setup"
             && (!args["pending"].is_null()
                 || args["dry_run"] == true
@@ -393,12 +394,13 @@ pub(crate) fn resume_setup(context: &Context, name: &str, args: &Value) -> Resul
 }
 
 pub(crate) fn setup_resume_only(name: &str, args: &Value) -> bool {
-    name == "mcp_setup" && args == &json!({})
+    matches!(name, "mcp_setup" | super::setup::TOOL) && args == &json!({})
 }
 
 pub(crate) fn setup_resume_status(
     context: &Context,
     connection: &Connection,
+    name: &str,
     error: Option<&Error>,
     checkpoint: Checkpoint<'_>,
 ) -> Value {
@@ -413,6 +415,19 @@ pub(crate) fn setup_resume_status(
     );
     if let Some(error) = error {
         value["data"]["setup_error"] = json!(error.to_string());
+        if name == super::setup::TOOL {
+            value["data"]["next_action"] = json!(
+                "Call mcp_setup with pending: review to inspect the conflict, or pending: cancel to review cancellation."
+            );
+            value["data"]["pending_setup"] = json!({"review":{"tool":"mcp_setup","arguments":{"pending":"review"}},"cancel":{"tool":"mcp_setup","arguments":{"pending":"cancel"}}});
+        }
+    } else if name == super::setup::TOOL && value["data"].is_object() {
+        let status = value["data"].take();
+        value["data"] = super::setup::receipt(
+            std::path::Path::new(&context.project_root),
+            status,
+            "resumed",
+        );
     }
     value
 }
@@ -444,20 +459,19 @@ pub(crate) fn admin_confirmation(
     }
     checkpoint()?;
     {
-        let mut pending = connection.admin.lock().map_err(|_| Error::Locked)?;
-        let key = admin_key(name, args);
-        if let Some((id, entry)) = pending.iter_mut().find(|(_, (candidate, _, pages))| {
-            *candidate == key && pages.as_ref().is_some_and(|pages| !pages.awaiting)
-        }) {
-            let message = entry.2.as_mut().expect("paged review").present()?;
-            return Ok(Some((message, *id)));
-        }
+        let pending = connection.admin.lock().map_err(|_| Error::Locked)?;
         if pending.len() >= 8 {
             return Err(Error::Overloaded);
         }
     }
     let prepared = super::admin::prepare(context, name, args, checkpoint)?;
     let reconciled = prepared.committed_result().is_some();
+    let message = if reconciled {
+        String::new()
+    } else {
+        super::operator::administrative_review(prepared.review_ref(), &context.project_root)
+            .form()?
+    };
     checkpoint()?;
     let key = admin_key(name, args);
     let mut pending = connection
@@ -467,32 +481,10 @@ pub(crate) fn admin_confirmation(
     if pending.len() >= 8 {
         return Err(Error::Overloaded);
     }
-    let review = prepared.review();
-    let mut message = if reconciled {
-        String::new()
-    } else {
-        format!(
-            "Confirm this Shield administrative change?\n{}",
-            serde_json::to_string_pretty(&review)
-                .map_err(|_| Error::Invalid("administrative review encoding"))?
-        )
-    };
-    let mut pages = if message.len() > 48 * 1024 {
-        Some(admin_pages::Pages::new(&message)?)
-    } else {
-        None
-    };
-    if let Some(pages) = &mut pages {
-        pages.context = format!(
-            "Tool: {name}. Project: {}.",
-            review["project"].as_str().unwrap_or(&context.project_root)
-        );
-        message = pages.present()?;
-    }
     let id = connection
         .admin_sequence
         .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    pending.insert(id, (key, prepared, pages));
+    pending.insert(id, (key, prepared));
     Ok((!reconciled).then_some((message, id)))
 }
 
@@ -504,7 +496,13 @@ fn admin_call(
     checkpoint: Checkpoint<'_>,
     confirmed: bool,
     binding: Option<u64>,
-) -> Result<Value, Error> {
+) -> Result<Value, Failure> {
+    let approval_required = |prepared: &super::admin::Prepared| {
+        prepared.setup_operator_action().map_or(
+            Failure::Review(Error::ApprovalRequired),
+            Failure::SetupApprovalRequired,
+        )
+    };
     let retained = if let Some(binding) = binding {
         connection
             .admin
@@ -514,50 +512,34 @@ fn admin_call(
     } else {
         let mut pending = connection.admin.lock().map_err(|_| Error::Locked)?;
         let key = admin_key(name, args);
-        let completed = pending.iter().find_map(|(id, (candidate, prepared, _))| {
+        let completed = pending.iter().find_map(|(id, (candidate, prepared))| {
             (candidate == &key && prepared.committed_result().is_some()).then_some(*id)
         });
         completed.and_then(|id| pending.remove(&id))
     };
-    if let Some((key, prepared, mut pages)) = retained {
-        if !confirmed && prepared.committed_result().is_none() {
-            return Err(Error::ApprovalRequired);
-        }
+    if let Some((key, prepared)) = retained {
         if key != admin_key(name, args) {
-            return Err(Error::StaleSnapshot);
+            return Err(Error::StaleSnapshot.into());
         }
-        if let Some(page_state) = &mut pages {
-            if !page_state.awaiting {
-                return Err(Error::StaleSnapshot);
-            }
-            page_state.awaiting = false;
-            page_state.accepted += 1;
-            if !page_state.remaining.is_empty() {
-                checkpoint()?;
-                let result = json!({"review_status":"more_pages","applied":false,
-                    "reviewed_pages":page_state.accepted,"total_pages":page_state.total,
-                    "retry_tool":name,"retry_arguments":args,
-                    "next_action":"Call the same tool with the exact retry_arguments to present the next human confirmation page. Nothing applies until every page is accepted. Declining or cancelling discards this review."});
-                let id = connection
-                    .admin_sequence
-                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                let mut pending = connection.admin.lock().map_err(|_| Error::Locked)?;
-                if pending.len() >= 8 {
-                    return Err(Error::Overloaded);
-                }
-                pending.insert(id, (key, prepared, pages.take()));
-                return Ok(result);
-            }
+        if !confirmed && prepared.committed_result().is_none() {
+            return Err(approval_required(&prepared));
         }
-        return prepared.commit(context, checkpoint);
+        return prepared.commit(context, checkpoint).map_err(Into::into);
     }
     if name == "mcp_setup" && args["dry_run"] == true {
         return Ok(super::admin::prepare(context, name, args, checkpoint)?.public_review());
     }
+    if name == super::setup::TOOL && !confirmed {
+        let prepared = super::admin::prepare(context, name, args, checkpoint)?;
+        if let Some(receipt) = prepared.committed_result() {
+            return Ok(receipt);
+        }
+        return Err(approval_required(&prepared));
+    }
     Err(if confirmed {
-        Error::StaleSnapshot
+        Error::StaleSnapshot.into()
     } else {
-        Error::ApprovalRequired
+        Error::ApprovalRequired.into()
     })
 }
 #[cfg(test)]
@@ -653,15 +635,15 @@ pub(crate) fn call_with_bound_confirmation(
         {
             apply::present(context, &mut data)?;
         }
-        if [
-            "policy_show",
-            "policy_propose",
-            "pack_update",
-            "pack_remove",
-            "pack_configure",
-            "policy_withdraw",
-        ]
-        .contains(&name)
+        if (name == "policy_show" && args["proposal_id"].is_string() && args["section"].is_null())
+            || [
+                "policy_propose",
+                "pack_update",
+                "pack_remove",
+                "pack_configure",
+                "policy_withdraw",
+            ]
+            .contains(&name)
         {
             bound_policy_result(&mut data)?;
         }
@@ -787,6 +769,16 @@ fn result_envelope_data(context: &Context, name: &str, result: Result<ToolData, 
             }
             value
         }
+        Err(Failure::SetupApprovalRequired(action)) => {
+            let mut value = refused(
+                context,
+                "approval_unavailable",
+                "The host could not present the Shield setup review. Ask the user to run the returned command in a terminal to review it.",
+                Some("shield setup"),
+            );
+            value["error"]["operator_action"] = action;
+            value
+        }
         Err(Failure::Documentation(error)) => {
             let (code, message) = documentation::error_fields(&error);
             refused(context, code, &message, None)
@@ -847,14 +839,103 @@ pub(crate) fn admin_route(name: &str) -> Option<&'static str> {
         "policy_reject" => "shield policy reject",
         "history_configure" => "shield history configure",
         "mcp_setup" => "shield mcp setup",
+        super::setup::TOOL => "shield setup",
         _ => return None,
     })
+}
+
+pub(crate) fn admin_form_error(
+    context: &Context,
+    name: &str,
+    args: &Value,
+    error: &Error,
+) -> Value {
+    let mut value = admin_error(context, name, error);
+    if super::operator::administrative_form_refusal(error).is_some()
+        && let Some(action) = operator_action(context, name, args)
+    {
+        value["error"]["operator_route"] = json!(admin_route(name));
+        value["error"]["operator_action"] = action;
+    }
+    value
+}
+
+fn operator_action(context: &Context, name: &str, arguments: &Value) -> Option<Value> {
+    use std::path::Path;
+    let root = arguments["project"]
+        .as_str()
+        .unwrap_or(&context.project_root);
+    if name == super::setup::TOOL {
+        return Some(super::setup::operator_action(Path::new(root), arguments));
+    }
+    let mut argv = vec![json!("--project"), json!(root)];
+    argv.extend(
+        admin_route(name)?
+            .split_whitespace()
+            .skip(1)
+            .map(|word| json!(word)),
+    );
+    let mut action = json!({"command":"shield"});
+    match name {
+        "mcp_setup" => {
+            for agent in arguments["agents"].as_array().into_iter().flatten() {
+                argv.extend([json!("--agent"), agent.clone()]);
+            }
+            for flag in ["remove", "repair"] {
+                if arguments[flag] == true {
+                    argv.push(json!(format!("--{flag}")));
+                }
+            }
+            if let Some(pending) = arguments.get("pending") {
+                argv.extend([json!("--pending"), pending.clone()]);
+            }
+        }
+        "registry_add" | "registry_remove" | "registry_default" | "registry_trust" => {
+            if arguments["scope"] == "user" {
+                argv.extend([json!("--scope"), json!("user")]);
+            }
+            argv.extend([json!("--"), arguments["name"].clone()]);
+            if let Some(location) = arguments["location"].as_str() {
+                argv.push(if location.starts_with("https://") {
+                    json!(location)
+                } else {
+                    json!(Path::new(root).join(location))
+                });
+            }
+        }
+        "history_configure" => {
+            for field in ["enabled", "limit"] {
+                if let Some(value) = arguments.get(field).filter(|value| !value.is_null()) {
+                    argv.extend([json!(format!("--{field}")), json!(value.to_string())]);
+                }
+            }
+            if arguments["purge"] == true {
+                argv.push(json!("--purge"));
+            }
+        }
+        "policy_reject" => {
+            if let Some(reason) = arguments["reason"].as_str() {
+                argv.push(json!(format!("--reason={reason}")));
+            }
+            argv.extend([json!("--"), arguments["proposal_id"].clone()]);
+        }
+        "protection_set" => action["choices"] = arguments.clone(),
+        _ => {}
+    }
+    action["argv"] = json!(argv);
+    Some(action)
 }
 
 pub(crate) fn admin_error(context: &Context, name: &str, error: &Error) -> Value {
     let mut value = failure(context, error);
     if admin_route(name).is_some() {
         if matches!(error, Error::ApprovalRequired) {
+            if name == super::setup::TOOL {
+                value["error"]["message"] = json!(
+                    "This Shield setup change needs a human review. The host could not present it. Ask the user to review the returned command in a terminal."
+                );
+                return value;
+            }
             value["error"]["operator_route"] = Value::Null;
             value["error"]["message"] = json!(
                 "This administrative change requires supported in-session confirmation. Report the missing capability; do not send the user to a terminal or perform an unreviewed change."
@@ -864,7 +945,7 @@ pub(crate) fn admin_error(context: &Context, name: &str, error: &Error) -> Value
             value["error"]["message"] = json!(format!(
                 "This administrative review expired or its inputs changed. Call {name} again to prepare a fresh review; the person must confirm it."
             ));
-        } else if name == "mcp_setup"
+        } else if matches!(name, "mcp_setup" | super::setup::TOOL)
             && matches!(context.agent.as_deref(), Some("claude" | "codex"))
             && matches!(
                 error,
@@ -943,14 +1024,22 @@ fn failure(context: &Context, error: &Error) -> Value {
 fn refused(context: &Context, code: &str, message: &str, route: Option<&str>) -> Value {
     json!({"schema_version":1,"project_id":context.project_id,"policy_revision":null,"data":null,"missing":[],"truncated":false,"error":{"code":code,"message":message,"operator_route":route}})
 }
+const INLINE_POLICY_BYTES: usize = 16 * 1024;
+
 fn bound_policy_result(data: &mut Value) -> Result<(), Error> {
+    bound_policy_result_at(data, INLINE_POLICY_BYTES)
+}
+
+fn bound_policy_result_at(data: &mut Value, limit: usize) -> Result<(), Error> {
+    // Hosts may truncate structuredContent too, even when the compatibility
+    // text is compact. Keep approval arguments inline; reports retain detail.
     for field in [
         "rules",
         "comparison",
         "authorization_events",
         "project_rules",
     ] {
-        if crate::json::fits(data, 1024 * 1024) {
+        if crate::json::fits(data, limit) {
             return Ok(());
         }
         if data
@@ -967,7 +1056,7 @@ fn bound_policy_result(data: &mut Value) -> Result<(), Error> {
             data["truncated"] = json!(true);
         }
     }
-    if !crate::json::fits(data, 1024 * 1024) {
+    if !crate::json::fits(data, limit) {
         return Err(crate::policy::Error::Limit.into());
     }
     Ok(())
@@ -986,6 +1075,9 @@ fn error_fields(error: &Error) -> (&'static str, String) {
             "capacity_exceeded",
             "operator_review_required",
             "authorization_unavailable",
+            "confirmation_review_too_large",
+            "confirmation_review_requires_details",
+            "proposal_review_too_large",
         ] {
             if let Some(detail) = message
                 .strip_prefix(code)
@@ -1662,14 +1754,25 @@ fn propose_input(
             Ok(())
         },
         &|proposal| {
-            let data = apply::proposal_result(context, proposal);
+            let mut data = apply::proposal_result(context, proposal);
+            if data["apply_arguments"].is_object() {
+                // policy_show adds capture and authorization-event links. Leave
+                // room for those and the candidate handles added below.
+                bound_policy_result_at(&mut data, INLINE_POLICY_BYTES - 1024).map_err(|error| {
+                    if matches!(error, Error::Policy(crate::policy::Error::Limit)) {
+                        Error::Invalid("proposal_review_too_large: The approval review exceeds the response limit. Split the changes into smaller proposals and review each separately.")
+                    } else {
+                        error
+                    }
+                })?;
+            }
             presentation.replace(Some((
                 apply::argument_binding(context, proposal),
                 data["apply_arguments"].clone(),
                 super::publication::mcp_changed(&proposal.base_candidate, &proposal.candidate)
                     .unwrap_or(true),
             )));
-            data
+            Ok(data)
         },
     );
     let mut data = match result {

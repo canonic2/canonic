@@ -50,6 +50,9 @@ Options:
       --config <PATH>
           Shared configuration file; otherwise .shield/config.yml, then .config/shield/config.yml
 
+      --repair
+          Reconcile conflicting Shield entries for explicitly selected Claude or Codex agents
+
       --dry-run
           Show the review without writing anything
 

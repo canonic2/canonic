@@ -99,17 +99,10 @@ pub(in crate::review::packs) fn update(
     context: &Context,
     before: &State,
     reference: Option<&str>,
-) -> Result<(Value, Value), Error> {
+) -> Result<(Value, Value, Option<usize>), Error> {
     let mut retained = Retained::load(before)?;
     let aliases = super::super::current_aliases(&before.settings);
-    let requested = reference
-        .and_then(|reference| reference.rsplit_once('@'))
-        .map(|(_, version)| {
-            version
-                .parse::<semver::Version>()
-                .map_err(|_| Error::Invalid("update version must be an exact semantic version"))
-        })
-        .transpose()?;
+    let requested = requested_version(reference)?;
     let target = reference
         .map(|r| super::super::selection(&retained.rows, &aliases, r))
         .transpose()?;
@@ -125,6 +118,7 @@ pub(in crate::review::packs) fn update(
         return Ok((
             before.candidates["project"].clone(),
             before.operator.clone(),
+            target,
         ));
     }
     let mut roots = retained.roots(&seeds, &BTreeSet::new())?;
@@ -189,12 +183,34 @@ pub(in crate::review::packs) fn update(
         return Ok((
             before.candidates["project"].clone(),
             before.operator.clone(),
+            target,
         ));
     }
     let (candidate, rows) = render(before, &retained.rows, &selected, &retained.artifacts)?;
+    let target = target
+        .map(|index| {
+            let instance = &retained.releases[index].instance;
+            rows.as_array()
+                .ok_or(Error::Invalid("installed packs missing"))?
+                .iter()
+                .position(|row| identity(row).is_ok_and(|id| &id == instance))
+                .ok_or(Error::Missing)
+        })
+        .transpose()?;
     let mut meta = before.operator.clone();
     meta["installed"] = rows;
-    Ok((candidate, meta))
+    Ok((candidate, meta, target))
+}
+
+fn requested_version(reference: Option<&str>) -> Result<Option<semver::Version>, Error> {
+    reference
+        .and_then(|reference| reference.rsplit_once('@'))
+        .map(|(_, version)| {
+            version
+                .parse::<semver::Version>()
+                .map_err(|_| Error::Invalid("update version must be an exact semantic version"))
+        })
+        .transpose()
 }
 
 fn unchanged(rows: &[Value], selected: &[Selection<'_>]) -> bool {

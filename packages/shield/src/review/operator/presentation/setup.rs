@@ -33,6 +33,15 @@ pub(super) fn review(value: &Value) -> Option<String> {
                     label(&file["change"])
                 );
             }
+            if value["enabled"] == true
+                && value["files"]
+                    .as_array()
+                    .is_some_and(|files| !files.is_empty())
+            {
+                output.push_str(
+                    "The restored Codex rules can run matching commands outside its sandbox.\n",
+                );
+            }
             if let Some(trust) = value["state_trust"].as_str() {
                 let _ = writeln!(output, "{}", label(&Value::String(trust.into())));
             }
@@ -43,7 +52,20 @@ pub(super) fn review(value: &Value) -> Option<String> {
                 "Initialize Shield in {}\n",
                 label(&value["project"])
             );
-            policy(&mut output, value);
+            if let Some(packs) = value["packs"].as_array() {
+                let _ = writeln!(output, "Shield starts with enforcement enabled.");
+                for pack in packs {
+                    let _ = writeln!(
+                        output,
+                        "  {} {} · {} profile",
+                        label(&pack["id"]),
+                        label(&pack["version"]),
+                        label(&pack["profile"])
+                    );
+                }
+            } else {
+                policy(&mut output, value);
+            }
             integrations(&mut output, &value["integration_setup"]);
         }
         "reconcile project" => {
@@ -112,7 +134,7 @@ pub(super) fn protection(value: &Value) -> String {
     output
 }
 
-fn policy(output: &mut String, value: &Value) {
+pub(super) fn policy(output: &mut String, value: &Value) {
     let _ = writeln!(output, "Policy");
     let config = crate::configuration::layers::merged(&value["policy"]).unwrap_or_default();
     let selections = &config["packs"];
@@ -170,6 +192,25 @@ pub(super) fn initialized(value: &Value) -> String {
         super::plural(packs, "pack", "packs")
     );
     output.push_str(&connected(value));
+    output
+}
+
+/// The receipt of `shield setup`.
+pub(super) fn project_setup(value: &Value) -> String {
+    let outcome = match value["setup_status"].as_str() {
+        Some("unchanged") => "Shield setup is current",
+        Some("initialized") => "Shield set up",
+        Some("resumed") => "Shield setup resumed",
+        Some("configured") => "Shield integrations configured",
+        _ => return configured(value),
+    };
+    let mut output = format!("{outcome} for {}.\n", label(&value["project"]));
+    if let Some(next) = value["next_action"]
+        .as_str()
+        .filter(|text| !text.is_empty())
+    {
+        let _ = writeln!(output, "{}", label(&Value::String(next.into())));
+    }
     output
 }
 
@@ -264,6 +305,9 @@ fn integrations(output: &mut String, value: &Value) {
             output.push_str(&fallback(setting));
         }
         output.push('\n');
+        if agent["mcp_ownership"] == "external" {
+            output.push_str("    Preserve the external MCP entry unchanged; Shield checks it but never rewrites or removes it.\n");
+        }
     }
     tool_permissions(output, value);
     output.push_str(&super::policy::codex_prefixes(
@@ -293,6 +337,9 @@ fn integrations(output: &mut String, value: &Value) {
         .unwrap_or(0);
     for file in value["files"].as_array().into_iter().flatten() {
         file_change(output, file, width);
+    }
+    if let Some(access) = value["private_definition_access"].as_str() {
+        let _ = writeln!(output, "  {access}");
     }
     if value["adopt_existing_entries"] == true {
         let _ = writeln!(

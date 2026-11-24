@@ -11,17 +11,15 @@ existing policy, packs, settings and agent selections.
 
 ## Initialize and connect
 
-1. A fresh project connection offers `init`. Call it with the selected agents
-   and baseline profile (Recommended by default), then let the user confirm
-   the concrete review in the host. Select `agents: ["hub"]` for a Hub project;
-   initialize Hub's agent configuration with its `setup` first if needed.
-   Otherwise name native agents such as `claude` and `codex`. The same connection
-   exposes normal tools after initialization; no MCP reconnect is needed for
-   the agent to finish configuration.
-2. In an initialized project, call `status` first. Use `mcp_setup` for a missing
-   requested integration. A Hub installation uses only `agents: ["hub"]`;
-   call Hub's `setup` afterwards to publish the Shield definition and hooks to
-   its saved agents. Preserve unrelated settings and existing selections.
+1. Call `setup` on a fresh or enrolled connection. Omit `agents` to reuse saved
+   choices or detect the publisher or native agent. Ask the user to choose when
+   discovery is ambiguous. The baseline defaults to Recommended on first use.
+   Let the user confirm material changes. If the host cannot show the review,
+   ask the user to run the returned operator command.
+2. Follow the returned `next` action. For a Hub project, call Hub's `setup` for
+   the named project and preserve its saved agent selection. Hub publishes the
+   Shield definition and hooks. An interrupted Shield publication resumes when
+   `setup` is called again without arguments.
 3. If enforcement is disabled and setup was requested, call `enable` for the
    user's in-session confirmation. Protected-file guards working while disabled
    do not establish active policy enforcement. Respect a declined review.
@@ -30,8 +28,8 @@ existing policy, packs, settings and agent selections.
    host loading. Report any required agent reload; installed files or a responding
    MCP connection do not prove live interception.
 
-For a combined Hub and Shield setup, use Hub's
-`skill://hub/project-setup/SKILL.md` workflow to initialize its project, register
+For a combined Hub and Shield setup, use Hub's `project-setup` skill from the
+Hub server to initialize its project, register
 the existing directory and publish its agent configuration. Do not stop at a
 list of missing configuration when the user requested setup.
 

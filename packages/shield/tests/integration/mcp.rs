@@ -388,6 +388,7 @@ fn historical_mcp_refuses_future_state_with_format_details_and_preserves_bytes()
     let bytes = serde_json::to_vec(&future).unwrap();
     std::fs::write(&path, &bytes).unwrap();
     let output = cargo_bin_cmd!("shield")
+        .current_dir(root.path())
         .args(["__internal", "mcp", "--project"])
         .arg(root.path())
         .assert()

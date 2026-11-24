@@ -4,6 +4,8 @@ expression: text
 ---
 $ shield registry remove acme
 --- terminal
+Shield review for [PROJECT] (project scope)
+
 Remove registry acme from this project
   [REGISTRY] · local directory
 Installed packs keep their source.

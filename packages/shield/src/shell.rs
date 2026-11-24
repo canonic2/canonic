@@ -1010,11 +1010,15 @@ impl Analysis<'_> {
             && !loop_transfer)
             || find_launches(words)
             || bindings::printf_mutates(words);
+        let executable_name = words[0].rsplit('/').next().unwrap_or_default();
         let effects = crate::effects::classify(&request);
         // Cwd determines contextual rule eligibility. Submitted constructs and
         // unresolved operands have their own coverage checks.
         let unknown_context = state.cwd_unknown;
         let (evaluation, policy_request) = self.contextual_evaluation(&request, state)?;
+        let interpreter_needs_review = opaque
+            && evaluation.decision == Decision::Allow
+            && bindings::script_interpreter(executable_name);
         let indirect = self.tool_nested(effects.as_ref(), span, state, depth, Some(&evaluation))?;
         budget::measure(
             &evaluation,
@@ -1057,6 +1061,7 @@ impl Analysis<'_> {
                     request,
                     evaluation: Box::new(evaluation),
                     detail: Box::new(Invocation::Literal {
+                        interpreter_needs_review,
                         effects: effects.map(Box::new),
                         evaluation_model: if state.cwd_unknown {
                             "cwd-independent-restriction-bound"
@@ -2022,12 +2027,8 @@ fn sole_filter(tree: &Node) -> bool {
 // An interpreter asked only for its version prints it and runs no code.
 fn version_query(words: &[String]) -> bool {
     let name = words[0].rsplit('/').next().unwrap_or(&words[0]);
-    let interpreter = bindings::versioned_interpreter(name)
-        || [
-            "python", "python3", "node", "nodejs", "deno", "bun", "ruby", "perl", "lua", "bash",
-            "zsh", "ksh", "fish", "tclsh",
-        ]
-        .contains(&name);
+    let interpreter =
+        bindings::script_interpreter(name) || matches!(name, "bash" | "zsh" | "ksh" | "fish");
     let flag = words.get(1).map(String::as_str);
     interpreter
         && words.len() == 2
@@ -2136,7 +2137,7 @@ fn opaque_executable(executable: &str) -> bool {
     executable.is_empty()
         || executable.contains('=')
         || bindings::unknown_builtin(name)
-        || bindings::versioned_interpreter(name)
+        || bindings::script_interpreter(name)
         || matches!(
             name,
             "if" | "then"
@@ -2183,21 +2184,11 @@ fn opaque_executable(executable: &str) -> bool {
                 | "bash"
                 | "zsh"
                 | "fish"
-                | "python"
-                | "python3"
-                | "node"
-                | "perl"
-                | "ruby"
                 | "dash"
                 | "ash"
                 | "ksh"
                 | "csh"
                 | "tcsh"
-                | "lua"
-                | "tclsh"
-                | "nodejs"
-                | "deno"
-                | "bun"
                 | "nohup"
                 | "nice"
                 | "timeout"

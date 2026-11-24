@@ -641,7 +641,7 @@ fn worktree_discovery_is_shared_by_all_queries_in_an_invocation() {
     }
     for (arguments, processes) in [
         (&["show", "HEAD:src/app.txt", "HEAD:src/other.txt"][..], 1),
-        (&["diff", "--", ":/src/a", ":/src/b"][..], 1),
+        (&["diff", "--", ":/src/a", ":/src/b"][..], 0),
         (&["status", "--short"][..], 0),
         (&["log", "--oneline"][..], 0),
     ] {

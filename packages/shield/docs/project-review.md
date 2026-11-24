@@ -95,15 +95,16 @@ checks are already enabled and the result names `shield mcp setup`.
 
 ## Initialize or revisit setup
 
-Run `shield init` to review and confirm project policy. It offers the same
-guided agent setup as `shield mcp setup`. Mark the agents to configure, or continue
-with none selected. `--agent claude` or `--agent codex`, repeatable, selects
-directly; `--no-setup` skips agent setup.
+Run `shield setup` to initialize a project or repair its integrations. It reuses
+saved choices and detects a publisher or a native agent for a new project. Use
+`--agent` to select explicitly. `shield init --no-setup` initializes policy
+without setting up an integration. `shield mcp setup` exposes the guided
+registration and removal options.
 
-New projects acquire the signed main baseline with Recommended preselected.
-Choose another profile during setup, pass `--profile strict`, or use
-`--no-baseline` to skip it. Download or verification failure leaves a new
-project unenrolled. Offline setup can use `--no-baseline` with supplied artifacts.
+New projects acquire the signed main baseline with the Recommended profile.
+Use `shield setup --profile strict` to select a different profile or
+`shield init --no-baseline` to skip the baseline. Download or verification
+failure leaves a new project unenrolled.
 
 Existing packs, rules, profiles, and removals are preserved. Use
 `shield pack remove baseline` for later removal. See
@@ -122,17 +123,16 @@ Each command installs hooks and MCP while keeping the other agent registered.
 `shield mcp setup` without `--agent` asks which agents to install or repair, or
 resumes an interrupted confirmed plan. `shield mcp setup --remove` asks which
 agents to remove, or takes `--agent`, and preserves policy, approvals, and
-history. Add `--dry-run` to see the review without writing anything. Edited owned entries report a conflict rather than
-being overwritten.
+history. Add `--dry-run` to see the review without writing anything. To reconcile
+conflicting Shield entries for Claude or Codex, use `shield mcp setup --repair`
+with an explicit `--agent` and review the replacement.
 
-In an agent session, setup uses Shield's `mcp_setup` confirmation forms. A large
-administrative review is presented in numbered pages without omitting contents.
-Accepting an intermediate page applies nothing. The agent repeats the same call
-using the returned `retry_arguments` to show the next page. Only acceptance of
-the final page applies the complete change, after checking that the reviewed
-files are still current. Declining or cancelling any page discards that review.
-An unanswered review stays open until you answer it or the agent session's
-connection ends.
+The CLI and MCP show the project, scope and material changes in one review.
+Accept applies the captured plan after checking that its inputs are still
+current. Decline or cancel discards the review. If the host cannot convey the
+material effects, Shield returns the command for a fresh operator review. In
+the terminal, select **Inspect details** to see the exact captured settings.
+That view can show private values.
 
 New Codex setups let valid Ask requests proceed by default, including unmatched
 requests and Strict-profile Asks. Existing Block or Allow choices are preserved;
@@ -232,6 +232,13 @@ and what allowing it can do. If you accept, the agent repeats the identical
 request once within five minutes; anything else is still blocked. Approval
 creates no standing permission. If you decline, the agent
 continues without it.
+
+The full one-time approval form has a 12,000 UTF-8 byte limit. For a patch,
+that includes its exact text, affected paths and review details. Shield shares
+the limit when the agent connects. If the edit will need approval, split it
+into smaller complete patches before submitting. The hook reports the measured
+size when a form exceeds the limit. Patches allowed by policy can proceed
+without a one-time approval form.
 
 A Git merge, branch switch or other Git operation that may replace Shield's
 policy files also offers this route when Codex cannot ask at its hook. The form
@@ -357,7 +364,8 @@ If your agent needs a reference folder outside the project, you can add that
 folder to the roots used by location rules. Adding a root does not itself allow
 every operation there; the active rules still decide what the agent may do.
 
-Project configuration can bind reusable location rules to additional directories:
+Project configuration can bind reusable location rules to additional folders or
+existing files:
 
 ```yaml
 access_paths:
@@ -367,19 +375,20 @@ access_paths:
 
 Add this mapping to `.shield/config.yml`, preserving its `schema_version`, `packs`
 and any `rules` selection; the next request uses it. An agent can also propose
-one directory at a time with the MCP `access_path_add` change, which you
+one path at a time with the MCP `access_path_add` change, which you
 confirm in the host. These settings are retained
 when installing, updating or removing packs and when changing custom rules.
 
 Rules with `{root: read}` use the project plus additional read and write roots;
 `{root: write}` uses the project plus additional write roots. Write access includes
-read access. At most 64 additional native absolute directories are accepted;
+read access. At most 64 additional native absolute paths are accepted;
 duplicates within each list, traversal components, NULs, null lists and unknown
 fields refuse. A configured root that does not exist when evaluated contains
 nothing, so it leaves the union and the remaining roots still decide. Exclusions
 retain missing roots, protecting entries created through a containing root.
-A root that exists but is not a directory, or cannot be inspected, makes its
-location predicate unknown, and requests that depend on it are blocked.
+An approved file contributes that file alone. A location rule's path filter can
+match its filename. An access path that cannot be inspected leaves the location
+check unverified.
 
 Native Claude/Codex integrations also include system temporary roots automatically
 in these unions; no `access_paths` entry is needed for ordinary temporary files.
@@ -389,8 +398,11 @@ tool input. Explicit policy restrictions and protected-file checks still apply.
 
 Access paths bind policy predicates; the selected rules decide which operations
 are permitted, including removal. They do not install a host filesystem sandbox.
-Native hook cwd remains inside the enrolled project; absolute operands can refer
-to additional roots. Protected Shield/operator configuration remains guarded.
+Native policy checks also accept an existing working directory inside an
+additional read or write root. The session's owning project and policy stay the
+same; a read grant does not authorize writes, and explicit cwd restrictions
+still apply. Unapproved, missing and file-only roots cannot supply an external
+working directory. Protected Shield/operator configuration remains guarded.
 
 ## Action approvals
 

@@ -611,6 +611,13 @@ pub(in crate::review) fn setup_preview(root: &Path, plan: Option<&Plan>) -> Resu
     let prefixes = super::prefix_rules::active(root).unwrap_or_default();
     let desired = plan.and_then(|plan| plan.desired.as_ref());
     super::prefix_rules::preview_for(root, &mut review, desired, &prefixes, enabled, plan);
+    if plan.is_some_and(Plan::affects_definition)
+        && let Some(definition) = desired.and_then(|registration| registration.definition.as_ref())
+        && files::private_exposed(root, definition.host())
+    {
+        review["private_definition_access"] =
+            json!("Restore owner-only access to the private Shield publisher definition.");
+    }
     Ok(review)
 }
 
@@ -675,7 +682,16 @@ pub(in crate::review) fn preview(root: &Path, plan: Option<&Plan>) -> Value {
                 .flatten()
                 .map(|(event, _)| event.clone())
                 .collect();
-            Some(json!({"agent":agent,"change":change,"hooks":hooks,"mcp_server":"shield"}))
+            let removed_hooks: Vec<_> = if change == "updated" {
+                before.as_ref().and_then(|row| row["groups"].as_object()).into_iter().flatten()
+                    .filter(|(event, _)| !hooks.contains(event)).map(|(event, _)| event).collect()
+            } else {
+                Vec::new()
+            };
+            Some(
+                json!({"agent":agent,"change":change,"hooks":hooks,"removed_hooks":removed_hooks,"mcp_server":"shield",
+                "mcp_ownership":if shown["mcp_borrowed"] == true {"external"} else {"shield"}}),
+            )
         });
     let host_next = host_rows
         .iter()
@@ -703,6 +719,38 @@ pub(in crate::review) fn preview(root: &Path, plan: Option<&Plan>) -> Value {
         .into_iter()
         .collect();
     files.extend(p.files.iter().map(|change| json!(change)));
+    let (tool_approvals, approval_changes) = tool_approval_preview(p);
+    let binary_changed =
+        p.previous
+            .as_ref()
+            .zip(p.desired.as_ref())
+            .is_some_and(|(before, after)| {
+                before.binary != after.binary || before.binary_digest != after.binary_digest
+            });
+    json!({
+        "tool_approvals":tool_approvals,
+        "approval_changes":approval_changes,
+        "initial_tool_approvals":p.previous.is_none(),
+        "maintenance_scope":{"targets":p.targets,"reason":p.scope_reason},
+        "operation":if p.desired.is_some() {"set up agent integrations"} else {"remove Shield integrations"},
+        "project":root,
+        "host_path_warning":super::HOST_PATH_WARNING,
+        "binary":p.desired.as_ref().or(p.previous.as_ref()).map(|r| &r.binary),
+        "binary_changed":binary_changed,
+        "previous_binary":p.previous.as_ref().map(|r| &r.binary),
+        "binary_digest":p.desired.as_ref().map(|r| &r.binary_digest),
+        "previous_binary_digest":p.previous.as_ref().map(|r| &r.binary_digest),
+        "agents":agents,
+        "host":host_next,
+        "connections":p.desired.as_ref().map_or_default(|r|r.connections.iter().filter(|(agent,_)|p.affects(agent)).flat_map(|(agent,value)|value["review"].as_array().into_iter().flatten().map(move |row| {let mut row=row.clone();row["agent"]=json!(agent);row})).collect::<Vec<_>>()),
+        "connection_changes":connection_changes(p),
+        "ask_fallbacks":fallbacks,
+        "adopt_existing_entries":p.previous.is_some() && !crate::layout::enrolled(root),
+        "files":files,
+    })
+}
+
+fn tool_approval_preview(p: &Plan) -> (Option<Value>, Value) {
     let tool_approvals = p
         .desired
         .as_ref()
@@ -715,20 +763,52 @@ pub(in crate::review) fn preview(root: &Path, plan: Option<&Plan>) -> Value {
                 .collect();
             json!({"approved":approved,"ask":ask})
         });
-    json!({
-        "tool_approvals":tool_approvals,
-        "maintenance_scope":{"targets":p.targets,"reason":p.scope_reason},
-        "operation":if p.desired.is_some() {"set up agent integrations"} else {"remove Shield integrations"},
-        "project":root,
-        "host_path_warning":super::HOST_PATH_WARNING,
-        "binary":p.desired.as_ref().or(p.previous.as_ref()).map(|r| &r.binary),
-        "agents":agents,
-        "host":host_next,
-        "connections":p.desired.as_ref().map_or_default(|r|r.connections.iter().filter(|(agent,_)|p.affects(agent)).flat_map(|(agent,value)|value["review"].as_array().into_iter().flatten().map(move |row| {let mut row=row.clone();row["agent"]=json!(agent);row})).collect::<Vec<_>>()),
-        "ask_fallbacks":fallbacks,
-        "adopt_existing_entries":p.previous.is_some() && !crate::layout::enrolled(root),
-        "files":files,
-    })
+    let approvals = |registration: &Option<Registration>| {
+        registration
+            .as_ref()
+            .and_then(|r| r.approved_tools.as_ref())
+            .cloned()
+            .unwrap_or_default()
+    };
+    let before_approvals = approvals(&p.previous);
+    let after_approvals = approvals(&p.desired);
+    let approval_changes = json!({
+        "added":after_approvals.iter().filter(|name| !before_approvals.contains(name)).collect::<Vec<_>>(),
+        "removed":before_approvals.iter().filter(|name| !after_approvals.contains(name)).collect::<Vec<_>>()
+    });
+    (tool_approvals, approval_changes)
+}
+
+fn connection_changes(plan: &Plan) -> Vec<Value> {
+    let mut connections = std::collections::BTreeMap::new();
+    for (index, registration) in [plan.previous.as_ref(), plan.desired.as_ref()]
+        .into_iter()
+        .enumerate()
+    {
+        for (agent, owned) in registration
+            .into_iter()
+            .flat_map(|r| &r.connections)
+            .filter(|(agent, _)| plan.affects(agent))
+        {
+            for row in owned["review"].as_array().into_iter().flatten() {
+                if let Some(id) = row["id"].as_str() {
+                    connections.entry((agent, id)).or_insert([None, None])[index] = Some(row);
+                }
+            }
+        }
+    }
+    connections
+        .into_iter()
+        .filter_map(|((agent, id), [before, after])| {
+            let change = match (before, after) {
+                (before, after) if before == after => return None,
+                (None, _) => "Add",
+                (_, None) => "Remove",
+                _ => "Update",
+            };
+            Some(json!({"agent":agent,"id":id,"change":change,"before":before,"after":after}))
+        })
+        .collect()
 }
 
 /// Apply a confirmed plan, then bring prefix rules in line with the active

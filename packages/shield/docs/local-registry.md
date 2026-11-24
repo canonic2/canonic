@@ -384,6 +384,22 @@ Pack review runs no installers or pack code.
 
 ## Pack variables and rule overrides
 
+Packs can discover installed executable paths during add, update and configure.
+For example, a Rust pack with executable discovery checks `CARGO_HOME/bin` and
+`~/.cargo/bin`. The review names the exact paths and saves them locally. Existing
+bindings are preserved, and discovery never executes a tool. Discovery skips
+executables in the project, approved write folders and system temporary folders,
+including symlinks into them. Through MCP, call
+`pack_configure` with the installed reference and no edits to review missing
+discovered bindings; use `variables` when you want to edit particular settings.
+
+When a single command using an absolute executable path matches no rule,
+`suggestion_list` can point to an unset setting in an installed pack. For example,
+it can recommend binding `cargo_executable` locally when the selected Rust
+profile covers that Cargo command and the exact path matches a declared
+discovery candidate outside writable folders. The next action prepares a `pack_configure`
+proposal for review. Listing the suggestion grants no permission.
+
 Some packs declare variables, such as the package manager or cloud profile the
 project uses. `shield pack add` asks one question per variable after resolving the
 pack, in the order the pack declares them, preselecting a value when a

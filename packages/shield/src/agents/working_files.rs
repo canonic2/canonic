@@ -39,7 +39,7 @@ pub(super) fn skill_directories<S: AsRef<Path>>(
 }
 
 /// The native temporary folders, as the platform names them.
-fn temporary_candidates() -> Vec<PathBuf> {
+pub(crate) fn temporary_candidates() -> Vec<PathBuf> {
     #[cfg(unix)]
     {
         vec![

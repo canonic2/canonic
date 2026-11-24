@@ -40,18 +40,6 @@ fn first_step<T>(step: Step<T>, back: bool) -> Result<Step<T>, Error> {
         step => Ok(step),
     }
 }
-pub(super) fn confirm_mcp(host: Host) -> Result<(), Error> {
-    let mut prompt = prompts::setup::confirmation_prompt(
-        "The review above lists the hooks, MCP entries, permissions and files to change. Cancel keeps your configuration.",
-    )?;
-    let ids = step(host.pick(&mut prompt)?)?.or_cancel()?;
-    if ids.first().is_some_and(|id| id == "apply") {
-        Ok(())
-    } else {
-        Err(Error::Cancelled)
-    }
-}
-
 pub(super) fn open(height: u16) -> Result<Host, Error> {
     let signals = signals::Signals::new()?;
     let host = match Host::open(height) {

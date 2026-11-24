@@ -51,6 +51,29 @@ pub(in crate::review) struct Installation {
 }
 
 impl Installation {
+    /// Repair missing executable bindings with one frozen policy review, rather
+    /// than an input form for every variable and rule in a development pack.
+    pub(in crate::review) fn discover(context: &Context, reference: &str) -> Result<Self, Error> {
+        let before = crate::review::project::load(context)?;
+        let scope = super::discovery::Scope::for_candidate(
+            &crate::review::project::root(context),
+            &before.candidates["project"],
+        )?;
+        let (candidate, metadata) =
+            super::prepare_configure(&before, reference, |artifact, settings| {
+                super::discovery::settings(artifact, settings, &scope)?;
+                Ok(())
+            })?;
+        Ok(Self {
+            settings: Vec::new(),
+            revision: before.policy_revision.clone(),
+            changes: vec![json!({"kind":"pack_configure","reference":reference})],
+            binding: changes::prepared_binding(&before),
+            candidate,
+            metadata,
+            local: true,
+        })
+    }
     pub(in crate::review) fn source_bytes(&self) -> usize {
         ["config", "local_config", "rules", "local_rules"]
             .into_iter()
@@ -84,7 +107,7 @@ impl Installation {
         let mut supplied = Vec::new();
         let mut changes = Vec::new();
         for selection in selections {
-            let (candidate, metadata) = super::prepare_add(
+            let (candidate, metadata) = super::prepare_add_unconfigured(
                 context,
                 &before,
                 &selection.reference,
@@ -143,6 +166,7 @@ impl Installation {
             .remove("project")
             .ok_or(Error::Invalid("project candidate missing"))?;
         let metadata = before.operator;
+        let (candidate, metadata) = discover_executables(context, candidate, metadata, &requested)?;
         let settings = collect_settings(&candidate, &metadata, &requested)?;
         Ok(Self {
             settings,
@@ -234,6 +258,32 @@ impl Installation {
             comparison: None,
         })
     }
+}
+
+fn discover_executables(
+    context: &Context,
+    mut candidate: Value,
+    mut metadata: Value,
+    requested: &BTreeMap<String, BTreeSet<String>>,
+) -> Result<(Value, Value), Error> {
+    let root = crate::review::project::root(context);
+    let selected: Vec<usize> = metadata["installed"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .enumerate()
+        .filter_map(|(index, row)| {
+            row["selector"]
+                .as_str()
+                .filter(|selector| requested.contains_key(*selector))
+                .map(|_| index)
+        })
+        .collect();
+    for index in selected {
+        (candidate, metadata) =
+            super::discovery::candidate(&root, candidate, metadata, Some(index))?;
+    }
+    Ok((candidate, metadata))
 }
 
 fn collect_settings(

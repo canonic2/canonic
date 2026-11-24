@@ -4,6 +4,8 @@ expression: text
 ---
 $ shield registry add acme [REGISTRY]
 --- terminal
+Shield review for [PROJECT] (project scope)
+
 Register acme for this project
   [REGISTRY] · local directory
   Source identity: [DIGEST]

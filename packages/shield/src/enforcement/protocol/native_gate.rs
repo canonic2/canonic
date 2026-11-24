@@ -124,6 +124,7 @@ fn paused_shell(
 pub(super) fn resolve(
     root: &Path,
     native: NativeContext<'_>,
+    access_paths: Option<&crate::configuration::AccessPaths>,
     value: &mut Value,
 ) -> Result<(), &'static str> {
     let owner = value["identity"]["project_root"]
@@ -159,6 +160,14 @@ pub(super) fn resolve(
     if result.is_ok() && value["disposition"] != "allowed" {
         value["fixed_protection"] = json!(fixed(value, owner, cwd, guard));
         value["deny_rules"] = deny_rules(value);
+        if value["code"] == "policy-deny"
+            && let Some(access_paths) = access_paths
+            && let Some(found) =
+                unapproved_outside(value, owner, cwd, guard.working_files, access_paths)
+        {
+            value["outside_path"] =
+                json!({"path":found.path,"access":found.access,"folder":found.folder});
+        }
     }
     result
 }
@@ -320,12 +329,14 @@ fn gate(
         block(value, code);
         return Ok(());
     }
+    // Preserve the existing session-grant boundary independently of the
+    // more specific folder recovery shown to the agent.
     if value["decision"] == "deny"
-        && let Some(found) = unapproved_outside(value, owner, cwd, native.working_files)
+        && outside(value, owner, cwd, &|_, _| true).is_some_and(|found| {
+            !within_working_files(&found.path, found.access == "read", native.working_files)
+        })
     {
-        // Names the path, and the folder the agent may propose when it is narrow.
-        value["outside_path"] =
-            json!({"path":found.path,"access":found.access,"folder":found.folder});
+        value["_outside_grant_boundary"] = json!(true);
     }
     // Policy Deny stands. Otherwise, uncertain policy writes and sensitive
     // reads require human approval regardless of policy Allow or Ask fallback.
@@ -415,14 +426,38 @@ fn unapproved_outside(
     owner: &Path,
     cwd: &Path,
     working_files: Option<&crate::location::WorkingFiles>,
+    paths: &crate::configuration::AccessPaths,
 ) -> Option<paths::Outside> {
-    outside(value, owner, cwd).filter(|found| {
-        working_files.is_none_or(|scope| {
-            !scope
-                .roots(found.access == "read")
-                .any(|root| found.path.starts_with(root))
-        })
+    let checks = requirement_checks(value);
+    if checks
+        .iter()
+        .any(|check| check["code"] == "evidence_unavailable")
+        || (!checks
+            .iter()
+            .any(|check| check["code"] == "location_outside")
+            && checks.iter().any(|check| check["status"] != "met"))
+    {
+        return None;
+    }
+    let readable = std::cell::OnceCell::new();
+    let writable = std::cell::OnceCell::new();
+    outside(value, owner, cwd, &|path, access| {
+        let read = access == "read";
+        let roots = if read { &readable } else { &writable };
+        roots
+            .get_or_init(|| crate::location::Observer::approved_roots(owner, cwd, paths, read))
+            .as_ref()
+            .is_some_and(|roots| !roots.iter().any(|root| path.starts_with(root)))
+            && !within_working_files(path, read, working_files)
     })
+}
+
+fn within_working_files(
+    path: &Path,
+    read: bool,
+    working_files: Option<&crate::location::WorkingFiles>,
+) -> bool {
+    working_files.is_some_and(|scope| scope.roots(read).any(|root| path.starts_with(root)))
 }
 
 fn disposition(
@@ -456,20 +491,17 @@ fn disposition(
 
 /// The outside path behind a location refusal: the file tool's own path, or an
 /// outside argument of the shell command a failed location check names.
-fn outside(value: &Value, owner: &Path, cwd: &Path) -> Option<paths::Outside> {
-    let located = |checks: &Value| {
-        checks
-            .as_array()
-            .into_iter()
-            .flatten()
-            .find(|check| check["code"] == "location_outside")
-            .cloned()
-    };
-    let evaluation = &value["_observation"]["evaluation"];
-    let explanation = evaluation
-        .get("explanation")
-        .unwrap_or(&evaluation["evaluation"]);
-    let check = located(&explanation["requirement_checks"]);
+fn outside(
+    value: &Value,
+    owner: &Path,
+    cwd: &Path,
+    unapproved: &dyn Fn(&Path, &str) -> bool,
+) -> Option<paths::Outside> {
+    let explanation = explanation(value);
+    let checks = requirement_checks(value);
+    let check = checks
+        .iter()
+        .find(|check| check["code"] == "location_outside");
     if check.is_some()
         && let Some(path) = value["_file_targets"][0].as_str()
     {
@@ -482,18 +514,14 @@ fn outside(value: &Value, owner: &Path, cwd: &Path) -> Option<paths::Outside> {
             &json!({"request":{"executable":reader,"arguments":[path]}}),
             owner,
             cwd,
+            unapproved,
         );
     }
     // Missing evidence is not proof that a folder permission is absent.
-    // Do not send the agent into repeated folder approvals for a failed check.
     if check.is_none()
-        && explanation["requirement_checks"]
-            .as_array()
-            .is_some_and(|checks| {
-                checks
-                    .iter()
-                    .any(|check| check["code"] == "evidence_unavailable")
-            })
+        && checks
+            .iter()
+            .any(|check| check["code"] == "evidence_unavailable")
     {
         return None;
     }
@@ -518,10 +546,23 @@ fn outside(value: &Value, owner: &Path, cwd: &Path) -> Option<paths::Outside> {
             ) == reference
         })
         .filter_map(|operation| match file_effect(operation) {
-            Some(file) => paths::outside(&file, owner, cwd),
-            None => paths::outside(operation, owner, cwd),
+            Some(file) => paths::outside(&file, owner, cwd, unapproved),
+            None => paths::outside(operation, owner, cwd, unapproved),
         })
         .find(|found| !reads_only || found.access == "read")
+}
+
+fn explanation(value: &Value) -> &Value {
+    let evaluation = &value["_observation"]["evaluation"];
+    evaluation
+        .get("explanation")
+        .unwrap_or(&evaluation["evaluation"])
+}
+
+fn requirement_checks(value: &Value) -> &[Value] {
+    explanation(value)["requirement_checks"]
+        .as_array()
+        .map_or_default(Vec::as_slice)
 }
 
 /// A redirection or retained typed file effect as the write or read it performs.

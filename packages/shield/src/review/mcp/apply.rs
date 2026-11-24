@@ -254,6 +254,31 @@ fn present_captured_arguments(
     } else {
         adapter.apply_arguments(canonical, "")
     };
+    // Full installed inventories can duplicate dozens of unchanged packs.
+    // Leave room for review metadata while retaining every material change.
+    if !crate::json::fits(&value, super::INLINE_POLICY_BYTES - 3 * 1024)
+        && let Some(packs) = value
+            .get_mut("review")
+            .and_then(|review| review.get_mut("packs"))
+            .and_then(Value::as_object_mut)
+    {
+        let affected: std::collections::BTreeSet<_> = canonical["changes"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|change| change["kind"] == "pack")
+            .filter_map(|change| change["id"].as_str())
+            .collect();
+        for (side, total) in [("before", "before_total"), ("after", "after_total")] {
+            if let Some(rows) = packs.get_mut(side).and_then(Value::as_array_mut) {
+                let count = rows.len();
+                rows.retain(|row| row["id"].as_str().is_some_and(|id| affected.contains(id)));
+                if rows.len() < count {
+                    packs.insert(total.into(), json!(count));
+                }
+            }
+        }
+    }
     crate::review::model::redact(&mut value);
     value
 }

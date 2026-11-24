@@ -195,7 +195,7 @@ fn human_errors_are_actionable_plain_text_and_json_errors_keep_their_contract() 
     assert_eq!(human.stdout.as_slice(), b"");
     let stderr = String::from_utf8(human.stderr).expect("human UTF8");
     assert!(stderr.contains("Error: Shield is not initialized here"));
-    assert!(stderr.contains("shield init"));
+    assert!(stderr.contains("shield setup"));
     assert!(!stderr.contains("invalid review input or state"));
     assert!(!stderr.contains('\u{1b}'));
     let structured = cargo_bin_cmd!("shield")
@@ -208,7 +208,7 @@ fn human_errors_are_actionable_plain_text_and_json_errors_keep_their_contract() 
     assert_eq!(result["error"]["code"], "invalid-review");
     assert_eq!(
         result["error"]["message"],
-        "invalid review input or state: no enrolled project; run shield init"
+        "invalid review input or state: no enrolled project; run shield setup"
     );
     assert_eq!(
         result["error"]["details"],
@@ -216,7 +216,7 @@ fn human_errors_are_actionable_plain_text_and_json_errors_keep_their_contract() 
     );
     assert_eq!(
         result["error"]["recovery"][0],
-        "Run shield init in the intended project."
+        "Run shield setup in the intended project."
     );
     assert_eq!(
         result["error"]["recovery"].as_array().map(Vec::len),
@@ -482,7 +482,7 @@ fn setup_defaults_to_allow_and_refuses_unreviewed_fallback_edits() {
         .arg(root.path())
         .assert()
         .code(1)
-        .stderr(predicates::str::contains("shield init"));
+        .stderr(predicates::str::contains("shield setup"));
     assert!(!root.path().join(".shield/state/state.json").exists());
     assert_eq!(guided(&root, &["init"], "codex\n\nyes\n")["code"], 0);
     super::mcp::settle_startup(&root);
@@ -887,7 +887,6 @@ fn old_public_commands_and_unattended_mutations_are_refused() {
         "runtime",
         "read-approvals",
         "run-approvals",
-        "setup",
         "packs",
         "registries",
         "rules",
@@ -910,16 +909,18 @@ fn old_public_commands_and_unattended_mutations_are_refused() {
     ] {
         cargo_bin_cmd!("shield").args(&args).assert().code(2);
     }
-    // Retained MCP launch syntax is supported, but still needs project files.
+    // Retained MCP launch syntax can wait for an approved first-run setup.
     cargo_bin_cmd!("shield")
         .current_dir(root.path())
         .args(["__internal", "mcp"])
         .assert()
-        .code(1)
-        .stdout("")
-        .stderr(predicates::str::contains(
-            "no Shield project; run shield init",
-        ));
+        .success()
+        .stdout("");
+    cargo_bin_cmd!("shield")
+        .args(["setup", "--json", "--project"])
+        .arg(root.path())
+        .assert()
+        .code(1);
     cargo_bin_cmd!("shield")
         .args(["init", "--json", "--project"])
         .arg(root.path())

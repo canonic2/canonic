@@ -1,4 +1,5 @@
 //! Pack variable declarations, typed values, setup wording and `when` activation tests.
+pub(crate) mod executables;
 pub(crate) mod order;
 
 use crate::policy::{
@@ -103,6 +104,12 @@ pub(crate) struct Declaration {
         skip_serializing_if = "Option::is_none"
     )]
     pub(crate) suggest: Option<Vec<Suggestion>>,
+    #[serde(
+        default,
+        deserialize_with = "crate::policy::rules::present",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub(crate) discover: Option<Vec<executables::Candidate>>,
     #[serde(
         default,
         deserialize_with = "crate::policy::rules::present",
@@ -311,6 +318,20 @@ impl Declaration {
     }
 
     fn validate(&self) -> Result<(), Error> {
+        if let Some(candidates) = &self.discover {
+            if self.kind != Kind::String
+                || self.layer() != Layer::Local
+                || candidates.is_empty()
+                || candidates.len() > 16
+            {
+                return Err(Error::Contract(
+                    "executable discovery requires 1-16 candidates on a local string variable",
+                ));
+            }
+            for candidate in candidates {
+                candidate.validate()?;
+            }
+        }
         if self.description.trim().is_empty() || self.description.len() > 512 {
             return Err(Error::Contract("invalid variable description"));
         }

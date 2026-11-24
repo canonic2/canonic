@@ -4,21 +4,16 @@ expression: text
 ---
 $ shield mcp setup --agent claude
 --- terminal
-Tool permissions → 51 of 52 marked
-Agent integrations
-  Claude Code added · hooks PostToolUse, PostToolUseFailure, PreToolUse, SessionEnd, Stop · MCP server shield
-  Hooks and MCP run [SHIELD] for this project.
-  51 of 52 Shield MCP tools run without asking; ask each time: policy_apply.
-  Policy changes still require your confirmation.
-  Agents can read/write their skill folders and system temporary folders. Claude can also read/write its memory folder for this project. Session files use each agent's supported mappings.
+Tool permissions → 52 of 53 marked
+Shield review for [PROJECT] (project scope)
 
-  Files
-    .mcp.json                    created    Claude Code MCP server
-    .claude/settings.local.json  created    Claude Code hooks
-  Other settings in these files are preserved.
-
-After confirming, restart each agent, trust this project, review its hooks and approve the MCP server.
-
-Apply MCP setup? → Apply reviewed changes
+set up agent integrations.
+Claude Code — added · hooks PostToolUse, PostToolUseFailure, PreToolUse, SessionEnd, Stop
+Registered agents gain the adapter's scoped access to skill, temporary, and supported session files.
+Shield executable [SHIELD].
+52 Shield tools can start without a host tool prompt. Shield's separate confirmation checks still apply.
+Keep the host prompt for policy_apply.
+Create 2 configuration files.
+Review and confirm → Apply change
 Connected Claude Code. Restart it, trust this project and approve Shield's hooks and MCP server.
 --- exit 0

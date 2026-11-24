@@ -71,6 +71,85 @@ fn value(result: &CandidateEvaluation) -> Value {
     serde_json::to_value(result).expect("candidate result JSON")
 }
 
+#[test]
+fn typed_previews_match_shell_for_declared_directory_options() {
+    use policy::resolution::normalized::{Context, Input};
+    let root = assert_fs::TempDir::new().unwrap();
+    let root = root.path().canonicalize().unwrap();
+    let project = root.join("project");
+    std::fs::create_dir_all(project.join("package")).unwrap();
+    std::fs::create_dir(root.join("other")).unwrap();
+    let rule = |id, decision, arguments| {
+        json!({"id":id,"decision":decision,"conditions":{
+        "domain":"argv","executable":"npm","arguments":{"kind":"exact","values":arguments},
+        "cwd":{"within":{"root":"project"}}}})
+    };
+    let declaration =
+        json!({"executable":"npm","option":"--prefix","position":"anywhere","paths":"follow"});
+    let rules = policy::rules::document_with(
+        &[
+            rule("test", "allow", vec!["test"]),
+            rule("written-review", "ask", vec!["--prefix=package", "test"]),
+        ],
+        &[declaration],
+    )
+    .unwrap()
+    .to_string();
+    let evaluator = Evaluator::new(vec![(Scope::Project, snapshot(&[], Some(&rules)))]).unwrap();
+    let project = project.to_str().unwrap();
+    let context = Context {
+        cwd: project.into(),
+        environment: None,
+        working_files: None,
+    };
+    let original = json!({"label":"Acme test"});
+    let now = crate::evidence::now();
+    for (args, decision, normalized) in [
+        (vec!["test"], "allow", false),
+        (vec!["--prefix", "package", "test"], "allow", true),
+        (vec!["--prefix=package", "test"], "ask", false),
+        (vec!["--prefix", "../other", "test"], "ask", true),
+        (
+            vec!["--prefix", "package", "--prefix", ".", "test"],
+            "ask",
+            false,
+        ),
+    ] {
+        let argv = Input::Argv {
+            executable: "npm".into(),
+            arguments: args.iter().map(|arg| (*arg).into()).collect(),
+            original_input: original.clone(),
+        };
+        let typed = evaluator
+            .evaluate_normalized(&argv, &context, project, None, &now, &|| Ok(()))
+            .unwrap();
+        let shell = crate::shell::analyze(
+            &format!("npm {}", args.join(" ")),
+            crate::shell::Dialect::Posix,
+            project,
+            project,
+            &evaluator,
+        )
+        .unwrap();
+        assert_eq!(typed["decision"], decision, "{args:?}: {typed}");
+        assert_eq!(typed["decision"], shell["decision"], "{args:?}");
+        assert_eq!(typed["normalized_request"]["arguments"], json!(args));
+        assert_eq!(typed["normalized_request"]["original_input"], original);
+        assert_eq!(
+            typed.get("directory_request").is_some(),
+            normalized,
+            "{typed}"
+        );
+        if normalized {
+            assert_eq!(typed["directory_request"]["arguments"], json!(["test"]));
+            assert_eq!(
+                typed["directory_request"]["cwd"],
+                shell["operations"][0]["policy_request"]["cwd"]
+            );
+        }
+    }
+}
+
 fn approved_root_evaluator(dir: &assert_fs::TempDir) -> Evaluator {
     for name in ["project", "reference", "scratch", "outside"] {
         std::fs::create_dir(dir.path().join(name)).unwrap();
@@ -87,7 +166,7 @@ fn root_evaluator(reference: &std::path::Path, scratch: &std::path::Path) -> Eva
     let rows = vec![
         json!({"id":"read","decision":"allow","conditions":{"domain":"argv","executable":{"one_of":["cat","head","tail","wc","ls"]},"arguments":{"kind":"any"}},"requirements":{"targets":{"action":"read","all":{"within":{"root":"read"}}}},"on_unmet":{"decision":"deny"}}),
         json!({"id":"remove","decision":"allow","conditions":{"domain":"argv","executable":"rm","arguments":{"kind":"any"}},"requirements":{"targets":{"action":"remove","all":{"within":{"root":"write"},"exclude":[{"root":"write","path":".git"}],"match":{"regex":".+"}}}},"on_unmet":{"decision":"deny"}}),
-        json!({"id":"write-file","decision":"allow","conditions":{"domain":"file","action":"write"},"requirements":{"destination":{"within":{"root":"write"},"exclude":[{"root":"write","path":".git"}]}},"on_unmet":{"decision":"deny"}}),
+        json!({"id":"write-file","decision":"allow","conditions":{"domain":"file","action":"write"},"requirements":{"targets":{"action":"write","all":{"within":{"root":"write"},"exclude":[{"root":"write","path":".git"}],"match":{"regex":".+"}}}},"on_unmet":{"decision":"deny"}}),
     ];
     let document = crate::policy::rules::document(&rows).unwrap().to_string();
     let config = json!({"schema_version":1,"packs":[],"rules":"rules.yml","access_paths":{"read":[reference],"write":[scratch]}}).to_string();
@@ -405,6 +484,7 @@ fn approved_file_roots_preserve_directory_grants_and_exclusions() {
     };
     for (path, decision) in [
         (file, Decision::Allow),
+        (project.clone(), Decision::Deny),
         (project.join("item"), Decision::Allow),
         (project.join(".git/hooks/x"), Decision::Deny),
         (reference.join("item"), Decision::Deny),

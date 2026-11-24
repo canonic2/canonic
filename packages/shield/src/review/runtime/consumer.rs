@@ -242,6 +242,10 @@ impl NativeAuthority {
     }
 }
 impl NativeSource {
+    pub(crate) fn access_paths(&self) -> &crate::configuration::AccessPaths {
+        self.evaluator.effective().access_paths()
+    }
+
     /// The policy is the files; a request evaluated against them stays bound to
     /// its project only.
     fn check(&self, state: &super::State) -> Result<(), Error> {

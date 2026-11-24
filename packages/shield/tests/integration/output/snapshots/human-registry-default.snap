@@ -4,6 +4,8 @@ expression: text
 ---
 $ shield registry default acme
 --- terminal
+Shield review for [PROJECT] (project scope)
+
 Make acme the default registry for this project (was main)
 Review and confirm → Apply change
 acme is the default registry for this project.

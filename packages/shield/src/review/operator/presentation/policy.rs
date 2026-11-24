@@ -562,7 +562,7 @@ pub(super) fn codex_prefixes(changes: &Value) -> String {
             .collect();
         format!(
             "{} ({} {})",
-            pattern.join(" "),
+            label(&Value::String(pattern.join(" "))),
             label(&prefix["owner"]),
             label(&prefix["rule"])
         )

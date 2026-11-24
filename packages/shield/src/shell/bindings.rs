@@ -114,8 +114,11 @@ pub(super) fn loop_value(name: &str, value: Option<String>, state: &mut State) {
     }
 }
 
-pub(super) fn versioned_interpreter(name: &str) -> bool {
-    ["python", "pypy", "lua", "tclsh", "ruby", "perl"]
+pub(super) fn script_interpreter(name: &str) -> bool {
+    matches!(
+        name,
+        "python" | "node" | "nodejs" | "deno" | "bun" | "ruby" | "perl" | "lua" | "tclsh"
+    ) || ["python", "pypy", "lua", "tclsh", "ruby", "perl"]
         .iter()
         .any(|prefix| {
             name.strip_prefix(prefix).is_some_and(|suffix| {

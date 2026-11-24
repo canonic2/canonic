@@ -2,8 +2,11 @@
 use super::{Error, File, OpenOptions, Path, Store, fs, private};
 use std::{thread, time::Duration};
 
+const LOCK_ATTEMPTS: usize = 500;
+
+/// Readers and completion writers wait through short bursts of history updates.
 pub(in crate::review) fn lock(store: &Store) -> Result<File, Error> {
-    acquire(store, false, 500, true)
+    acquire(store, false, LOCK_ATTEMPTS, true)
 }
 
 #[cfg(test)]
@@ -14,12 +17,6 @@ pub(in crate::review) fn lock_diagnostics(store: &Store) -> Result<File, Error> 
 /// Decision and authority writers never wait behind another history user.
 pub(in crate::review) fn lock_optional(store: &Store) -> Result<File, Error> {
     acquire(store, false, 1, true)
-}
-
-/// Completions can arrive in a burst after parallel tools finish. Allow eight
-/// one-millisecond retries without using the reader/control wait budget.
-pub(in crate::review) fn lock_completion(store: &Store) -> Result<File, Error> {
-    acquire(store, false, 9, true)
 }
 
 /// Called only while publishing a human-confirmed history control. Never
@@ -186,6 +183,42 @@ fn normalize(file: &mut File) -> Result<(), Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn completion_history_waits_for_a_short_parallel_append() {
+        let (root, _) = crate::review::tests::enrolled();
+        let store = Store::open(root.path()).unwrap();
+        let mut writer = Some(lock(&store).unwrap());
+        let contender = open(&store.directory.join("history.lock"), false, false).unwrap();
+        let mut waits = 0;
+
+        // Simulate an append/rotation finishing after a short burst. Advancing
+        // retry steps instead of sleeping keeps the regression deterministic.
+        let result = retry_lock(&contender, LOCK_ATTEMPTS, || {
+            waits += 1;
+            if waits == 16 {
+                drop(writer.take().unwrap());
+            }
+        });
+        assert!(
+            result.is_ok(),
+            "completion lost during a short append: {result:?}"
+        );
+        assert_eq!(waits, 16);
+        assert!(writer.is_none());
+    }
+
+    #[test]
+    fn completion_history_still_bounds_an_unreleased_writer() {
+        let (root, _) = crate::review::tests::enrolled();
+        let store = Store::open(root.path()).unwrap();
+        let _writer = lock(&store).unwrap();
+        let contender = open(&store.directory.join("history.lock"), false, false).unwrap();
+        let mut waits = 0;
+        let result = retry_lock(&contender, LOCK_ATTEMPTS, || waits += 1);
+        assert!(matches!(result, Err(Error::Locked)));
+        assert_eq!(waits, LOCK_ATTEMPTS - 1);
+    }
 
     #[test]
     fn history_lock_retries_after_writer_releases() {

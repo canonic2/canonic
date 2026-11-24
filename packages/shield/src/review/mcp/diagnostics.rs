@@ -79,7 +79,10 @@ pub(super) fn evaluate(
         evaluate_captured(context, &captured, &input, &request_context, checkpoint)?;
     checkpoint()?;
     let next_action = (selected.is_none() && evaluation.decision == policy::Decision::Allow)
-        .then_some("Active policy already allows this request. Submit it through the normal tool. A policy change is unnecessary to run it.");
+        .then_some(match input {
+            Input::Argv { .. } => "Active policy allows this argv. For a shell tool call, preview the complete request with kind shell to check shell analysis.",
+            _ => "Active policy already allows this request. Submit it through the normal tool. A policy change is unnecessary to run it.",
+        });
     let report = Report {
         evaluation,
         mcp_match,

@@ -92,6 +92,16 @@ session folder. Restart an older agent to load the current binary. Do not delete
 
 ## The agent does not seem to use Shield
 
+For OpenCode V1, a Shield MCP connection published by Hub does not install the
+enforcement plugin. `shield status` and `shield doctor` report this as
+`mcp_only_integrations` with `plugin-not-registered`. Preview the plugin setup
+with `shield mcp setup --agent opencode --dry-run`, then run the same command
+without `--dry-run` and confirm. Through MCP, use `mcp_setup_preview` and then
+`mcp_setup`, both with `agents: ["opencode"]`. A matching existing local Shield
+launcher is preserved under its external owner, including on plugin removal;
+unrelated Hub entries remain untouched. A changed launcher remains a conflict.
+Restart OpenCode afterwards; saved plugin files do not prove live loading.
+
 Check whether the agent is registered with `shield status`. If it is missing,
 run `shield mcp setup --agent claude` or `shield mcp setup --agent codex` in an interactive terminal,
 review the changes, and confirm.
@@ -147,6 +157,21 @@ Policy files, proposals, history and approvals stay in place across updates.
 Do not delete `.shield/state/` to recover; only the compiled cache is
 disposable.
 
+## A tool completed, but its history could not be recorded
+
+“Shield could not record the tool completion in history” means the completion
+observation was unavailable. The tool's result and its original permission
+decision remain in effect. History inspection must leave the missing outcome
+unknown.
+
+Completion recording retries a busy history lock for a bounded interval so short
+bursts of parallel tool completions can finish recording. Persistent storage,
+permission or lock failures still produce the warning. Use `shield doctor` and
+`shield history list` to inspect history availability. When diagnostic recording
+is enabled, `history_failed_busy`, `history_failed_io`, `history_failed_invalid`
+and `history_failed_unavailable` distinguish the failure category without storing
+raw operating-system messages.
+
 ## The request was allowed or blocked unexpectedly
 
 Inspect the recorded request:
@@ -166,7 +191,24 @@ Check the command, working directory, matching rule, failed requirements, and
 active revision. Extra arguments or unknown options can stop a rule matching;
 failed requirements can select its Ask or Deny branch.
 
+If a request is blocked after you approve its folder, inspect the failed check
+in history before approving anything else. A location rule can require a path
+inside the project even when an external folder is approved. If Shield reports
+that it could not verify a fact, check the resource evidence and correct the
+request or its context before retrying.
+
+For a blocked Codex patch, check the file named in the refusal. If Shield could
+not resolve the target, check its parent directories and links. If the message
+names allowed or excluded paths instead, inspect the matching rule and resolve
+those paths before retrying the patch.
+
 Check the host action too: Codex's Allow fallback can let a policy Ask proceed.
+
+Ordinary `git diff` inspection, including `git diff --check` and staged diffs,
+follows the active Git policy even when agent settings appear in the diff.
+Shield does not add a separate credential-read review for those diffs. Output
+files, helper execution, direct settings reads and other Git content commands
+retain their own checks.
 
 For `rg` searches, a missing file or directory within permitted locations can
 proceed when the request meets the other policy requirements. Shield checks its

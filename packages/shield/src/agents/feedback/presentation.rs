@@ -54,7 +54,7 @@ pub(super) fn denial(mut reply: Reply, receipt: &Value) -> Reply {
         "operator-cli" if receipt["operator_route"] == "registration" => "Registration changes use Shield's reviewed MCP setup, or Box's publication review for Box-managed hooks. The command was not executed.".into(),
         "operator-cli" => "Agents use Shield's MCP tools for diagnostics and reviewed administration. This command was not executed; the agent has the corresponding recovery routes.".into(),
         "invalid-host-input" | "invalid-host-event" | "invalid-input" => "The tool input is invalid. The agent must correct the request.".into(),
-        "invalid-context" => "The session's working directory is not an existing folder inside this Shield project.".into(),
+        "invalid-context" => "The working directory is unavailable or outside this project's permitted context. External folder access requires your approval.".into(),
         "runtime-busy" => "Shield state was briefly locked by another update. Retrying the request can succeed.".into(),
         "handoff-failed" | "project-changed" => "The project's current authorization could not be verified. Check Shield's project status before retrying.".into(),
         "compiled-cache-unavailable" => "The policy cache is unavailable. The agent can rebuild it, or ask you to approve a new cache location in this session.".into(),

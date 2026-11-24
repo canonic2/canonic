@@ -4,6 +4,8 @@ expression: text
 ---
 $ shield registry add acme [REGISTRY]
 --- terminal
+Shield review for [PROJECT] (project scope)
+
 Replace registry acme for this project
 Previous source:
   [REGISTRY] · local directory

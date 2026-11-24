@@ -325,7 +325,12 @@ fn decide_operations(
 ) -> Option<Value> {
     let root = Path::new(&context.project_root);
     let local_id = if request.event.post() {
-        request.tool_id.map_or_else(invocation_id, str::to_owned)
+        // A host ID may already fill the protocol's 128-byte limit. Bound the
+        // derived operation/delivery IDs before adding batch and event suffixes;
+        // provenance keeps the original ID for exact completion correlation.
+        request.tool_id.map_or_else(invocation_id, |id| {
+            format!("completion-{}", crate::policy::fingerprint(id.as_bytes()))
+        })
     } else {
         invocation_id()
     };
@@ -647,15 +652,18 @@ fn decide(
             authority,
         });
     }
-    feedback::respond(
+    let mut reply = feedback::respond(
         root,
         adapter,
         request.event,
         &receipt,
         &decided,
         request.session,
-    )
-    .map(|reply| NativeDecision {
+    )?;
+    if request.tool == "apply_patch" {
+        feedback::name_patch_target(root, &decided, &receipt, &mut reply);
+    }
+    Some(NativeDecision {
         reply,
         refusal,
         authority,

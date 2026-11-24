@@ -3,7 +3,7 @@
 use super::{ServeError, Server, confirmation::Confirmations, response};
 use crate::{
     cli::ReviewContext,
-    review::{self, initialization::Onboarding},
+    review::{self, initialization::Onboarding, setup},
 };
 use canonic_mcp_kit::{
     Annotations, Catalog, Client, Decision, RpcError, ServerInfo, Tool, ToolCall, ToolResult, rpc,
@@ -18,7 +18,7 @@ use std::{
     },
 };
 
-const INSTRUCTIONS: &str = "This connection supports first-run Shield setup. If project configuration is absent, call init with agents: [\"hub\"] after initializing Hub and publishing its .hub/ marker, or name native agents such as [\"claude\",\"codex\"]. The default baseline profile is recommended. The person confirms the captured setup in this session; no terminal handoff is needed. After init, all normal Shield tools work on this connection. For an initialized project inspect status; use mcp_setup for integration changes. For Hub publication call Hub's setup, then Shield status and doctor. Resume disabled enforcement with enable only through its human review. Report any required agent reload and keep live interception unverified until observed.";
+const INSTRUCTIONS: &str = "Call setup to initialize or repair Shield. It defaults to the Recommended baseline for a fresh project and detects a project publisher or agent. Pass agents only to choose a target explicitly. The user reviews changes in this session. Follow any returned publication or reload action, then inspect Shield status and doctor.";
 
 struct Bootstrap {
     input: Arc<ReviewContext>,
@@ -39,18 +39,9 @@ fn instructions(project: &std::path::Path) -> String {
 }
 
 fn first_run_target_allowed(project: &std::path::Path, home: Option<&std::path::Path>) -> bool {
-    let Ok(project) = project.canonicalize() else {
-        return false;
-    };
-    if project.parent().is_none() {
-        return false;
-    }
-    match home {
-        Some(home) => home
-            .canonicalize()
-            .is_ok_and(|home| !home.starts_with(&project)),
-        None => true,
-    }
+    project
+        .canonicalize()
+        .is_ok_and(|root| setup::first_run_target_allowed(&root, home))
 }
 
 fn tool() -> Tool {
@@ -83,7 +74,12 @@ fn result(input: &ReviewContext, data: Result<Value, review::Error>) -> ToolResu
             true,
         ),
     };
-    response::tool_result("status", input.agent.as_deref(), value, failed, &|| Ok(()))
+    let tool = if value["data"]["setup_status"].is_string() {
+        setup::TOOL
+    } else {
+        "status"
+    };
+    response::tool_result(tool, input.agent.as_deref(), value, failed, &|| Ok(()))
 }
 
 fn finish(
@@ -92,11 +88,12 @@ fn finish(
     input: &ReviewContext,
     active: &OnceLock<Server>,
     log: &Arc<crate::diagnostics::Log>,
+    arguments: Option<&Value>,
     checkpoint: review::Checkpoint<'_>,
 ) -> ToolResult {
     let value = match decision {
         Decision::Accepted => {
-            let committed = plan.commit(checkpoint);
+            let committed = plan.commit(checkpoint, "mcp", None);
             // If publication was interrupted after initialization, expose the
             // ordinary inspection/setup tools instead of stranding the caller
             // on a fresh-project endpoint that can no longer initialize.
@@ -124,13 +121,53 @@ fn finish(
             );
         }
         Decision::Unavailable => {
+            if let Some(arguments) = arguments {
+                return setup_unavailable(input, arguments);
+            }
             return refusal(
                 "approval_unavailable",
-                "This host could not show Shield's setup confirmation. Enable in-session confirmation prompts and call init again; nothing was initialized.",
+                "This host could not show Shield's setup confirmation. Ask the user to review shield setup in a terminal for the selected project, or enable in-session confirmation and retry. Nothing was initialized.",
             );
         }
     };
-    result(input, value)
+    result(
+        input,
+        value.map(|receipt| {
+            if arguments.is_some() {
+                setup::receipt(&input.project, receipt, "initialized")
+            } else {
+                receipt
+            }
+        }),
+    )
+}
+
+fn setup_unavailable(input: &ReviewContext, arguments: &Value) -> ToolResult {
+    setup_refusal(
+        input,
+        arguments,
+        "approval_unavailable",
+        "The host could not present the Shield setup review. Ask the user to run the returned terminal command to review it. Nothing was initialized.",
+    )
+}
+
+fn setup_refusal(
+    input: &ReviewContext,
+    arguments: &Value,
+    code: &str,
+    message: &str,
+) -> ToolResult {
+    response::tool_result(
+        setup::TOOL,
+        input.agent.as_deref(),
+        json!({
+            "schema_version":1,"project_id":"uninitialized","policy_revision":null,"data":null,
+            "error":{"code":code,"message":message,"operator_route":"shield setup","operator_action":setup::operator_action(&input.project, arguments)},
+            "missing":[],"truncated":false
+        }),
+        true,
+        &|| Ok(()),
+    )
 }
 
 fn refusal(code: &str, message: &str) -> ToolResult {
@@ -160,29 +197,36 @@ impl Bootstrap {
         {
             return self.resume(request, call, context);
         }
-        let agents = call.arguments["agents"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(Value::as_str)
-            .map(str::to_owned)
-            .collect::<Vec<_>>();
-        let profile = match call.arguments["profile"].as_str().unwrap_or("recommended") {
-            "loose" => crate::policy::Profile::Loose,
-            "strict" => crate::policy::Profile::Strict,
-            _ => crate::policy::Profile::Recommended,
-        };
-        let plan = match (self.prepare)(&self.input.project, profile, &agents) {
-            Ok(plan) => plan,
+        let (plan, agents) = match self.prepare_call(call) {
+            Ok(prepared) => prepared,
             Err(error) => return Outcome::Tool(result(&self.input, Err(error))),
         };
+        let ordinary_setup = call.name == setup::TOOL;
+        let mut operator_arguments = call.arguments.clone();
+        operator_arguments["agents"] = json!(agents);
+        let message = match plan.message() {
+            Ok(message) => message,
+            Err(error)
+                if let Some((code, message)) =
+                    review::operator::administrative_form_refusal(&error) =>
+            {
+                return Outcome::Tool(setup_refusal(
+                    &self.input,
+                    &operator_arguments,
+                    code,
+                    message,
+                ));
+            }
+            Err(error) => return Outcome::Tool(result(&self.input, Err(error))),
+        };
+        let operator_arguments = ordinary_setup.then_some(operator_arguments);
         if let Some(request) = context.request_context() {
             let binding = self.sequence.fetch_add(1, Ordering::Relaxed);
             let confirmation = self
                 .confirmations
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .begin(request, call, plan.message(), Some(binding), None);
+                .begin(request, call, &message, Some(binding), None);
             return match confirmation {
                 Ok(question) => {
                     self.plans
@@ -190,6 +234,11 @@ impl Bootstrap {
                         .unwrap_or_else(std::sync::PoisonError::into_inner)
                         .insert(binding, plan);
                     Outcome::InputRequired(question)
+                }
+                Err(super::confirmation::Refusal::Unavailable)
+                    if let Some(arguments) = &operator_arguments =>
+                {
+                    Outcome::Tool(setup_unavailable(&self.input, arguments))
                 }
                 Err(_) => Outcome::Tool(refusal(
                     "approval_unavailable",
@@ -200,16 +249,48 @@ impl Bootstrap {
         let input = self.input.clone();
         let active = self.active.clone();
         let log = self.log.clone();
-        Outcome::Confirm(Confirm::new(
-            plan.message().to_owned(),
-            move |decision, context| {
-                Outcome::Tool(finish(plan, decision, &input, &active, &log, &|| {
+        Outcome::Confirm(Confirm::new(message, move |decision, context| {
+            Outcome::Tool(finish(
+                plan,
+                decision,
+                &input,
+                &active,
+                &log,
+                operator_arguments.as_ref(),
+                &|| {
                     context
                         .check()
                         .map_err(|_| crate::policy::Error::Interrupted)
-                }))
-            },
-        ))
+                },
+            ))
+        }))
+    }
+
+    fn prepare_call(&self, call: &ToolCall) -> Result<(Onboarding, Vec<String>), review::Error> {
+        let agents = call.arguments["agents"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .map(str::to_owned)
+            .collect::<Vec<_>>();
+        let agents = if call.name == setup::TOOL {
+            setup::agents(
+                &self.input.project,
+                &Value::Null,
+                &agents,
+                self.input.agent.as_deref(),
+            )?
+        } else {
+            agents
+        };
+        let profile = match call.arguments["profile"].as_str().unwrap_or("recommended") {
+            "loose" => crate::policy::Profile::Loose,
+            "strict" => crate::policy::Profile::Strict,
+            _ => crate::policy::Profile::Recommended,
+        };
+        let plan = (self.prepare)(&self.input.project, profile, &agents)?;
+        Ok((plan, agents))
     }
 
     fn resume(
@@ -241,6 +322,7 @@ impl Bootstrap {
                 &self.input,
                 &self.active,
                 &self.log,
+                (call.name == setup::TOOL).then_some(&call.arguments),
                 &|| {
                     context
                         .check()
@@ -281,11 +363,20 @@ impl Handler for Bootstrap {
     fn call(&self, request: Request, context: &stdio::Context) -> Outcome {
         // Continuations belong to this exact bootstrap review, even if another
         // init finished while this host still had a confirmation open.
-        let continuation = context
-            .request_context()
-            .is_some_and(|request| request.request_state.is_some());
+        let continuation = context.request_context().is_some_and(|request| {
+            self.confirmations
+                .lock()
+                .ok()
+                .and_then(|confirmations| confirmations.review_binding(request))
+                .is_some()
+        });
         if let Some(server) = self.active.get() {
-            if matches!(&request, Request::Tool(call) if call.name == "init") && !continuation {
+            let init = matches!(&request, Request::Tool(call) if call.name == "init");
+            if init
+                && context
+                    .request_context()
+                    .is_none_or(|request| request.request_state.is_none())
+            {
                 return server.call(
                     Request::Tool(ToolCall {
                         name: "status".into(),
@@ -295,23 +386,25 @@ impl Handler for Bootstrap {
                     context,
                 );
             }
-            if !matches!(&request, Request::Tool(call) if call.name == "init") {
+            if !init && !continuation {
                 return server.call(request, context);
             }
         }
         match request {
-            Request::Tool(call) if call.name == "init" => self.initialize_project(&call, context),
+            Request::Tool(call) if matches!(call.name.as_str(), "init" | setup::TOOL) => {
+                self.initialize_project(&call, context)
+            }
             Request::Prompt(call) => super::prompts::render(&call),
             Request::Tool(_) => Outcome::Tool(refusal(
                 "not_initialized",
-                "Shield is not initialized in this project. Call init with the selected agents to review setup in this session.",
+                "Shield is not initialized in this project. Call setup to review setup in this session.",
             )),
             Request::Method { method, params } if method == "resources/read" => {
                 Outcome::ResourceNotFound(params["uri"].as_str().unwrap_or_default().into())
             }
             _ => Outcome::Method(Err(RpcError::new(
                 rpc::METHOD_NOT_FOUND,
-                "Initialize this project with init before using project resources",
+                "Set up this project with setup before using project resources",
             ))),
         }
     }

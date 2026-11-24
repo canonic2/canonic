@@ -278,6 +278,13 @@ impl PackDocument {
         if features.variables {
             extra.insert("variables-v1".to_owned());
         }
+        if self
+            .variables
+            .values()
+            .any(|declaration| declaration.discover.is_some())
+        {
+            extra.insert("executable-discovery-v1".to_owned());
+        }
         if features.selectors.parts {
             extra.insert("variable-parts-v1".to_owned());
         }

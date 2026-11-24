@@ -5,14 +5,14 @@ expression: text
 $ shield init --no-setup --no-baseline
 --- terminal
 Setting up Shield. Nothing is written until you confirm.
-Initialize Shield in [PROJECT]
+Shield review for [PROJECT] (project scope)
 
+Initialize Shield with project enforcement enabled.
 Policy
   No permission packs
 
-Agent integrations
-  None selected. Set them up later with shield mcp setup.
-
+Setup does not verify host loading or interception.
+keep integrations.
 Review and confirm → Apply change
 Shield is set up in [PROJECT] with no packs.
 No agent is connected. Connect one with shield mcp setup.

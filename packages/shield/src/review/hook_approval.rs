@@ -26,7 +26,7 @@ const GRANT_MS: u64 = 300_000;
 const FOLLOWUP_MS: u64 = 60_000;
 const ID_KIND: &str = "hook-request";
 /// Longest form Shield shows, within the host confirmation's message limit.
-pub(super) const MAX_FORM: usize = 12_000;
+pub(crate) const MAX_FORM: usize = 12_000;
 /// Most requests one confirmation may cover.
 const MAX_GROUP: usize = 8;
 
@@ -870,9 +870,9 @@ pub(crate) fn relative_cwd(root: &std::path::Path, cwd: &str) -> String {
         .unwrap_or_else(|| cwd.to_owned())
 }
 
-/// Whether the form can show this request whole; a longer one is not offered.
-pub(crate) fn fits(summary: &Summary, cwd: &str) -> bool {
-    message(summary, cwd).len() <= MAX_FORM
+/// Measure the exact single-request form, including escaping and display text.
+pub(crate) fn form_bytes(summary: &Summary, cwd: &str) -> usize {
+    message(summary, cwd).len()
 }
 
 /// Shield's own lines come first; the agent's request follows as an indented

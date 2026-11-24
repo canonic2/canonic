@@ -707,7 +707,8 @@ fn only_active_policy_allow_continues_without_a_proposal() {
         .as_str()
         .unwrap();
     assert!(
-        action.contains("A policy change is unnecessary to run it"),
+        action.contains("Active policy allows this argv")
+            && action.contains("check shell analysis"),
         "{active}"
     );
     assert!(

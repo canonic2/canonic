@@ -25,6 +25,10 @@ struct Output {
     value: Value,
     context: Option<Context>,
 }
+
+pub(crate) use presentation::admin::{
+    form_refusal as administrative_form_refusal, review as administrative_review,
+};
 impl Output {
     fn independent(value: Value) -> Self {
         Self {
@@ -146,6 +150,24 @@ fn dispatch(input: &Cli) -> Result<Output, Error> {
                 json!({"mode":"preview", "docker": observation}),
             ));
         }
+        PublicCommand::Setup { agents, profile } => {
+            let path = start.canonicalize()?;
+            let root = if input.project.is_some() {
+                path.as_path()
+            } else {
+                path.ancestors()
+                    .find(|root| configured(root))
+                    .unwrap_or(&path)
+            };
+            return integrations::project_setup(
+                root,
+                agents,
+                *profile,
+                input.json,
+                input.cache_dir.as_deref(),
+            )
+            .map(Output::independent);
+        }
         PublicCommand::Init {
             agents,
             no_setup,
@@ -237,6 +259,12 @@ fn dispatch(input: &Cli) -> Result<Output, Error> {
                         context: Some(context),
                     },
                 );
+            }
+            if setup.repair {
+                return integrations::repair(&context, setup, input.json).map(|value| Output {
+                    value,
+                    context: Some(context),
+                });
             }
             if setup.dry_run {
                 return integrations::setup_review(
@@ -520,7 +548,7 @@ fn administer(
 ) -> Result<Value, Error> {
     let mut tty = terminal::Terminal::required(json_mode)?;
     let prepared = super::admin::prepare(context, name, args, &|| Ok(()))?;
-    tty.confirm(&prepared.review())?;
+    tty.confirm_admin(prepared.review_ref(), &context.project_root)?;
     prepared.commit(context, &|| Ok(()))
 }
 
@@ -535,7 +563,7 @@ fn project_with(start: &Path, open: fn(&Path) -> Result<Context, Error>) -> Resu
             return open(root);
         }
     }
-    Err(Error::Invalid("no enrolled project; run shield init"))
+    Err(Error::Invalid("no enrolled project; run shield setup"))
 }
 
 fn configured(root: &Path) -> bool {

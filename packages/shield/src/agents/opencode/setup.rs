@@ -77,6 +77,32 @@ fn document(source: Option<&str>) -> Result<Value, Error> {
 pub(super) fn has_mcp(source: &str) -> Result<bool, Error> {
     Ok(document(Some(source))?["mcp"].get("shield").is_some())
 }
+
+pub(super) fn borrow_mcp(
+    source: &str,
+    binary: &std::path::Path,
+    root: &std::path::Path,
+) -> Result<Option<String>, Error> {
+    let value = document(Some(source))?;
+    let Some(entry) = value["mcp"].get("shield") else {
+        return Ok(None);
+    };
+    // These are complete generated launchers, not basename or flag scans.
+    // Extra environment, disabled entries, remote servers and wrappers refuse.
+    for command in [Some("shield"), binary.to_str()].into_iter().flatten() {
+        for project in [Some("."), root.to_str()].into_iter().flatten() {
+            let command: Vec<_> = std::iter::once(command.to_owned())
+                .chain(super::super::setup::serve_args_for_project(
+                    root, "opencode", project,
+                ))
+                .collect();
+            if entry == &json!({"type":"local","command":command,"enabled":true}) {
+                return Ok(Some(entry.to_string()));
+            }
+        }
+    }
+    Ok(None)
+}
 pub(super) fn merge_mcp(
     actual: Option<&str>,
     old: Option<&str>,

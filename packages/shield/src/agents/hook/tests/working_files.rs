@@ -5,6 +5,28 @@ use crate::location::WorkingFiles;
 use std::path::PathBuf;
 
 #[cfg(unix)]
+fn native_shell_at(context: &review::Context, cwd: &Path, agent: &str, command: &str) -> Value {
+    let input = json!({"protocol_version":1,"request_id":"external-workdir-acme",
+        "expected_project_id":context.project_id,"cwd":cwd,
+        "operation":{"kind":"shell","source":command,"dialect":"posix"},
+        "host":null,"approval_request_id":null});
+    protocol::evaluate_native(
+        Path::new(&context.project_root),
+        &serde_json::to_vec(&input).unwrap(),
+        &json!({}),
+        NativeContext {
+            integration: agent,
+            approval: NativeApproval::Prompt,
+            context_complete: true,
+            working_files: None,
+        },
+        None,
+        &|_| {},
+    )
+    .0
+}
+
+#[cfg(unix)]
 #[test]
 fn monorepo_cd_uses_normal_lookup_and_preserves_native_boundaries() {
     let (_fixture, context) = fixture();
@@ -39,6 +61,10 @@ fn monorepo_cd_uses_normal_lookup_and_preserves_native_boundaries() {
 }
 
 fn scoped_project(root: &Path) -> review::Context {
+    scoped_project_with_config(root, "schema_version: 1\npacks: []\nrules: rules.yml\n")
+}
+
+fn scoped_project_with_config(root: &Path, config: &str) -> review::Context {
     let rules = json!({"schema_version":1,"kind":"custom",
         "capabilities":["structured-rules-v1","argument-rules-v1","location-v1","access-paths-v1","requirements-v1"],
         "rules":[
@@ -48,16 +74,269 @@ fn scoped_project(root: &Path) -> review::Context {
             {"id":"cat","decision":"allow","conditions":{"domain":"argv","executable":"cat","arguments":{"kind":"any"}},"requirements":{"targets":{"action":"read","all":{"within":{"root":"read"}}}},"on_unmet":{"decision":"deny"}},
             {"id":"rg","decision":"allow","conditions":{"domain":"argv","executable":"rg","arguments":{"kind":"any"}},"requirements":{"targets":{"action":"read","all":{"within":{"root":"read"}}}},"on_unmet":{"decision":"deny"}},
             {"id":"printf","decision":"allow","conditions":{"domain":"argv","executable":"printf","arguments":{"kind":"any"}}},
+            {"id":"project-cwd","decision":"allow","conditions":{"domain":"argv","executable":"acme-project-only","arguments":{"kind":"any"}},"requirements":{"cwd":{"within":{"root":"project"}}},"on_unmet":{"decision":"deny"}},
             {"id":"git-output","decision":"allow","conditions":{"domain":"argv","executable":"git","arguments":{"kind":"prefix","values":[{"one_of":["diff","show"]}]}},"requirements":{"targets":{"action":"write","all":{"within":{"root":"write"}}}},"on_unmet":{"decision":"ask"}},
             {"id":"explicit-deny","decision":"deny","conditions":{"domain":"argv","executable":"acme-denied","arguments":{"kind":"any"}}}
         ]}).to_string();
-    let bundle = Bundle::capture(
+    let bundle = Bundle::capture(config, &[], Some(&rules)).unwrap();
+    review::mcp::initialize_fixture(root, &bundle)
+}
+
+#[test]
+fn folder_recovery_skips_existing_grants_and_names_the_unapproved_operand() {
+    let fixture = assert_fs::TempDir::new().unwrap();
+    let parent = fixture.path().canonicalize().unwrap();
+    let project = parent.join("project");
+    let approved = parent.join("approved");
+    let outside = parent.join("outside");
+    for folder in [&project, &approved, &outside] {
+        fs::create_dir(folder).unwrap();
+        fs::write(folder.join("note.txt"), "Acme note").unwrap();
+    }
+    let rule = crate::policy::rules::document(&[
+        json!({"id":"project-cat","decision":"allow",
+            "conditions":{"domain":"argv","executable":"cat","arguments":{"kind":"any"}},
+            "requirements":{"targets":{"action":"read","all":{"within":{"root":"project"}}}},
+            "on_unmet":{"decision":"deny","message":"Use approved paths.",
+                "alternatives":["Propose folder access with access_path_add."]}}),
+        json!({"id":"approved-head","decision":"allow",
+            "conditions":{"domain":"argv","executable":"head","arguments":{"kind":"any"}},
+            "requirements":{"targets":{"action":"read","all":{"within":{"root":"read"}}}},
+            "on_unmet":{"decision":"deny"}}),
+    ])
+    .unwrap()
+    .to_string();
+    let config = json!({"schema_version":1,"packs":[],"rules":"rules.yml",
+        "access_paths":{"write":[approved]}})
+    .to_string();
+    let bundle = Bundle::capture(&config, &[], Some(&rule)).unwrap();
+    let context = review::mcp::initialize_fixture(&project, &bundle);
+    let approve_path = approved.join("note.txt");
+    let outside_path = outside.join("note.txt");
+    let command = format!("cat '{}'", approve_path.display());
+    let value = unscoped_shell(&project, "codex", &command);
+    assert_eq!(denial_decision(&value), "deny", "{value}");
+    let message = reason(&value);
+    assert!(message.contains("project-cat"), "{message}");
+    assert!(message.contains("rule's location requirement"), "{message}");
+    assert!(!message.contains("access_path_add"), "{message}");
+    assert!(
+        !value.to_string().contains("outside the approved folders"),
+        "{value}"
+    );
+
+    let both = format!(
+        "head '{}' '{}'",
+        approve_path.display(),
+        outside_path.display()
+    );
+    let value = unscoped_shell(&project, "codex", &both);
+    assert_eq!(denial_decision(&value), "deny", "{value}");
+    let arguments = propose_offered(&context, reason(&value));
+    assert_eq!(arguments["change"]["path"], json!(outside), "{arguments}");
+    assert_eq!(arguments["change"]["access"], "read", "{arguments}");
+}
+
+#[test]
+fn routine_patches_work_with_mixed_folder_and_file_grants() {
+    let fixture = assert_fs::TempDir::new().unwrap();
+    let parent = fixture.path().canonicalize().unwrap();
+    let root = parent.join("project");
+    let checkout = parent.join("checkout");
+    for folder in [&root, &checkout] {
+        fs::create_dir(folder).unwrap();
+    }
+    let metadata = parent.join("release.json");
+    fs::write(&metadata, "{}\n").unwrap();
+    fs::write(root.join("ROADMAP.md"), "Acme roadmap\n").unwrap();
+    let config = json!({"schema_version":1,"packs":[],"rules":"rules.yml",
+        "access_paths":{"write":[checkout,metadata]}})
+    .to_string();
+    let rule = crate::policy::rules::document(&[json!({"id":"file-write","decision":"allow",
+        "conditions":{"domain":"file","action":"write"},
+        "requirements":{"targets":{"action":"write","all":{"within":{"root":"write"},
+            "exclude":[{"root":"write","path":".git"},{"root":"write","path":".shield/cache"}],
+            "match":{"regex":".+"}}}},"on_unmet":{"decision":"deny"}})])
+    .unwrap()
+    .to_string();
+    let bundle = Bundle::capture(&config, &[], Some(&rule)).unwrap();
+    review::mcp::initialize_fixture(&root, &bundle);
+    let evaluate = |body: &str| {
+        tool(
+            &root,
+            "codex",
+            "apply_patch",
+            &json!({
+                "command": format!("*** Begin Patch\n{body}\n*** End Patch\n")
+            }),
+        )
+    };
+    let create = format!(
+        "*** Add File: {}\n+Acme fixture",
+        checkout.join("scripts/pack.mjs").display()
+    );
+    let update = format!(
+        "*** Update File: {}\n@@\n-{{}}\n+{{\"acme\":true}}",
+        metadata.display()
+    );
+    assert_permitted(&evaluate(&format!("{create}\n{update}")), "codex");
+    assert_permitted(
+        &evaluate(&format!("*** Add File: large.txt\n+{}", "x".repeat(13_000))),
+        "codex",
+    );
+    assert_permitted(
+        &evaluate("*** Update File: ROADMAP.md\n@@\n-Acme roadmap\n+Acme complete"),
+        "codex",
+    );
+    for path in [
+        checkout.join(".git/config"),
+        root.join(".shield/config.yml"),
+    ] {
+        let value = evaluate(&format!(
+            "{create}\n*** Add File: {}\n+Acme blocked",
+            path.display()
+        ));
+        assert_eq!(denial_decision(&value), "deny", "{path:?}: {value}");
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn patch_refusals_name_the_blocking_target_and_failed_verification() {
+    let fixture = assert_fs::TempDir::new().unwrap();
+    let root = fixture.path().canonicalize().unwrap();
+    let project = root.join("project");
+    fs::create_dir(&project).unwrap();
+    fs::write(project.join("file"), "Acme ordinary file").unwrap();
+    // A dangling grant fails root verification, even for a valid project path.
+    let grant = root.join("grant");
+    std::os::unix::fs::symlink(root.join("absent"), &grant).unwrap();
+    let config = json!({"schema_version":1,"packs":[],"rules":"rules.yml",
+        "access_paths":{"write":[grant]}})
+    .to_string();
+    scoped_project_with_config(&project, &config);
+    let patch = |body: &str| {
+        tool(
+            &project,
+            "codex",
+            "apply_patch",
+            &json!({
+                "command":format!("*** Begin Patch\n{body}\n*** End Patch")
+            }),
+        )
+    };
+    let target = patch("*** Add File: file/new.txt\n+Acme content");
+    let grants = patch("*** Add File: new.txt\n+Acme content");
+    for (value, path, cause) in [
+        (target, "file/new.txt", "parent components are directories"),
+        (grants, "new.txt", "configured access paths"),
+    ] {
+        assert_eq!(denial_decision(&value), "deny", "{value}");
+        assert!(reason(&value).contains(&format!("`{path}`")), "{value}");
+        assert!(reason(&value).contains(cause), "{value}");
+        assert!(
+            value["hookSpecificOutput"]["permissionDecisionReason"]
+                .as_str()
+                .unwrap()
+                .contains(cause),
+            "{value}"
+        );
+        assert!(!value.to_string().contains("Acme content"), "{value}");
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn approved_external_workdirs_keep_launch_policy_and_path_permissions() {
+    let fixture = assert_fs::TempDir::new().unwrap();
+    let parent = fixture.path().canonicalize().unwrap();
+    let root = parent.join("project");
+    let read = parent.join("read");
+    let write = parent.join("write");
+    let foreign = parent.join("foreign");
+    for path in [&root, &read, &write, &foreign] {
+        fs::create_dir(path).unwrap();
+        fs::write(path.join("note.txt"), "Acme note").unwrap();
+    }
+    let file = parent.join("single-file");
+    fs::write(&file, "Acme file grant").unwrap();
+    let config = json!({"schema_version":1,"packs":[],"rules":"rules.yml",
+        "access_paths":{"read":[read,file],"write":[write]}})
+    .to_string();
+    let context = scoped_project_with_config(&root, &config);
+    // A command's workdir must not select this other enrollment's policy.
+    let empty = Bundle::capture("schema_version: 1\npacks: []\n", &[], None).unwrap();
+    review::mcp::initialize_fixture(&write, &empty);
+    let escape = read.join("escape");
+    std::os::unix::fs::symlink(&foreign, &escape).unwrap();
+    let missing = write.join("missing");
+
+    let decide = |agent: &str, cwd: &Path, command: &str| {
+        let mut host = native_host(
+            &root,
+            agent,
+            "PreToolUse",
+            "Bash",
+            &json!({"command":command}),
+        );
+        if agent == "codex" {
+            host["tool_input"]["workdir"] = json!(cwd);
+        } else {
+            host["cwd"] = json!(cwd);
+        }
+        translate(&root, agent, &serde_json::to_vec(&host).unwrap())
+    };
+    for agent in ["codex", "claude"] {
+        assert_permitted(&decide(agent, &write, "cat note.txt"), agent);
+        for command in [
+            "acme-denied",
+            "acme-project-only",
+            "cat ../foreign/note.txt",
+            "printf x > .shield/config.yml",
+        ] {
+            let reply = native_shell_at(&context, &write, agent, command);
+            assert_eq!(reply["decision"], "deny", "{agent} {command}: {reply}");
+        }
+        assert_eq!(
+            native_shell_at(&context, &write, agent, "printf x > note.txt")["decision"],
+            "allow"
+        );
+        // The command rule allows printf without a cwd or write predicate.
+        assert_eq!(
+            native_shell_at(&context, &read, agent, "printf x")["code"],
+            "invalid-context"
+        );
+        assert_eq!(
+            native_shell_at(&context, &write, agent, "printf x")["decision"],
+            "allow"
+        );
+        for cwd in [&read, &foreign, &escape, &missing, &file] {
+            let reply = decide(agent, cwd, "cat note.txt");
+            assert_eq!(denial_decision(&reply), "deny", "{agent} {cwd:?}: {reply}");
+            assert!(reason(&reply).contains("working directory"), "{reply}");
+        }
+    }
+    let approval = |cwd: &Path| {
+        let reply = permission(
+            &root,
+            "Bash",
+            json!({"command":"cat note.txt","workdir":cwd}),
+        );
+        reply["hookSpecificOutput"]["decision"]["behavior"].clone()
+    };
+    assert_eq!(approval(&write), "allow");
+
+    fs::write(
+        root.join(".shield/config.yml"),
         "schema_version: 1\npacks: []\nrules: rules.yml\n",
-        &[],
-        Some(&rules),
     )
     .unwrap();
-    review::mcp::initialize_fixture(root, &bundle)
+    for agent in ["codex", "claude"] {
+        let reply = decide(agent, &write, "cat note.txt");
+        assert_eq!(denial_decision(&reply), "deny", "{agent}: {reply}");
+        assert!(reason(&reply).contains("working directory"), "{reply}");
+    }
+    assert_eq!(approval(&write), "deny");
 }
 
 #[test]
@@ -809,9 +1088,11 @@ fn git_output_requires_writable_destinations_and_preserves_protected_paths() {
     };
     let patch = scratch.join("review.diff");
     let diff = format!("diff base head --output='{}'", patch.display());
-    // The native Git content check can require approval to read agent settings.
-    let protected_read = git(&diff, true);
-    assert_eq!(protected_read["code"], "sensitive-read", "{protected_read}");
+    // Ordinary diff inspection needs no settings-read grant, while its output
+    // destination must still be writable under the active path policy.
+    let inspection = git(&diff, true);
+    assert_eq!(inspection["decision"], "allow", "{inspection}");
+    assert_eq!(git(&diff, false)["decision"], "ask");
     review::path_access::configure_fixture(
         project,
         review::path_access::PathAccess {

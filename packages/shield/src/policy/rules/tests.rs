@@ -2412,7 +2412,9 @@ fn uninspectable_shell_parts_explain_their_ask_to_agents() {
         (
             "node acme.js",
             "ask",
-            Some("`node acme.js` runs a program whose effects Shield cannot inspect"),
+            Some(
+                "`node acme.js` requires shell analysis review because Shield cannot inspect the code the interpreter runs",
+            ),
         ),
         ("node -v", "allow", None),
         ("node --version && cat", "allow", None),

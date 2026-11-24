@@ -17,17 +17,20 @@ pub(super) fn instructions_for(context: &crate::review::Context) -> String {
 }
 
 fn instructions_with(adapter: &dyn crate::agents::review::ReviewAdapter) -> String {
-    let inspection = "Shield manages project permissions. For setup requests complete missing integration, publication and enable reviews, then check status and doctor. Disabled enforcement and configured hooks do not establish live interception. Inspect decisions with policy_evaluate, rules with rule_list, and installed packs with pack_list or pack_show. If the request is allowed, continue with the normal tool. Use suggestion_list for this session's evidence and existing reviews. \
+    let inspection = "Shield manages project permissions. Call setup to initialize or repair the project's integrations, follow the returned action, then check status and doctor. Disabled enforcement and configured hooks do not establish live interception. Inspect decisions with policy_evaluate, rules with rule_list, and installed packs with pack_list or pack_show. If the request is allowed, continue with the normal tool. Use suggestion_list for this session's evidence and existing reviews. \
 Use history_list or history_show with an absolute project path for history in an enrolled nested worktree. For more results, follow next_cursor with the same filters. Restart without a cursor on invalid_cursor. ";
     let host = adapter.guidance().instructions;
     if adapter.confirmation() == crate::agents::review::Confirmation::Terminal {
         return format!("{inspection}{host}");
     }
-    let approvals = "For one-time approval, follow request_approve and repeat the approved call once unchanged. For a batch needed this session, check session_grant_list, propose exact, bounded commands with session_grant_propose, then pass its unchanged apply_arguments to session_grant_approve. Use session_grant_reconsider only on explicit request and obtain fresh confirmation. \
+    let approvals = "For one-time approval, follow request_approve and repeat the approved call once unchanged. Ordinary session grants cover eligible Ask decisions only. For a repeated Ask, inspect session_grant_list, propose bounded commands with session_grant_propose, and pass its unchanged apply_arguments to session_grant_approve. Follow denial-specific recovery for Deny. Use session_grant_reconsider only on explicit request and obtain fresh confirmation. \
 Prefer temporary session grants for work limited to this task. Propose persistent policy when the permission should carry over to future sessions. Open skill://shield/custom-rules/SKILL.md via MCP resources/read. Check policy_evaluate and rule_list, preserve scope and deny boundaries, and use rule_add or policy_propose. \
 Update a named pack with pack_update and its reference. Omit reference only to update all direct packs, including pinned packs. For removal use pack_remove, omitting reference only to let the user choose. Use pack_configure for installed settings and pack_info for setup settings before pack_add. In registry_add, use returned retry_arguments for the separate trust review after collecting any missing inputs. \
-Copy apply_arguments unchanged to policy_apply for host confirmation. A preview, report, prepared Task or chat reply grants no approval. For a preparation Task, poll tasks/get and pass its review_arguments to policy_propose. Recover a lost handle with identical creation arguments. Read report_resources via resources/read for more evidence. With review_status: more_pages, call retry_tool with exact retry_arguments until the review is complete. Keep confirmation in this session and stop on a decline. Never bypass a refusal or automatically restart failed or cancelled work. ";
-    format!("{inspection}{approvals}{host}")
+Copy apply_arguments unchanged to policy_apply for host confirmation. A preview, report, prepared Task or chat reply grants no approval. For a preparation Task, poll tasks/get and pass its review_arguments to policy_propose. Recover a lost handle with identical creation arguments. Read report_resources via resources/read for more evidence. When an administrative review requires the operator terminal, ask the person to run the returned operator_action. Stop on a decline. Never bypass a refusal or automatically restart failed or cancelled work. ";
+    let form_limit = crate::review::hook_approval::MAX_FORM;
+    format!(
+        "{inspection}When an edit needs one-time approval, the complete form fits at most {form_limit} UTF-8 bytes, including the patch, paths and review text. Before submitting a large patch that needs approval, split it into smaller complete patches at file or hunk boundaries. {approvals}{host}"
+    )
 }
 
 pub(super) fn approval_unavailable(agent: Option<&str>) -> &'static str {
@@ -157,18 +160,20 @@ fn primary_summary(name: &str, agent: Option<&str>, value: &Value) -> String {
         };
     }
     let data = &value["data"];
-    if data["review_status"] == "more_pages" {
-        return format!(
-            "Accepted {} of {} review pages. Nothing has applied. Call {} again with the exact retry_arguments for the next human confirmation page.",
-            data["reviewed_pages"],
-            data["total_pages"],
-            data["retry_tool"].as_str().unwrap_or(name)
-        );
-    }
     if data["unchanged"] == true {
         return "Already up to date; no proposal or approval is needed.".into();
     }
     match name {
+        "setup" => {
+            let outcome = match data["setup_status"].as_str() {
+                Some("initialized") => "Shield set up for this project.",
+                Some("unchanged") => "Shield setup is current.",
+                Some("configured") => "Shield integrations configured.",
+                Some("resumed") => "Previously approved Shield setup finished.",
+                _ => "Shield setup needs attention.",
+            };
+            format!("{outcome} {}", data["next_action"].as_str().unwrap_or_default()).trim_end().into()
+        }
         "mcp_setup" if data["operator_recovery"].is_object() => data["next_action"].as_str().unwrap_or("Ask the user to run the target-project operator recovery command.").into(),
         "registry_add" if data["status"] == "input_collected" => data["next_action"].as_str().unwrap_or("Registry details collected; separate trust confirmation is required.").into(),
         "session_grant_list"|"session_grant_show"|"session_grant_propose"|"session_grant_reconsider"|"session_grant_approve"|"session_grant_revoke"=>data["next_action"].as_str().unwrap_or("Session grant inspection only; no command was executed.").into(),

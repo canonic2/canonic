@@ -24,7 +24,7 @@ pub(super) fn configure(context: &Context, json_mode: bool) -> Result<Value, Err
     let after = chosen(before, ask(&mut tty, before)?)?;
     let prepared = Prepared::from_current(context, before, after);
     if after != before {
-        tty.confirm(&prepared.review())?;
+        tty.confirm_admin(&prepared.review(), &context.project_root)?;
     }
     prepared.commit(context, &|| Ok(()))
 }

@@ -7,6 +7,7 @@ Project policy and approval for AI agents
 Usage: shield [OPTIONS] <COMMAND>
 
 Commands:
+  setup          Set up or repair Shield, reusing saved agent and policy choices
   init           Create this project's Shield policy and optionally set up agents, after confirmation
   status         Show policy, integrations and pending requests
   enable         Resume this project's native Shield checks after confirmation
@@ -38,8 +39,7 @@ Options:
   -h, --help                           Print help
   -V, --version                        Print version
 
-Start a project:  shield init
-Configure agents: shield mcp setup
+Set up or repair: shield setup
 Inspect policy:   shield status  /  shield policy show  /  shield rule list
 Find packs:       shield pack search <query>  /  shield pack info <reference>
 Review requests:  shield request list  /  shield request approve <request>

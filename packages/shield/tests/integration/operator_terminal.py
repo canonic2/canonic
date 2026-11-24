@@ -124,7 +124,7 @@ try:
     result = {}
     if mode == "agents":
         assert b"CodexcommandsShieldwouldaskabout" not in visible()
-        assert b"Askfallbackallowsrequests" in visible()
+        assert b"Codexwhenthehostcannotask:allowAskrequests" in visible()
         os.write(master, b"2\r")
     elif mode == "error":
         os.write(master, b"2\r")

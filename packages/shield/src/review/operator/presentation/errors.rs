@@ -130,11 +130,7 @@ fn classify(command: &PublicCommand, error: &Error) -> Report {
             version,
             digest,
         } => revoked(source_identity, pack, version, digest),
-        Error::Ambiguous { .. } => Report::detailed(
-            "The pack reference is ambiguous",
-            "Several packs match this reference.",
-            &["Retry with one of the listed references."],
-        ),
+        Error::Ambiguous { .. } => ambiguous(command),
         // Only agent connections receive this; the terminal is the operator.
         Error::Missing | Error::AgentNotConnected => missing(command),
         Error::CacheUnavailable => Report::new(
@@ -212,6 +208,24 @@ fn classify(command: &PublicCommand, error: &Error) -> Report {
             retained,
             limit,
         } => capacity(*kind, *pending, *retained, *limit),
+    }
+}
+
+fn ambiguous(command: &PublicCommand) -> Report {
+    if matches!(command, PublicCommand::Setup { .. }) {
+        Report::detailed(
+            "Choose the agent to set up",
+            "Shield detected several supported agents.",
+            &[
+                "Run shield setup with --agent and one of the listed IDs. Repeat --agent to select several.",
+            ],
+        )
+    } else {
+        Report::detailed(
+            "The pack reference is ambiguous",
+            "Several packs match this reference.",
+            &["Retry with one of the listed references."],
+        )
     }
 }
 
@@ -396,7 +410,7 @@ fn invalid(command: &PublicCommand, reason: &str) -> Report {
             "Shield is not initialized here",
             "No enrolled project was found for the selected directory.",
             &[
-                "Run shield init in the intended project.",
+                "Run shield setup in the intended project.",
                 "To use another enrolled project, select it with --project PATH.",
             ],
         );
@@ -436,7 +450,7 @@ fn invalid(command: &PublicCommand, reason: &str) -> Report {
             "The captured files or state no longer match this operation's review.",
             &[
                 "Inspect the current files and shield doctor, then repeat the review.",
-                "For a saved partial setup, run shield mcp setup to resume its confirmed plan.",
+                "Run shield setup to resume a confirmed partial setup.",
             ],
         );
     }
@@ -827,7 +841,7 @@ mod tests {
     fn classified_errors() -> Vec<Error> {
         let reasons = [
             "operator terminal required; run this command interactively",
-            "no enrolled project; run shield init",
+            "no enrolled project; run shield setup",
             "Shield MCP entry is unowned or manually changed",
             "project already initialized",
             "repair plan changed during review",

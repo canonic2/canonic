@@ -4,6 +4,8 @@ expression: text
 ---
 $ shield disable
 --- terminal
+Shield review for [PROJECT] (project scope)
+
 disable Shield in [PROJECT]
 Currently enabled.
 Native hooks pause policy decisions while retaining protected-file and operator-command guards. Other requests defer to the agent's own permissions and sandbox; Shield does not approve them.

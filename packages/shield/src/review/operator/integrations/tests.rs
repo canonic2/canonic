@@ -1966,3 +1966,15 @@ fn reviews_list_the_codex_prefixes_a_change_adds_or_removes() {
     let text = review(&current, &current.candidates["project"]);
     assert!(!text.contains("Codex"), "{text}");
 }
+#[test]
+fn project_setup_fresh_mutation_requires_an_operator_terminal() {
+    let root = assert_fs::TempDir::new().unwrap();
+    let result = super::project_setup(root.path(), &["claude".into()], None, true, None);
+    assert!(matches!(
+        result,
+        Err(Error::Invalid(
+            "JSON is read-only; run this command interactively"
+        ))
+    ));
+    assert!(!root.path().join(".shield").exists());
+}

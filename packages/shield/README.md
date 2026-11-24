@@ -9,7 +9,7 @@ propose new rules, but nothing changes until you review and confirm it.
 
 ## Highlights
 
-- **Ready on first run.** `shield init` installs a signed baseline pack and
+- **Ready on first run.** `shield setup` installs a signed baseline pack and
   connects your agents. You don't have to write any policy to start.
 - **Reusable permission packs.** Install packs for the tools you use and pick a
   Loose, Recommended or Strict profile for each one.
@@ -59,12 +59,12 @@ for build prerequisites, the glibc baseline and platform coverage.
 In your project's folder:
 
 ```sh
-shield init
+shield setup
 ```
 
-Choose a profile for the baseline pack, mark the agents to connect with Space,
-then press Enter and confirm the review. Restart the agent so it loads the hooks
-and MCP server, and approve them if it asks.
+Review the Recommended baseline and the agent or publisher Shield detected.
+Use `--agent` to choose explicitly. Run the same command again to check or
+repair setup. Follow the publication or reload action in the result.
 
 Check the installation, then look at what the agent submits as you work:
 
@@ -134,14 +134,14 @@ explains compatible versions, repository scope and pagination.
 ## Agents
 
 ```sh
-shield mcp setup --agent claude
-shield mcp setup --agent codex
-shield mcp setup --agent gemini
-shield mcp setup --agent agy
+shield setup --agent claude
+shield setup --agent codex
+shield setup --agent gemini
+shield setup --agent agy
 shield mcp setup --remove --agent codex
 shield mcp setup --dry-run
-shield mcp setup --agent hub
-shield mcp setup --agent box
+shield setup --agent hub
+shield setup --agent box
 ```
 
 Setup installs hooks, the MCP server and permission settings together, and it

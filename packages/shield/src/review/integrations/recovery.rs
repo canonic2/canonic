@@ -111,6 +111,11 @@ impl Prepared {
             "review conflicting agent setup"
         });
         review["pending"] = json!(self.action);
+        review["unclassified_recovery"] = json!(self.plan.as_ref().is_some_and(|plan| {
+            plan.files
+                .iter()
+                .any(|file| legacy::asset_path(&file.path) && file.before != file.after)
+        }));
         review["preserved_paths"] = json!(self.preserved);
         if self.plan.is_none() {
             let previous = registration(&self.metadata).ok().flatten();

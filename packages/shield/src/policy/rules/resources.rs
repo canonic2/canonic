@@ -22,6 +22,15 @@ pub(crate) trait Resources {
     fn predicate_evidence(&self, _key: &str) -> Option<Value> {
         None
     }
+    /// Explain an unavailable location check for a single explicit file target.
+    fn unavailable_file_evidence(
+        &self,
+        _key: &str,
+        _predicate: &Value,
+        _patterns: &dyn Provider,
+    ) -> Option<Value> {
+        None
+    }
     /// Check one explicitly parsed argument path, without claiming a complete
     /// runtime filesystem footprint for the executable.
     fn argument_path(

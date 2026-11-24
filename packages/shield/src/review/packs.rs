@@ -1,7 +1,9 @@
 //! Retained selections and reviewed acquisition; source aliases are discovery only.
+pub(super) mod binding_advice;
 pub(super) mod bootstrap;
 mod closure;
 mod connections;
+pub(super) mod discovery;
 pub(super) mod installation;
 pub(super) mod settings;
 use super::{project as state, registries};
@@ -871,6 +873,24 @@ pub(super) fn prepare_add(
     local: bool,
     choose: impl FnOnce(&str, &str) -> Result<Profile, Error>,
 ) -> Result<(Value, Value), Error> {
+    let (candidate, meta) =
+        prepare_add_unconfigured(context, before, reference, profile, local, choose)?;
+    let selected = addition_selection(&meta, &before.settings, reference)?;
+    let (candidate, mut meta) =
+        discovery::candidate(&state::root(context), candidate, meta, Some(selected))?;
+    refresh_after_mutation(before, &candidate, &mut meta)?;
+    Ok((candidate, meta))
+}
+
+/// Capture acquisition before callers apply explicit settings and discovery.
+pub(super) fn prepare_add_unconfigured(
+    context: &Context,
+    before: &crate::review::model::State,
+    reference: &str,
+    profile: Option<Profile>,
+    local: bool,
+    choose: impl FnOnce(&str, &str) -> Result<Profile, Error>,
+) -> Result<(Value, Value), Error> {
     let (candidate, meta) = prepare_shared_add(context, before, reference, profile, choose)?;
     add_layer(before, candidate, meta, local)
 }
@@ -1315,7 +1335,9 @@ pub(super) fn prepare_update(
     before: &crate::review::model::State,
     reference: Option<&str>,
 ) -> Result<(Value, Value), Error> {
-    let (candidate, mut meta) = closure::mutations::update(context, before, reference)?;
+    let (candidate, meta, selected) = closure::mutations::update(context, before, reference)?;
+    let (candidate, mut meta) =
+        discovery::candidate(&state::root(context), candidate, meta, selected)?;
     refresh_after_mutation(before, &candidate, &mut meta)?;
     Ok((candidate, meta))
 }
@@ -1349,15 +1371,26 @@ pub(super) fn prepare_change(
             clear_override,
             layer,
         } => {
-            if set.is_empty()
+            let local = *layer == Some(super::changes::Layer::Local);
+            let no_edits = set.is_empty()
                 && unset.is_empty()
                 && overrides.is_empty()
-                && clear_override.is_empty()
-            {
-                return Err(Error::Invalid("pack_configure names at least one change"));
-            }
-            let local = *layer == Some(super::changes::Layer::Local);
+                && clear_override.is_empty();
             prepare_configure(before, reference, |artifact, settings| {
+                if no_edits {
+                    if !policy::declarations(artifact)?
+                        .values()
+                        .any(|declaration| declaration.discover.is_some())
+                    {
+                        return Err(Error::Invalid("pack_configure names at least one change"));
+                    }
+                    let scope = discovery::Scope::for_candidate(
+                        &state::root(context),
+                        &before.candidates["project"],
+                    )?;
+                    discovery::settings(artifact, settings, &scope)?;
+                    return Ok(());
+                }
                 settings.edit(local, |binding| {
                     settings::assign(artifact, binding, set, unset)?;
                     binding.overrides.extend(overrides.clone());

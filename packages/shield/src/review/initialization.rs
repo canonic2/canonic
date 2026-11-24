@@ -125,7 +125,7 @@ impl Prepared {
 pub(crate) struct Onboarding {
     policy: Prepared,
     plan: super::integrations::Plan,
-    message: String,
+    review: Value,
 }
 
 impl Onboarding {
@@ -153,7 +153,7 @@ impl Onboarding {
     ) -> Result<Self, Error> {
         if crate::layout::discovery_root(root) {
             return Err(Error::Invalid(
-                "project already initialized; inspect status and use mcp_setup to change agents",
+                "project already initialized; use setup to inspect or repair the registration",
             ));
         }
         let plan = Self::integration(root, agents)?;
@@ -217,39 +217,44 @@ impl Onboarding {
         }
         let mut integration = super::integrations::setup::preview(root, Some(&plan));
         policy.preview_prefixes(&mut integration, plan.desired.as_ref());
-        let review = json!({"project":root,"operation":"Initialize Shield with enforcement enabled", "packs":metadata["installed"], "integration_setup":integration});
-        let message = format!(
-            "Set up Shield for this project?\n\n{}\n\nThis installs the captured, verified baseline and the listed integrations. Hub definitions still require Hub's setup publication. Reload affected agents to load new hooks; configured files do not verify live interception.",
-            serde_json::to_string_pretty(&review)
-                .map_err(|_| Error::Invalid("initialization review encoding"))?
-        );
-        if message.len() > 48 * 1024 {
-            return Err(Error::Invalid(
-                "initialization review exceeds the host form limit",
-            ));
-        }
+        let review = json!({"project":root,"operation":"initialize project", "packs":metadata["installed"], "integration_setup":integration});
         Ok(Self {
             policy,
             plan,
-            message,
+            review,
         })
     }
 
-    pub(crate) fn message(&self) -> &str {
-        &self.message
+    pub(crate) fn review(&self) -> &Value {
+        &self.review
+    }
+
+    pub(crate) fn message(&self) -> Result<String, Error> {
+        super::operator::administrative_review(&self.review, &self.policy.root.to_string_lossy())
+            .form()
     }
 
     /// Only a validated human confirmation may reach this method.
-    pub(crate) fn commit(self, checkpoint: super::Checkpoint<'_>) -> Result<Value, Error> {
+    pub(crate) fn commit(
+        self,
+        checkpoint: super::Checkpoint<'_>,
+        surface: &str,
+        cache_dir: Option<&Path>,
+    ) -> Result<Value, Error> {
         let (mut context, receipt) = self.policy.commit(checkpoint)?;
-        context.surface = "mcp".into();
-        let receipt = super::integrations::setup::finish_checked(
+        context.surface = surface.into();
+        let mut receipt = super::integrations::setup::finish_checked(
             &context,
             &json!({}),
             Some(&self.plan),
             Some(receipt),
             checkpoint,
         )?;
+        if receipt.get("setup_error").is_none()
+            && let Some(directory) = cache_dir
+        {
+            receipt["cache_location"] = super::files::relocate_cache(&context, directory)?;
+        }
         super::storage::Store::open(Path::new(&context.project_root))?.update_checkpoint(
             &context,
             &|| Ok(()),

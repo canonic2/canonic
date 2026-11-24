@@ -267,7 +267,7 @@ pub(super) fn propose(
     input: &Input,
     checkpoint: Checkpoint<'_>,
     reserve: Reservation<'_>,
-    present: &dyn Fn(&Proposal) -> Value,
+    present: &dyn Fn(&Proposal) -> Result<Value, Error>,
 ) -> Result<Value, Error> {
     let _trace = crate::diagnostics::trace::span("proposal.prepare");
     validate_input(input)?;
@@ -332,7 +332,7 @@ pub(super) fn propose(
             (&row.base_digest, &row.candidate_digest),
             None,
         )?;
-        return Ok(present(row));
+        return present(row);
     }
     super::web_reviews::check_proposal(&before, context, &input.review_ids)?;
     checkpoint()?;
@@ -478,7 +478,7 @@ pub(super) fn propose(
                 // read. Reserve that retained row, not this request's candidate.
                 store.hydrate_proposal(row)?;
                 reserve((&row.base_candidate, &row.base_metadata), (&row.candidate, &row.candidate_metadata), (&row.base_digest, &row.candidate_digest), None)?;
-                Ok(present(row))
+                present(row)
             } else { Err(Error::Invalid("idempotency key reused with changed input")) };
         }
         if input.supersedes_proposal_id.as_ref().is_some_and(|id| !state.proposals.iter().any(|p| p.id == *id)) { return Err(Error::Missing); }
@@ -506,7 +506,7 @@ pub(super) fn propose(
         let row = Proposal { id, created_at:event["recorded_at"].as_str().ok_or(Error::Invalid("timestamp unavailable"))?.into(), status:"pending".into(), provenance:context.provenance(), links:event["links"].clone(), reasons:event["reasons"].clone(), policy_revision:state.policy_revision.clone(),target_scope:"project".into(),operation:kind,rule_id,candidate_digest:presentation_after.clone(),base_digest:presentation_before.clone(),files:files.clone(),candidate,base_candidate:base_candidate.clone(),retired_candidate:None,retired_base_candidate:None,base_metadata:before.operator.clone(),candidate_metadata:meta,receipt:Value::Null,comparison,presentation:presentation_ref,operator:None,retry_key:retry_key.clone(),retry_owner:context.retry_owner(),signature,reviewed_files, reviewed_paths, interaction:Some(super::proposal_lifecycle::Interaction::new(context)?), closed_reason:None };
         let result = {
             let _trace = crate::diagnostics::trace::span("proposal.present");
-            present(&row)
+            present(&row)?
         };
         state.proposals.push(row);
         state.record(event);
