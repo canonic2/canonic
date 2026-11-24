@@ -104,5 +104,5 @@ to satisfy the JSDoc plugin's current TypeScript compatibility range.
 
 ## License
 
-Lattice is subject to the [Canonic Proprietary License](../../LICENSE).
+Lattice is subject to the [Canonic Proprietary License](LICENSE).
 Third-party components retain their own licenses and notices.

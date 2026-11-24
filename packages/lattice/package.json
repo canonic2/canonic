@@ -2,6 +2,7 @@
   "name": "@canonic2/lattice",
   "version": "0.1.0",
   "private": true,
+  "license": "SEE LICENSE IN LICENSE",
   "description": "Native JavaScript primitives for state and Web Component bindings.",
   "files": [
     "src",

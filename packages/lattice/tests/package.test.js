@@ -94,6 +94,7 @@ afterAll(() => {
 
 describe('packed archive', () => {
   test('contains runtime source and no tests or development files', () => {
+    expect(archived).toContain('package/LICENSE');
     expect(archived).toContain('package/src/index.js');
     expect(archived).toContain('package/src/modules/store/store.js');
     expect(archived).toContain('package/src/modules/elements/elements.js');

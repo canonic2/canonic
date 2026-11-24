@@ -89,16 +89,8 @@ impl SessionBrowser {
         }
     }
     fn navigation(&mut self, code: KeyCode) -> bool {
-        let ids = self
-            .visible_ids()
-            .into_iter()
-            .map(|id| id.map(str::to_owned))
-            .collect::<Vec<_>>();
-        let selected = if self.search_row {
-            None
-        } else {
-            self.selected.clone()
-        };
+        let ids = self.visible_ids();
+        let selected = self.selected();
         let old = ids.iter().position(|id| *id == selected).unwrap_or(0);
         let last = ids.len().saturating_sub(1);
         let next = match code {
@@ -110,9 +102,9 @@ impl SessionBrowser {
             KeyCode::End => last,
             _ => return false,
         };
-        if let Some(id) = ids.get(next) {
-            self.selected.clone_from(id);
+        if let Some(id) = ids.get(next).map(|id| id.map(str::to_owned)) {
             self.search_row = id.is_none();
+            self.selected = id;
         }
         if next == last
             && matches!(code, KeyCode::Down | KeyCode::PageDown | KeyCode::End)

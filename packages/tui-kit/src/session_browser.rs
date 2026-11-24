@@ -225,9 +225,7 @@ impl SessionBrowser {
     fn validate_new(&self, snapshot: &Snapshot) -> Result<(), Invalid> {
         model::validate(snapshot)?;
         for row in &snapshot.rows {
-            if let Some(old) = self
-                .row(&row.id)
-                .or_else(|| self.snapshot.rows.iter().find(|r| r.id == row.id))
+            if let Some(old) = self.row(&row.id)
                 && (row.revision < old.revision
                     || row.revision == old.revision && !model::same_material(old, row))
             {
@@ -250,34 +248,29 @@ impl SessionBrowser {
         let visible = self
             .visible()
             .into_iter()
-            .map(|i| self.rows()[i].id.clone())
+            .map(|i| self.rows()[i].id.as_str())
             .collect::<Vec<_>>();
         if self
             .selected
-            .as_ref()
-            .is_some_and(|id| visible.contains(id))
+            .as_deref()
+            .is_some_and(|id| visible.contains(&id))
         {
             return;
         }
-        let previous = self.selected.take();
-        let old_position = previous
+        let old_position = self
+            .selected
             .as_ref()
             .and_then(|id| old.iter().position(|r| r == id));
-        self.selected = old_position
+        let selected = old_position
             .and_then(|p| {
                 old[p..]
                     .iter()
-                    .find(|id| visible.contains(id))
+                    .chain(old[..p].iter().rev())
+                    .find(|id| visible.contains(&id.as_str()))
                     .cloned()
-                    .or_else(|| {
-                        old[..p]
-                            .iter()
-                            .rev()
-                            .find(|id| visible.contains(id))
-                            .cloned()
-                    })
             })
-            .or_else(|| visible.first().cloned());
+            .or_else(|| visible.first().map(|id| (*id).to_owned()));
+        self.selected = selected;
         self.search_row = self.selected.is_none() && self.search_available();
     }
     fn reconcile(&mut self, authoritative: bool) {
