@@ -8,6 +8,9 @@ use std::{
     process::{Command, ExitStatus, Stdio},
 };
 
+#[cfg(windows)]
+pub use crate::windows::{OwnedTree, spawn_owned_pipe_tree, spawn_owned_stdio_tree};
+
 /// Redirect the Windows Rust/Win32 and CRT standard streams while retaining
 /// non-inherited private copies for a protocol driver. Call before any I/O.
 /// # Errors

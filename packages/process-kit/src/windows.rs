@@ -86,6 +86,7 @@ pub(crate) fn contain_worker() -> io::Result<OwnedHandle> {
 mod launch;
 pub(crate) mod transfer;
 pub(crate) use launch::spawn_detached;
+pub use launch::{OwnedTree, spawn_owned_pipe_tree, spawn_owned_stdio_tree};
 use std::{
     ffi::{OsString, c_void},
     fs::{File, OpenOptions},
@@ -592,8 +593,9 @@ unsafe fn aces(
     Ok(true)
 }
 
-/// Owner, protected user-only DACL and no label above medium.
-fn is_private_descriptor(file: &File) -> io::Result<bool> {
+/// Owner, user-only DACL and no label above medium. Endpoint objects also
+/// require a protected DACL. Child files can inherit from a protected root.
+fn is_private_descriptor(file: &File, protected: bool) -> io::Result<bool> {
     let user = user()?;
     let mut owner = ptr::null_mut();
     let mut dacl = ptr::null_mut();
@@ -629,7 +631,10 @@ fn is_private_descriptor(file: &File) -> io::Result<bool> {
     check(unsafe {
         GetSecurityDescriptorControl(descriptor, &raw mut control, &raw mut revision)
     })?;
-    if control & SE_DACL_PRESENT == 0 || control & SE_DACL_PROTECTED == 0 || dacl.is_null() {
+    if control & SE_DACL_PRESENT == 0
+        || (protected && control & SE_DACL_PROTECTED == 0)
+        || dacl.is_null()
+    {
         return Ok(false);
     }
     // SAFETY: `dacl` points into the live descriptor; each ACE pointer comes
@@ -637,7 +642,7 @@ fn is_private_descriptor(file: &File) -> io::Result<bool> {
     let dacl_private = unsafe {
         aces(dacl, |ace| {
             let header = *ace;
-            if header.AceFlags & u8::try_from(INHERITED_ACE).unwrap_or(u8::MAX) != 0 {
+            if protected && header.AceFlags & u8::try_from(INHERITED_ACE).unwrap_or(u8::MAX) != 0 {
                 return false;
             }
             match u32::from(header.AceType) {
@@ -688,17 +693,17 @@ pub(crate) fn private_until(
         Kind::Directory => info.directory && info.tag.is_none(),
         Kind::Socket => info.tag == Some(IO_REPARSE_TAG_AF_UNIX),
     };
-    Ok((shape && is_local(&file)? && is_private_descriptor(&file)?).then_some(info.identity))
+    Ok((shape && is_local(&file)? && is_private_descriptor(&file, true)?).then_some(info.identity))
 }
 
-/// Validate the open lease anchor: an ordinary single-link private file.
-pub(crate) fn private_file(file: &File) -> io::Result<bool> {
+/// Validate an ordinary single-link private file on the open handle.
+pub(crate) fn private_file(file: &File, protected: bool) -> io::Result<bool> {
     let info = info(file)?;
     Ok(!info.directory
         && info.tag.is_none()
         && info.links == 1
         && is_local(file)?
-        && is_private_descriptor(file)?)
+        && is_private_descriptor(file, protected)?)
 }
 
 /// Identity of an open file.

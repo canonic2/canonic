@@ -92,9 +92,9 @@ previews supply the pages. See
   recenter button to bring the artboard back into view.
 - Annotations: drawing, arrows, shapes, text, and comments. The camera button saves
   a JPEG.
-- Handoff: saves the screenshot to `.canonic/.handoffs/` (ignored), clears the
-  annotations, and copies a text description of each annotation to the
-  clipboard.
+- Handoff: saves the screenshot to `.canonic/.handoffs/` (ignored) and copies
+  a prompt to the clipboard. After copying, the canvas clears the captured
+  annotations and reports any it could not clear.
 - Actions are off by default: clicking a link or submitting a form on a
   page is logged instead of followed.
 - Several spaces in one window, such as a product and its design system.

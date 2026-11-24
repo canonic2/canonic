@@ -50,6 +50,9 @@ doesn't parse, and a problem names the `.config` file that isn't. A
 `--config` file that is missing, or isn't a file, is an error: Workbench
 doesn't fall back to the project's own manifest.
 
+If the manifest or its local override has unresolved Git conflict markers,
+Workbench names the file and opening line. Resolve the conflict and reload.
+
 Wherever the manifest is, paths in it stay relative to the project root:
 `src`, `root`, `include`, `docs`, icons and implementation roots mean the
 same in `.config/workbench.yaml` or a `--config` file as in a root

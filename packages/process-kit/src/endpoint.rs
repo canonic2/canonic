@@ -134,6 +134,16 @@ impl Root {
         })
     }
 
+    /// Create a new private root beneath its resolved, existing parent.
+    ///
+    /// # Errors
+    /// Returns I/O or privacy errors. An existing root is preserved. If creation
+    /// succeeds but identity validation fails, the new directory may remain.
+    pub fn create(&self) -> Result<RootIdentity> {
+        create_private_dir(self.path())?;
+        self.identity()
+    }
+
     /// Create missing directories with 0700 and validate the final private root.
     ///
     /// # Errors
@@ -332,7 +342,7 @@ fn private_file(file: &File) -> Result<()> {
 
 #[cfg(windows)]
 fn private_file(file: &File) -> Result<()> {
-    if crate::windows::private_file(file)? {
+    if crate::windows::private_file(file, true)? {
         Ok(())
     } else {
         Err(Error::PrivatePath)
@@ -454,6 +464,58 @@ pub fn prepare_directory(path: impl AsRef<Path>) -> Result<PathBuf> {
     let root = Root::resolve(path)?;
     root.prepare()?;
     Ok(root.path)
+}
+
+/// Check an existing Windows private directory without creating it.
+/// # Errors
+/// Returns native validation or filesystem errors, including a missing directory.
+#[cfg(windows)]
+pub fn check_private_directory(path: &Path) -> Result<()> {
+    private_directory_identity(path).map(drop)
+}
+
+/// Resolve and check a Windows directory and return its local path and file ID.
+/// The volume and object IDs describe the directory itself, including when an
+/// alternate spelling names the same directory.
+/// # Errors
+/// Returns native validation or filesystem errors, including a missing directory.
+#[cfg(windows)]
+pub fn private_directory_identity(path: &Path) -> Result<(PathBuf, u64, u128)> {
+    let root = Root::resolve(path)?;
+    let (volume, object) = private(root.path(), false)?;
+    Ok((root.path, volume, object))
+}
+
+/// Check the opened Windows file in a previously checked private directory.
+/// The owner-only access entries may be inherited from the directory.
+/// # Errors
+/// Returns native validation or filesystem errors, including permissive ACL entries,
+/// multiple links, reparse points and nonlocal volume identities.
+#[cfg(windows)]
+pub fn check_private_child_file(file: &File) -> Result<()> {
+    if crate::windows::private_file(file, false)? {
+        Ok(())
+    } else {
+        Err(Error::PrivatePath)
+    }
+}
+
+/// Exclusively lock a user-private Windows file without a socket-path limit.
+/// The caller holds the returned handle for the lifetime of the lock.
+/// # Errors
+/// Returns `AlreadyRunning` on contention or a native validation or I/O error.
+#[cfg(windows)]
+pub fn lock_private_file(path: &Path) -> Result<File> {
+    let directory = Root::resolve(path.parent().ok_or(Error::PrivatePath)?)?;
+    let name = path.file_name().ok_or(Error::PrivatePath)?;
+    directory.prepare()?;
+    let file = open_anchor(&directory.path().join(name))?;
+    private_file(&file)?;
+    match file.try_lock() {
+        Ok(()) => Ok(file),
+        Err(std::fs::TryLockError::WouldBlock) => Err(Error::AlreadyRunning),
+        Err(std::fs::TryLockError::Error(error)) => Err(error.into()),
+    }
 }
 
 /// Resolve parent aliases and native local-path spelling without creating files
@@ -599,6 +661,19 @@ impl Endpoint<'_> {
     #[must_use]
     pub fn path(&self) -> &Path {
         &self.path
+    }
+
+    /// Check that this listener's original private socket is still reachable
+    /// at its published path under the active root lease.
+    ///
+    /// # Errors
+    /// Returns a lease, path identity or native validation error.
+    pub fn verify(&self) -> Result<()> {
+        self.lease.verify()?;
+        if owned_socket(&self.path)? != Some(self.identity) {
+            return Err(Error::PrivatePath);
+        }
+        Ok(())
     }
     /// Remove only the socket identity bound here, while the lease is still held.
     ///
@@ -761,6 +836,21 @@ fn private_for_connect(path: &Path, socket: bool, until: Instant) -> Result<Iden
         let _ = until;
         private(path, socket)
     }
+}
+
+#[cfg(test)]
+#[test]
+fn exclusive_root_and_bound_socket_report_original_identity() {
+    let temporary = tempfile::tempdir().unwrap();
+    let root = Root::explicit(temporary.path().join("acme")).unwrap();
+    let identity = root.create().unwrap();
+    assert!(root.create().is_err());
+    assert_eq!(root.identity().unwrap(), identity);
+    let lease = Lease::acquire(&root, Duration::ZERO).unwrap();
+    let endpoint = lease.bind(false).unwrap();
+    endpoint.verify().unwrap();
+    endpoint.unlink().unwrap();
+    assert!(endpoint.verify().is_err());
 }
 
 #[cfg(all(test, unix))]

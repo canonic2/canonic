@@ -116,9 +116,10 @@ act on:
 1. The screenshot, with annotations, is saved to `.canonic/.handoffs/` in the
    project, named like the camera's file. A second handoff of the same view
    gets `-2`, `-3`, and so on.
-2. Captured annotations are cleared from every artboard after the handoff succeeds.
-3. A prompt is copied to your clipboard, and VS Code confirms it with a
-   notification. Paste it into Claude Code, Codex, Cursor's chat, or any other
+2. Workbench copies the prompt to your clipboard, then clears the captured
+   annotations. The canvas confirms the copy and tells you if any annotations
+   could not be cleared.
+3. Paste the prompt into Claude Code, Codex, Cursor's chat, or any other
    conversation.
 
 The prompt identifies every labelled image region, its space, page, scenario,

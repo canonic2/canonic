@@ -39,6 +39,13 @@ drive letter; network shares and mapped network drives are refused.
 product scope binding. Compare it under exclusion to reject copied or recreated
 roots, including replacements at the same path; it grants no authority.
 
+`Root::create()` creates only the final directory beneath its resolved, existing
+parent and returns its checked native identity. An existing root causes an error
+and is preserved. Creation and identity validation are separate steps: if the
+second step fails, the new directory may remain. The method performs no rollback.
+Use `Root::prepare()` instead when missing parent directories should also be
+created and an existing private root may be reused.
+
 `Lease::verify()` rechecks the private directory and lock-anchor identity. Use it
 before product-owned writes outside the endpoint loop; it does not make later
 filesystem operations atomic with that check.
@@ -49,6 +56,19 @@ lease. `Endpoint::listener() -> &net::Listener` borrows its bound listener.
 `manager.sock` for the ordinary lane or `control.sock` for the control lane,
 under the selected root. Reading that path does not establish liveness or
 transfer cleanup authority; retain the endpoint and lease guards.
+
+`Endpoint::verify()` rechecks its lease and the original socket identity at the
+published path. A missing or replaced socket refuses. It performs no connection
+or liveness probe and does not make later operations atomic with the check.
+
+The following additional `endpoint` helpers are Windows-only:
+
+| API | Preconditions, effects and ownership |
+| --- | --- |
+| `check_private_directory(path)` | Validate an existing local private directory without creating it. Missing paths and invalid ownership, permissions or reparse shapes refuse. |
+| `private_directory_identity(path)` | Resolve and validate that directory, returning `(local_path, volume, object)` for native identity comparison. It creates nothing and grants no exclusion. |
+| `check_private_child_file(&file)` | Validate an opened, regular, single-link local file beneath a directory the caller already checked. Owner-only ACL entries may be inherited. It does not validate the parent or the file's sharing mode. |
+| `lock_private_file(path)` | Resolve the parent, create its missing directory chain and create or open the private lock file. Retain the returned `File` for exclusion; contention returns `AlreadyRunning`. Dropping it releases the lock but leaves the file and directories. Failures may also leave created paths. No socket-path length limit applies. |
 
 Products with additional private guard or candidate channels can use
 `endpoint::connect_local(path, timeout)`. It validates the absolute private
@@ -293,6 +313,15 @@ uncertain. EOF requires every copy of the peer endpoint to close. On Windows a
 terminated owner's endpoint can report a reset instead of EOF; `wait` returns
 true for both.
 
+On Windows, `net::wait_peer_closed(&stream, timeout)` provides that silent-peer
+check without retaining a resource hold or latching the result. The caller must
+own the only reader after the handshake. It consumes no bytes and changes no
+socket settings. EOF or reset returns true; unexpected data returns `Envelope`;
+other socket failures remain errors. For both this helper and
+`owner::Connection::wait`, false means closure was not observed and may return
+before the timeout after a spurious readiness wake. It does not prove that the
+full timeout elapsed or that the peer remains alive after the observation.
+
 ## Explicit force-stop
 
 `server::Options::allow_force_stop` defaults to false. Enable it only when the
@@ -341,6 +370,38 @@ Clients still bound their own acknowledgement wait with `io`; that wait includes
 queueing. Set client budgets for the calls and queue waits the product supports.
 
 ## Launch and errors
+
+### Owned Windows application trees
+
+`launch::spawn_owned_pipe_tree` and `launch::spawn_owned_stdio_tree` are
+Windows-only launches returning `launch::OwnedTree`. Supply a `Command` with an
+absolute executable, literal arguments, the intended working directory and a
+complete explicit environment. The command's stdio configuration is ignored.
+The launch does not inherit unspecified environment variables or establish
+application readiness.
+
+`spawn_owned_pipe_tree(command, read, write, pipe_argument)` duplicates the two
+borrowed application handles into an isolated inheritance parent and starts the
+child with NUL standard streams. The callback receives the actual inherited
+handle values and returns one argument in the child's protocol. The caller's
+original handles remain open: close its copies of child-side pipe ends after
+launch, or those copies can prevent EOF. Retain the opposite ends for caller I/O.
+
+`spawn_owned_stdio_tree(command, [stdin, stdout, stderr])` uses the three supplied
+borrowed handles as the child's standard streams. The caller likewise owns and
+closes its original copies according to its pipe protocol. Launch errors clean
+up the library's helper and duplicates; they do not close caller-owned handles.
+
+Both launches assign a private, non-breakaway, kill-on-close job at process
+creation. Retain `OwnedTree` through the application's lifetime. Dropping it
+closes the job and terminates remaining members. `id`, `exited` and `try_wait`
+describe the retained root process; `active_processes` and `empty` describe the
+whole job, whose descendants may outlive that root. `terminate` requests
+termination of this job only; observe completion separately. These launches
+differ from `contain_worker`, which contains the current worker, and from
+`Spawn`, which starts a detached manager.
+
+### Detached managers and registered activation
 
 `Spawn` clears the environment, installs only explicit pairs, sets null stdin,
 uses the product's log and directory, and creates a new session/process group.

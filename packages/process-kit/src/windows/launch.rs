@@ -8,26 +8,28 @@ use std::{
     io,
     os::windows::{
         ffi::{OsStrExt, OsStringExt},
-        io::{AsRawHandle, FromRawHandle, OwnedHandle},
+        io::{AsHandle, AsRawHandle, BorrowedHandle, FromRawHandle, OwnedHandle},
         process::ExitStatusExt,
     },
     process::{Command, ExitStatus},
     ptr,
 };
 use windows_sys::Win32::{
-    Foundation::{DUPLICATE_SAME_ACCESS, DuplicateHandle, HANDLE, WAIT_OBJECT_0},
+    Foundation::{DUPLICATE_SAME_ACCESS, DuplicateHandle, HANDLE, WAIT_OBJECT_0, WAIT_TIMEOUT},
     Globalization::CompareStringOrdinal,
     System::{
         JobObjects::{
             CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
-            JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
-            JobObjectExtendedLimitInformation, SetInformationJobObject,
+            JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK, JOBOBJECT_BASIC_ACCOUNTING_INFORMATION,
+            JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectBasicAccountingInformation,
+            JobObjectExtendedLimitInformation, QueryInformationJobObject, SetInformationJobObject,
+            TerminateJobObject,
         },
         Threading::{
             CREATE_BREAKAWAY_FROM_JOB, CREATE_NEW_PROCESS_GROUP, CREATE_SUSPENDED,
             CREATE_UNICODE_ENVIRONMENT, CreateProcessW, DETACHED_PROCESS,
             DeleteProcThreadAttributeList, EXTENDED_STARTUPINFO_PRESENT, GetCurrentProcess,
-            GetExitCodeProcess, INFINITE, InitializeProcThreadAttributeList,
+            GetExitCodeProcess, GetProcessId, INFINITE, InitializeProcThreadAttributeList,
             LPPROC_THREAD_ATTRIBUTE_LIST, PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
             PROC_THREAD_ATTRIBUTE_JOB_LIST, PROC_THREAD_ATTRIBUTE_PARENT_PROCESS,
             PROCESS_INFORMATION, STARTF_USESTDHANDLES, STARTUPINFOEXW, TerminateProcess,
@@ -95,7 +97,7 @@ impl Parent {
         Ok(Self { process, _job: job })
     }
 
-    fn duplicate(&self, file: &File) -> io::Result<HANDLE> {
+    fn duplicate(&self, file: BorrowedHandle<'_>) -> io::Result<HANDLE> {
         let mut handle = ptr::null_mut();
         // SAFETY: the file and parent remain open. The resulting handle belongs
         // to the suspended parent's handle table, not this process's table.
@@ -127,6 +129,12 @@ impl Drop for Parent {
 }
 
 fn helper_job() -> io::Result<OwnedHandle> {
+    // The helper must die with the client. Its detached manager leaves this job
+    // automatically, while any outer caller job keeps enforcing its limits.
+    job(JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK)
+}
+
+fn job(flags: u32) -> io::Result<OwnedHandle> {
     // SAFETY: unnamed job with default security, returned handle owned here.
     let raw = unsafe { CreateJobObjectW(ptr::null(), ptr::null()) };
     if raw.is_null() {
@@ -135,10 +143,7 @@ fn helper_job() -> io::Result<OwnedHandle> {
     // SAFETY: successful CreateJobObjectW returned an owned handle.
     let job = unsafe { OwnedHandle::from_raw_handle(raw) };
     let mut limits = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
-    // The helper dies if the client dies, but its manager leaves this private
-    // job automatically. Any outer caller job still enforces its own limits.
-    limits.BasicLimitInformation.LimitFlags =
-        JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK;
+    limits.BasicLimitInformation.LimitFlags = flags;
     // SAFETY: live job and correctly sized initialized limits structure.
     check(unsafe {
         SetInformationJobObject(
@@ -197,8 +202,8 @@ impl<'a> Attributes<'a> {
         Ok(attributes)
     }
 
-    fn new(handles: &'a [HANDLE], parent: &'a HANDLE) -> io::Result<Self> {
-        let attributes = Self::allocate(2)?;
+    fn new(handles: &'a [HANDLE], parent: &'a HANDLE, job: Option<&'a HANDLE>) -> io::Result<Self> {
+        let attributes = Self::allocate(2 + u32::from(job.is_some()))?;
         // SAFETY: the caller retains the handle slice and its owned handles
         // through CreateProcessW; this attribute contains exactly that slice.
         check(unsafe {
@@ -225,6 +230,20 @@ impl<'a> Attributes<'a> {
                 ptr::null(),
             )
         })?;
+        if let Some(job) = job {
+            // SAFETY: the job handle remains owned and live through CreateProcessW.
+            check(unsafe {
+                UpdateProcThreadAttribute(
+                    attributes.as_ptr(),
+                    0,
+                    PROC_THREAD_ATTRIBUTE_JOB_LIST as usize,
+                    ptr::from_ref(job).cast(),
+                    size_of::<HANDLE>(),
+                    ptr::null_mut(),
+                    ptr::null_mut(),
+                )
+            })?;
+        }
         Ok(attributes)
     }
 
@@ -342,11 +361,11 @@ fn spawn_prepared(command: &Command, log: &File, prepared: impl FnOnce()) -> io:
         .transpose()?;
     let parent = Parent::new(&program)?;
     let handles = [
-        parent.duplicate(&File::open(r"\\.\NUL")?)?,
-        parent.duplicate(log)?,
+        parent.duplicate(File::open(r"\\.\NUL")?.as_handle())?,
+        parent.duplicate(log.as_handle())?,
     ];
     let parent_handle = parent.process.as_raw_handle();
-    let attributes = Attributes::new(&handles, &parent_handle)?;
+    let attributes = Attributes::new(&handles, &parent_handle, None)?;
     prepared();
     let mut startup = STARTUPINFOEXW::default();
     startup.StartupInfo.cb =
@@ -399,9 +418,271 @@ fn spawn_prepared(command: &Command, log: &File, prepared: impl FnOnce()) -> io:
     unreachable!("both launch attempts return on success or refusal")
 }
 
+/// A child started inside a private job with no breakaway. Dropping this
+/// guard closes the last job handle and terminates any remaining members.
+pub struct OwnedTree {
+    process: OwnedHandle,
+    job: OwnedHandle,
+}
+
+impl OwnedTree {
+    /// Returns the ID of the process represented by the retained handle.
+    #[must_use]
+    pub fn id(&self) -> u32 {
+        // SAFETY: the retained handle refers to the launched process.
+        unsafe { GetProcessId(self.process.as_raw_handle()) }
+    }
+
+    /// Whether the launched process has exited.
+    /// # Errors
+    /// Returns a native wait error.
+    pub fn exited(&self) -> io::Result<bool> {
+        // SAFETY: the retained process handle is live; the timeout is zero.
+        match unsafe { WaitForSingleObject(self.process.as_raw_handle(), 0) } {
+            WAIT_OBJECT_0 => Ok(true),
+            WAIT_TIMEOUT => Ok(false),
+            _ => Err(io::Error::last_os_error()),
+        }
+    }
+
+    /// Whether the kernel reports that every member has exited.
+    /// # Errors
+    /// Returns a native accounting query error.
+    pub fn empty(&self) -> io::Result<bool> {
+        Ok(self.active_processes()? == 0)
+    }
+
+    /// Number of live processes in this owned job.
+    /// # Errors
+    /// Returns a native accounting query error.
+    pub fn active_processes(&self) -> io::Result<u32> {
+        let mut info = JOBOBJECT_BASIC_ACCOUNTING_INFORMATION::default();
+        // SAFETY: the job and writable accounting buffer stay live for the call.
+        check(unsafe {
+            QueryInformationJobObject(
+                self.job.as_raw_handle(),
+                JobObjectBasicAccountingInformation,
+                ptr::from_mut(&mut info).cast(),
+                u32::try_from(size_of_val(&info)).map_err(|_| io::ErrorKind::InvalidInput)?,
+                ptr::null_mut(),
+            )
+        })?;
+        Ok(info.ActiveProcesses)
+    }
+
+    /// Exit status once the root process has stopped.
+    /// # Errors
+    /// Returns a native wait or process-status error.
+    pub fn try_wait(&self) -> io::Result<Option<ExitStatus>> {
+        if !self.exited()? {
+            return Ok(None);
+        }
+        let mut code = 0;
+        // SAFETY: the retained process handle and output pointer are valid.
+        check(unsafe { GetExitCodeProcess(self.process.as_raw_handle(), &raw mut code) })?;
+        Ok(Some(ExitStatus::from_raw(code)))
+    }
+
+    /// Request termination through this private job's handle.
+    /// # Errors
+    /// Returns a native termination error.
+    pub fn terminate(&self) -> io::Result<()> {
+        // SAFETY: this job contains only the tree admitted at process creation.
+        check(unsafe { TerminateJobObject(self.job.as_raw_handle(), 1) })
+    }
+}
+
+/// Launch a fully selected executable in a new kill-on-close job with only two
+/// application handles and NUL stdio. `pipe_argument` serializes the actual
+/// inherited handle values using the child's application protocol.
+///
+/// The command supplies an absolute program, literal arguments, working
+/// directory and complete explicit environment. Its stdio settings are ignored.
+/// The borrowed pipe ends stay open in the caller; close its child-side copies
+/// after launch so they cannot prevent EOF on the protocol's retained ends.
+///
+/// # Errors
+/// Returns native handle, job or process creation errors.
+pub fn spawn_owned_pipe_tree(
+    command: Command,
+    read: BorrowedHandle<'_>,
+    write: BorrowedHandle<'_>,
+    pipe_argument: impl FnOnce(usize, usize) -> OsString,
+) -> io::Result<OwnedTree> {
+    let null_device = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(r"\\.\NUL")?;
+    spawn_owned_tree(
+        command,
+        [null_device.as_handle(), read, write],
+        |command, handles| {
+            command.arg(pipe_argument(handles[1] as usize, handles[2] as usize));
+            [handles[0]; 3]
+        },
+    )
+}
+
+/// Launch with exactly the supplied stdin, stdout and stderr in a private job.
+/// The command supplies the absolute executable, arguments, working directory
+/// and complete environment. Its stdio settings are ignored.
+/// # Errors
+/// Returns native handle, job or process creation errors.
+pub fn spawn_owned_stdio_tree(
+    command: Command,
+    stdio: [BorrowedHandle<'_>; 3],
+) -> io::Result<OwnedTree> {
+    spawn_owned_tree(command, stdio, |_, handles| handles)
+}
+
+fn spawn_owned_tree(
+    mut command: Command,
+    selected: [BorrowedHandle<'_>; 3],
+    configure: impl FnOnce(&mut Command, [HANDLE; 3]) -> [HANDLE; 3],
+) -> io::Result<OwnedTree> {
+    if !std::path::Path::new(command.get_program()).is_absolute() {
+        return Err(io::ErrorKind::InvalidInput.into());
+    }
+    let program = wide(command.get_program())?;
+    let helper = wide(std::env::current_exe()?.as_os_str())?;
+    let parent = Parent::new(&helper)?;
+    let handles = [
+        parent.duplicate(selected[0])?,
+        parent.duplicate(selected[1])?,
+        parent.duplicate(selected[2])?,
+    ];
+    let job = job(JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE)?;
+    let parent_handle = parent.process.as_raw_handle();
+    let job_handle = job.as_raw_handle();
+    let attributes = Attributes::new(&handles, &parent_handle, Some(&job_handle))?;
+    let stdio = configure(&mut command, handles);
+    let mut line = argument(command.get_program())?;
+    for arg in command.get_args() {
+        line.push(u16::from(b' '));
+        line.extend(argument(arg)?);
+    }
+    line.push(0);
+    let environment = environment(&command)?;
+    let directory = command
+        .get_current_dir()
+        .map(|dir| directory(dir.as_os_str()))
+        .transpose()?;
+    let mut startup = STARTUPINFOEXW::default();
+    startup.StartupInfo.cb =
+        u32::try_from(size_of::<STARTUPINFOEXW>()).map_err(|_| io::ErrorKind::InvalidInput)?;
+    startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+    startup.StartupInfo.hStdInput = stdio[0];
+    startup.StartupInfo.hStdOutput = stdio[1];
+    startup.StartupInfo.hStdError = stdio[2];
+    startup.lpAttributeList = attributes.as_ptr();
+    let mut info = PROCESS_INFORMATION::default();
+    // SAFETY: all pointers, job and inherited handles are live for the call.
+    // The handle list and job both take effect before application code runs.
+    check(unsafe {
+        CreateProcessW(
+            program.as_ptr(),
+            line.as_mut_ptr(),
+            ptr::null(),
+            ptr::null(),
+            1,
+            DETACHED_PROCESS | CREATE_UNICODE_ENVIRONMENT | EXTENDED_STARTUPINFO_PRESENT,
+            environment.as_ptr().cast(),
+            directory.as_ref().map_or(ptr::null(), Vec::as_ptr),
+            &raw const startup.StartupInfo,
+            &raw mut info,
+        )
+    })?;
+    // SAFETY: successful creation transferred two owned handles.
+    let (process, thread) = unsafe {
+        (
+            OwnedHandle::from_raw_handle(info.hProcess),
+            OwnedHandle::from_raw_handle(info.hThread),
+        )
+    };
+    drop(thread);
+    Ok(OwnedTree { process, job })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[ignore = "child process for the owned pipe launch regression"]
+    fn owned_pipe_child() {
+        use std::io::{Read, Write};
+        let handles = std::env::args().last().unwrap();
+        let (read, write) = handles.split_once(',').unwrap();
+        let decode = |text: &str| text.parse::<usize>().unwrap() as HANDLE;
+        // SAFETY: the launcher passed the two exclusively inherited pipe ends.
+        let mut read = unsafe { std::io::PipeReader::from_raw_handle(decode(read)) };
+        let mut write = unsafe { std::io::PipeWriter::from_raw_handle(decode(write)) };
+        let mut token = [0; 4];
+        read.read_exact(&mut token).unwrap();
+        write.write_all(&token).unwrap();
+        let _ = read.read(&mut token);
+    }
+
+    #[test]
+    fn owned_pipe_trees_exchange_bytes_and_close_only_their_own_job() {
+        use std::{
+            io::{Read, Write},
+            time::Duration,
+        };
+
+        fn start() -> (OwnedTree, std::io::PipeReader, std::io::PipeWriter) {
+            let mut command = Command::new(std::env::current_exe().unwrap());
+            command.env_clear().args([
+                "--exact",
+                "windows::launch::tests::owned_pipe_child",
+                "--ignored",
+                "--skip",
+            ]);
+            if let Some(root) = std::env::var_os("SystemRoot") {
+                command.env("SystemRoot", root);
+            }
+            let (input, write) = io::pipe().unwrap();
+            let (read, output) = io::pipe().unwrap();
+            let tree = spawn_owned_pipe_tree(
+                command,
+                input.as_handle(),
+                output.as_handle(),
+                |input, output| format!("{input},{output}").into(),
+            )
+            .unwrap();
+            (tree, read, write)
+        }
+
+        let (first, mut read, mut first_input) = start();
+        let (sibling, _read, _sibling_input) = start();
+        let (sent, result) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            first_input.write_all(b"Acme").unwrap();
+            let mut data = [0; 4];
+            read.read_exact(&mut data).unwrap();
+            sent.send(data).unwrap();
+            let _ = read.read(&mut data);
+        });
+        assert_eq!(
+            result.recv_timeout(Duration::from_secs(10)).unwrap(),
+            *b"Acme"
+        );
+        assert!(!first.empty().unwrap());
+        let first_process = first.process.try_clone().unwrap();
+        drop(first);
+        // SAFETY: the cloned handle keeps this exact process identity through the wait.
+        assert_eq!(
+            unsafe { WaitForSingleObject(first_process.as_raw_handle(), 10000) },
+            WAIT_OBJECT_0
+        );
+        assert!(!sibling.exited().unwrap());
+        sibling.terminate().unwrap();
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        while !sibling.empty().unwrap() {
+            assert!(std::time::Instant::now() < deadline);
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
 
     #[test]
     #[ignore = "child process for the detached launch regressions"]

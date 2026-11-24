@@ -124,7 +124,7 @@ fn created_directories_and_anchors_have_one_protected_user_entry_and_the_user_ow
     assert!(private(&directory, Kind::Directory).unwrap().is_some());
 
     let anchor = open_anchor(&directory.join("manager.lock")).unwrap();
-    assert!(private_file(&anchor).unwrap());
+    assert!(private_file(&anchor, true).unwrap());
     let text = sddl(&directory.join("manager.lock"));
     assert!(text.starts_with(&format!("O:{sid}")), "{text}");
     assert_eq!(dacl_entries(&text), [format!("(A;;FA;;;{sid})")], "{text}");
@@ -157,6 +157,33 @@ fn inherited_permissive_and_reparse_roots_are_refused_without_changes() {
     assert!(private(&file, Kind::Socket).unwrap().is_none());
     assert!(socket_identity(&file).unwrap().is_none());
     assert_eq!(std::fs::read(&file).unwrap(), b"acme");
+}
+
+#[test]
+fn private_browser_lock_excludes_independent_handles_and_releases_on_drop() {
+    use crate::{Error, endpoint::lock_private_file};
+
+    let temporary = tempfile::tempdir().unwrap();
+    let path = temporary.path().join("private").join("browser.lock");
+    let first = lock_private_file(&path).unwrap();
+    assert!(matches!(
+        lock_private_file(&path),
+        Err(Error::AlreadyRunning)
+    ));
+    drop(first);
+    lock_private_file(&path).unwrap();
+}
+
+#[test]
+fn private_child_file_refuses_an_extra_link() {
+    let temporary = tempfile::tempdir().unwrap();
+    let directory = temporary.path().join("private");
+    create_private_directory(&directory).unwrap();
+    let path = directory.join("fixture");
+    let file = open_anchor(&path).unwrap();
+    assert!(crate::endpoint::check_private_child_file(&file).is_ok());
+    std::fs::hard_link(&path, directory.join("alias")).unwrap();
+    assert!(crate::endpoint::check_private_child_file(&file).is_err());
 }
 
 #[test]

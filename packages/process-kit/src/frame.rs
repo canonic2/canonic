@@ -46,16 +46,12 @@ impl<'a> Deadline<'a> {
             Ok(()) => operation(),
         }
     }
-}
-
-#[cfg(any(unix, windows))]
-impl Read for Deadline<'_> {
-    fn read(&mut self, bytes: &mut [u8]) -> std::io::Result<usize> {
-        let mut stream = self.stream;
+    fn retry(
+        &self,
+        mut operation: impl FnMut() -> std::io::Result<usize>,
+    ) -> std::io::Result<usize> {
         loop {
-            let result = self.timed(stream.set_read_timeout(Some(self.remaining()?)), || {
-                stream.read(bytes)
-            });
+            let result = operation();
             if result.as_ref().is_err_and(|error| {
                 matches!(
                     error.kind(),
@@ -74,27 +70,26 @@ impl Read for Deadline<'_> {
 }
 
 #[cfg(any(unix, windows))]
+impl Read for Deadline<'_> {
+    fn read(&mut self, bytes: &mut [u8]) -> std::io::Result<usize> {
+        let mut stream = self.stream;
+        self.retry(|| {
+            self.timed(stream.set_read_timeout(Some(self.remaining()?)), || {
+                stream.read(bytes)
+            })
+        })
+    }
+}
+
+#[cfg(any(unix, windows))]
 impl Write for Deadline<'_> {
     fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
         let mut stream = self.stream;
-        loop {
-            let result = self.timed(stream.set_write_timeout(Some(self.remaining()?)), || {
+        self.retry(|| {
+            self.timed(stream.set_write_timeout(Some(self.remaining()?)), || {
                 stream.write(bytes)
-            });
-            if result.as_ref().is_err_and(|error| {
-                matches!(
-                    error.kind(),
-                    std::io::ErrorKind::Interrupted
-                        | std::io::ErrorKind::WouldBlock
-                        | std::io::ErrorKind::TimedOut
-                )
-            }) && std::time::Instant::now() < self.until
-            {
-                std::thread::sleep(std::time::Duration::from_millis(1).min(self.remaining()?));
-                continue;
-            }
-            return result;
-        }
+            })
+        })
     }
     fn flush(&mut self) -> std::io::Result<()> {
         Ok(())
@@ -308,6 +303,40 @@ mod deadline_tests {
         os::unix::net::UnixStream,
         time::{Duration, Instant},
     };
+
+    #[test]
+    fn deadline_retries_stalled_nonblocking_reads_and_writes_until_expiry() {
+        let (client, _peer) = UnixStream::pair().unwrap();
+        client.set_nonblocking(true).unwrap();
+        let until = Instant::now() + Duration::from_millis(20);
+        let mut wire = Deadline::new(&client, until);
+        let error = wire.read(&mut [0]).unwrap_err();
+        assert!(Instant::now() >= until);
+        assert!(matches!(
+            error.kind(),
+            std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
+        ));
+
+        // Keep the peer open and unread while filling the finite send buffer.
+        let mut stream = &client;
+        loop {
+            match stream.write(&[0; 8192]) {
+                Ok(0) => panic!("socket stopped accepting nonempty writes"),
+                Ok(_) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => break,
+                Err(error) => panic!("socket fill failed: {error}"),
+            }
+        }
+        let until = Instant::now() + Duration::from_millis(20);
+        let mut wire = Deadline::new(&client, until);
+        let error = wire.write(&[0]).unwrap_err();
+        assert!(Instant::now() >= until);
+        assert!(matches!(
+            error.kind(),
+            std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
+        ));
+    }
 
     #[test]
     fn channel_retains_partial_prefix_and_body_and_bounds_before_allocation() {

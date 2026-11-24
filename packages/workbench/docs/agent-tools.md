@@ -86,17 +86,16 @@ Run `workbench mcp serve --check` to validate and print the installed tool
 catalog as JSON without opening the MCP transport or starting a project manager.
 
 Every MCP tool has a CLI command that runs the same operation. Add `--json`
-for its structured result. Commands below run from your project root; replace
-the example page paths with pages listed by `config show`.
+for its structured result. From your project root, pass a known page source
+path directly.
 
 ```sh
-workbench view show --json
-workbench config show --json
 workbench page screenshot pages/pricing.html --size mobile --json
 ```
 
-`view_show` identifies the canvas the user used last and each artboard's
-target. `config_show` lists pages, scenarios, sizes and implementation lenses.
+Use `view_show` for "this page". It identifies the canvas the user used last
+and each artboard's target. Use `config_show` to find pages, scenarios, sizes
+and implementation lenses.
 A target names a `page`, optionally a `space`, `scenario`, `artboard`,
 `iteration`, `lens`, and `size`. Use `width` and `height` instead of `size`
 for explicit CSS dimensions. The CLI takes these as flags. If several spaces
@@ -113,7 +112,7 @@ clients can list resources and read:
 skill://workbench/canonic-workbench/SKILL.md
 ```
 
-Ask your agent to read that resource from the Workbench server. It is bundled
+Ask your agent to read it with MCP `resources/read`. It is bundled
 with the executable and available without a project or running manager.
 Reading it does not install instructions, activate a skill or grant tool
 permissions. Your host owns skill loading and approval. Existing local skill
@@ -171,7 +170,8 @@ PNGs, or a 16 MiB output PNG; request fewer or smaller sizes when refused.
 
 For one page, `page_screenshot` supports `--full-page`, `--clip '#selector'`,
 and `--device-scale-factor 2`. `--save` also writes that screenshot into
-`.canonic/.handoffs/`. Other captures stay outside the project: MCP captures
+`.canonic/.handoffs/`. The MCP catalog marks `page_screenshot` as write-capable
+because it supports saving. Other captures stay outside the project: MCP captures
 last for their connection, while CLI captures keep the project's newest 50.
 
 ## View a capture in chat
@@ -212,7 +212,11 @@ next command when more remain.
 Replace the example handle with `page_start`'s `page`. Handles retain the
 page's state between calls; `page_interact` returns each step's outcome,
 new console entries and a screenshot, optionally a snapshot. Steps stop at
-the first failure. A handle closes after 10 minutes without a call; CLI
+the first failure. If evidence collection fails after the steps ran, the
+result keeps the step outcomes and names the missing evidence in `evidenceErrors`.
+Inspect the page's current state before repeating an input step whose outcome
+is uncertain. Calls using the same handle run one at a time, including a
+comparison that uses the handle. A handle closes after 10 minutes without a call. CLI
 handles also close when the manager stops, including its idle shutdown.
 MCP handles belong to their connection, while CLI handles belong to the project.
 Pass handles to `page_compare` to compare states already reached through input.

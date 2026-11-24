@@ -1,7 +1,11 @@
 //! Dedicated owner-channel death detection without releasing product responsibility.
 
-use crate::{Error, Result, core::Hold, endpoint, net::Stream};
-use std::time::{Duration, Instant};
+#[cfg(unix)]
+use crate::Error;
+use crate::{Result, core::Hold, endpoint, net::Stream};
+use std::time::Duration;
+#[cfg(unix)]
+use std::time::Instant;
 
 /// A dedicated, silent same-user connection plus its live-resource hold.
 /// The client retains its endpoint while it owns work. Kernel EOF detects owner
@@ -32,6 +36,7 @@ impl Connection {
     /// connected; timeouts are not proof of death. True remains true on later
     /// calls. The hold remains pinned: clean up product resources before dropping
     /// this connection. If cleanup is uncertain, retain it and its hold.
+    /// A spurious readiness wake may return false before the timeout.
     ///
     /// # Errors
     /// Returns poll/socket errors, or `Envelope` if the silent owner channel
@@ -77,29 +82,16 @@ impl Connection {
     /// It polls for readability, then peeks one byte without consuming it, and
     /// never sets a receive timeout on the retained stream. A connection reset
     /// counts as closure: Windows reports a terminated owner's endpoint that way.
+    /// A spurious readiness wake may return false before the timeout.
     ///
     /// # Errors
     /// Returns poll/socket errors, or `Envelope` if the silent owner channel
     /// contains data. An error does not establish owner death or drop the hold.
     #[cfg(windows)]
     pub fn wait(&mut self, timeout: Duration) -> Result<bool> {
-        let deadline = Instant::now() + timeout;
-        while !self.disconnected {
-            let remaining = deadline.saturating_duration_since(Instant::now());
-            if !crate::windows::wait_readable(&self.stream, remaining)? {
-                return Ok(false);
-            }
-            // Process termination closes the owner's endpoint abortively, which
-            // Windows reports as a reset rather than an orderly EOF.
-            match crate::windows::peek(&self.stream) {
-                Ok(0) => self.disconnected = true,
-                Err(error) if error.kind() == std::io::ErrorKind::ConnectionReset => {
-                    self.disconnected = true;
-                }
-                Ok(_) => return Err(Error::Envelope),
-                Err(error) => return Err(error.into()),
-            }
+        if !self.disconnected {
+            self.disconnected = crate::net::wait_peer_closed(&self.stream, timeout)?;
         }
-        Ok(true)
+        Ok(self.disconnected)
     }
 }
