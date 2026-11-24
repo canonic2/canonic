@@ -33,9 +33,14 @@ export function docsNavigation(entries, order = docGroups) {
 
 // Keep repository Markdown links usable on the website, including fragments.
 // Links outside the published docs lead to the corresponding repository file.
-export function rewriteDocLink(url, source, base = '/') {
+function guideId(relativePath) {
+  return relativePath.replace(/\.md$/i, '').replace(/(^|\/)README$/, '$1index');
+}
+
+export function rewriteDocLink(url, source, base = '/', { relativeGuides = false } = {}) {
   if (!source || /^(?:[a-z][a-z\d+.-]*:|\/|#)/i.test(url)) return url;
-  if (!docSources.some(docs => source.startsWith(docs.root + path.sep))) return url;
+  const current = docSources.find(docs => source.startsWith(docs.root + path.sep));
+  if (!current) return url;
   const match = /^([^?#]+)(.*)$/.exec(url);
   if (!match) return url;
   const resolved = path.resolve(path.dirname(source), decodeURIComponent(match[1]));
@@ -43,8 +48,12 @@ export function rewriteDocLink(url, source, base = '/') {
     const relative = path.relative(docs.root, resolved).split(path.sep).join('/');
     if (relative.startsWith('../') || path.isAbsolute(relative)) continue;
     if (!/\.md$/i.test(match[1])) return url;
-    const id = relative.replace(/\.md$/i, '').replace(/(^|\/)README$/, '$1index');
-    return docsHref(id, base, docs.product) + match[2];
+    const target = docsHref(guideId(relative), base, docs.product);
+    if (!relativeGuides) return target + match[2];
+    const currentId = guideId(path.relative(current.root, source).split(path.sep).join('/'));
+    const sourceHref = docsHref(currentId, base, current.product);
+    const trail = path.posix.relative(sourceHref, target);
+    return `${trail || '.'}/${match[2]}`;
   }
   const repositoryPath = path.relative(repositoryRoot, resolved).split(path.sep).join('/');
   if (repositoryPath.startsWith('../')) return url;
@@ -63,11 +72,11 @@ export const shikiConfig = { theme: 'github-dark', langAlias: { gitignore: 'plai
 /* The Sätteri plugins that rewrite guide links and open external links in a
    new tab. The site adds them to Astro's processor; the docs preview in
    previews/ renders with the same plugins. */
-export function docsMarkdownPlugins({ site, base = '/' }) {
+export function docsMarkdownPlugins({ site, base = '/', relativeGuides = false }) {
   const rewrite = (node, context) => {
     const source = context.fileURL && fileURLToPath(context.fileURL);
     if (!source || !docSources.some(docs => source.startsWith(docs.root + path.sep))) return;
-    context.setProperty(node, 'url', rewriteDocLink(node.url, source, base));
+    context.setProperty(node, 'url', rewriteDocLink(node.url, source, base, { relativeGuides }));
   };
   return {
     hastPlugins: [{
@@ -91,7 +100,7 @@ export function docsMarkdown() {
     hooks: {
       'astro:config:setup': ({ config }) => {
         // Extend Astro's default Sätteri processor without adding a renderer.
-        const plugins = docsMarkdownPlugins({ site: config.site, base: config.base });
+        const plugins = docsMarkdownPlugins({ site: config.site, base: config.base, relativeGuides: true });
         config.markdown.processor.options.hastPlugins.push(...plugins.hastPlugins);
         config.markdown.processor.options.mdastPlugins.push(...plugins.mdastPlugins);
       },

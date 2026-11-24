@@ -500,6 +500,10 @@ section .h-medium { font-size: clamp(26px, 3vw, 36px); line-height: 1.15; letter
 .foot-top .logo svg { height: 26px; }
 .foot-col { display: flex; flex-direction: column; gap: 12px; min-width: 160px; }
 .foot-head { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-dim); }
+.site-language summary { cursor: pointer; }
+.site-language summary span { color: var(--ink-dim); }
+.site-language ul { list-style: none; padding: 0; margin: 12px 0 0; display: grid; gap: 8px; }
+.site-language a[aria-current="page"] { font-weight: 600; }
 .foot a { color: var(--ink-fg); text-decoration: none; }
 .foot a:hover { color: var(--ink-strong); text-decoration: underline; }
 .foot-soon { color: var(--ink-dim); }

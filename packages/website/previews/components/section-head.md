@@ -6,6 +6,9 @@ the overview uses it.
 | Prop | Type | Description |
 | --- | --- | --- |
 | `kicker` | string | The short line above the heading |
+| `lang` | string | Heading language; defaults to `en` |
+| `contentLang` | string | Lede language; defaults to `en` |
+| `kickerLang` | string | Optional language override for the kicker |
 | `title` | string | The heading |
 
 ## With a lede

@@ -8,7 +8,7 @@ interface Props {
 const { downloads } = Astro.props;
 ---
 {downloads ? (
-  <canonic-downloads class="downloads">
+  <canonic-downloads class="downloads" lang="en">
     {downloads.files.map(file => (
       <a class="dl" href={file.url} data-target={file.target} aria-label={`Download for ${file.computer}: ${file.name}`}>
         <span class="dl-text">
@@ -20,7 +20,7 @@ const { downloads } = Astro.props;
     ))}
   </canonic-downloads>
 ) : (
-  <p class="lede">Workbench downloads will appear after the first successful workbench release.</p>
+  <p class="lede" lang="en">Workbench downloads will appear after the first successful workbench release.</p>
 )}
 
 <script>

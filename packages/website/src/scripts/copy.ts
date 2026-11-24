@@ -5,8 +5,8 @@ const timers = new WeakMap<HTMLElement, number>();
 export function copyText(button: HTMLElement, text: string) {
   if (!navigator.clipboard) return;
   navigator.clipboard.writeText(text).then(() => {
-    button.textContent = 'Copied';
+    button.textContent = button.dataset.copied || 'Copied';
     clearTimeout(timers.get(button));
-    timers.set(button, window.setTimeout(() => { button.textContent = 'Copy'; }, 1600));
+    timers.set(button, window.setTimeout(() => { button.textContent = button.dataset.copy || 'Copy'; }, 1600));
   }, () => {});
 }

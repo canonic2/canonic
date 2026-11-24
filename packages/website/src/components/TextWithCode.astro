@@ -1,0 +1,10 @@
+---
+interface Props {
+  text: string;
+  code: Record<string, string>;
+}
+const { text, code } = Astro.props;
+const parts = text.split(/(\{\w+\})/g);
+---
+{parts.map(part => Object.hasOwn(code, part.slice(1, -1)) && part.startsWith('{') && part.endsWith('}')
+  ? <code>{code[part.slice(1, -1)]}</code> : part)}

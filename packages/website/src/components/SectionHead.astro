@@ -3,11 +3,14 @@
 interface Props {
   kicker: string;
   title: string;
+  lang?: string;
+  contentLang?: string;
+  kickerLang?: string;
 }
-const { kicker, title } = Astro.props;
+const { kicker, title, kickerLang, lang = 'en', contentLang = 'en' } = Astro.props;
 ---
-<div class="section-head">
-  <span class="kicker">{kicker}</span>
+<div class="section-head" lang={lang}>
+  <span class="kicker" lang={kickerLang}>{kicker}</span>
   <h2>{title}</h2>
-  {Astro.slots.has('default') && <p class="lede"><slot /></p>}
+  {Astro.slots.has('default') && <p class="lede" lang={contentLang}><slot /></p>}
 </div>

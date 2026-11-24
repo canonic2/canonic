@@ -2,6 +2,9 @@
 /* One release on the Changelog: version, date, and tag beside its notes, its
    links on GitHub, and its builds when it has any. `release` is one entry of
    workbenchReleases() in src/lib/releases.js. */
+import { base } from '../lib/base.js';
+import { websiteLocale } from '../lib/locales.js';
+
 interface Props {
   release: {
     version: string; tag: string; url: string; published: string | null; changes: string;
@@ -12,21 +15,22 @@ interface Props {
   latest?: boolean;
 }
 const { release, latest = false } = Astro.props;
-const day = new Intl.DateTimeFormat('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' });
+const { t, locale } = websiteLocale(Astro.url, base);
+const day = new Intl.DateTimeFormat(locale, { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' });
 const arrow = 'M8 2.5v8 M4.5 7L8 10.5 11.5 7 M3 13.5h10';
 ---
 <li class="release" id={`v${release.version}`}>
   <div class="release-meta">
     <span class="release-version">
       <a href={`#v${release.version}`}>v{release.version}</a>
-      {latest && <span class="badge">Latest</span>}
+      {latest && <span class="badge">{t('Latest')}</span>}
     </span>
     {release.published && <time datetime={release.published.slice(0, 10)}>{day.format(new Date(release.published))}</time>}
     <span class="release-tag">{release.tag}</span>
   </div>
-  <div class="release-body">
+  <div class="release-body" lang="en">
     {release.notes.length > 0 && (
-      <div class="release-notes">
+      <div class="release-notes" lang="en">
         {release.notes.map(block => 'items' in block
           ? <ul>{block.items.map(item => <li>{item}</li>)}</ul>
           : <p>{block.text}</p>)}

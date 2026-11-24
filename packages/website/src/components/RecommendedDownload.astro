@@ -9,7 +9,7 @@ const { downloads } = Astro.props;
 const files = downloads.files.map(({ target, short, name, url }) => ({ target, short, name, url }));
 const arrow = 'M8 2.5v8 M4.5 7L8 10.5 11.5 7 M3 13.5h10';
 ---
-<canonic-recommended-download class="rec ink" hidden data-files={JSON.stringify(files)}>
+<canonic-recommended-download lang="en" class="rec ink" hidden data-files={JSON.stringify(files)}>
   <div class="rec-text">
     <span class="rec-kicker">For this computer</span>
     <span class="rec-name" data-rec-name></span>

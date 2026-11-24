@@ -4,15 +4,17 @@
 interface Props {
   kicker: string;
   title: string;
+  lang?: string;
+  contentLang?: string;
   /** The text column's width. */
   width?: 'narrow' | 'narrower';
 }
-const { kicker, title, width = 'narrow' } = Astro.props;
+const { kicker, title, width = 'narrow', lang = 'en', contentLang = 'en' } = Astro.props;
 ---
-<section class="page-hero">
+<section class="page-hero" lang={lang}>
   <div class:list={['wrap', width]}>
     <span class="kicker">{kicker}</span>
     <h1>{title}</h1>
-    {Astro.slots.has('default') && <p class="lede"><slot /></p>}
+    {Astro.slots.has('default') && <p class="lede" lang={contentLang}><slot /></p>}
   </div>
 </section>

@@ -163,7 +163,12 @@ picker keep the equivalent page selected.
 
 The site translates its navigation, product introductions and key page controls.
 It uses English source text where a guide, release note or page section has no
-translation. Website UI messages live in `src/lib/messages.js`. Each row holds
+translation. English fallback blocks declare their language explicitly. Routes
+whose main content remains English use the unprefixed English canonical URL;
+the fully translated Shield overview advertises its canonical language variants.
+The English regional routes remain available in the language picker.
+
+Website UI messages live in `src/lib/messages.js`. Each row holds
 the translations in the order named at the top of the file, and placeholders
 such as `{product}` must be present in each translation.
 

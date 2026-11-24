@@ -8,6 +8,7 @@ code sample.
 | --- | --- | --- |
 | `id` | string | The section's ID, for links to it |
 | `kicker` | string | The short line above the heading |
+| `kickerLang` | string | Optional language override for the kicker |
 | `title` | string | The heading |
 
 ## With a code sample

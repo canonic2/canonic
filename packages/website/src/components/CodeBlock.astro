@@ -1,6 +1,9 @@
 ---
 /* A code sample with its file name and a Copy button. Without JavaScript the
    code is still there to select. */
+import { base } from '../lib/base.js';
+import { websiteLocale } from '../lib/locales.js';
+
 interface Props {
   /** The file name or label above the code. */
   file: string;
@@ -9,13 +12,15 @@ interface Props {
   copies?: string;
 }
 const { file, code, copies = 'the code' } = Astro.props;
+const { t, locale } = websiteLocale(Astro.url, base);
 ---
-<canonic-code-block class="code">
+<canonic-code-block class="code" lang={locale}>
   <div class="code-head">
     <span class="code-file">{file}</span>
-    <button class="copy" type="button" aria-label={`Copy ${copies}`}>Copy</button>
+    <button class="copy" type="button" aria-label={locale.startsWith('en-') ? t('Copy {item}', { item: copies }) : t('Copy code')}
+      data-copy={t('Copy')} data-copied={t('Copied')}>{t('Copy')}</button>
   </div>
-  <pre><code>{code}</code></pre>
+  <pre lang="en"><code>{code}</code></pre>
 </canonic-code-block>
 
 <script>

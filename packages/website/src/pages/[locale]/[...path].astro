@@ -1,0 +1,46 @@
+---
+import { getCollection } from 'astro:content';
+import DocsPage from '../../components/DocsPage.astro';
+import { docsNavigation } from '../../lib/docs.js';
+import { shieldDocGroups } from '../../lib/doc-groups.js';
+import { defaultLocale, locales } from '../../lib/locales.js';
+import * as shield from '../../lib/shield.js';
+import * as workbench from '../../lib/workbench.js';
+import Shield from '../shield/index.astro';
+import Workbench from '../workbench/index.astro';
+import Install from '../workbench/install.astro';
+import Changelog from '../workbench/changelog.astro';
+
+export async function getStaticPaths() {
+  const marketing = ['workbench', 'workbench/install', 'workbench/changelog', 'shield'];
+  const [workbenchDocs, shieldDocs] = await Promise.all([
+    getCollection('workbenchDocs'), getCollection('shieldDocs'),
+  ]);
+  const documents = [
+    { entries: workbenchDocs, product: 'Workbench', groups: docsNavigation(workbenchDocs) },
+    { entries: shieldDocs, product: 'Shield', groups: docsNavigation(shieldDocs, shieldDocGroups) },
+  ];
+  return locales.filter(([tag]) => tag !== defaultLocale).flatMap(([tag]) => {
+    const locale = tag.toLowerCase();
+    return [
+      ...marketing.map(path => ({ params: { locale, path }, props: { page: path } })),
+      ...documents.flatMap(({ entries, product, groups }) => entries.map(entry => {
+        const slug = entry.id === 'index' ? '' : `/${entry.id.replace(/\/index$/, '')}`;
+        return {
+          params: { locale, path: `${product.toLowerCase()}/docs${slug}` },
+          props: { entry, groups, product },
+        };
+      })),
+    ];
+  });
+}
+
+const pages = { shield: Shield, workbench: Workbench, 'workbench/install': Install, 'workbench/changelog': Changelog };
+const { page, product, entry, groups } = Astro.props;
+const Page = pages[page];
+const docs = product === 'Workbench' ? {
+  version: (await workbench.downloads())?.version,
+  nav: workbench.workbenchNav('Docs'), github: workbench.github, download: workbench.download,
+} : { nav: shield.shieldNav('Docs'), github: shield.github, download: shield.download };
+---
+{Page ? <Page /> : <DocsPage {entry} {groups} {product} {...docs} />}

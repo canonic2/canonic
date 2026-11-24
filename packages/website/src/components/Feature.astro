@@ -5,13 +5,14 @@
 interface Props {
   id: string;
   kicker: string;
+  kickerLang?: string;
   title: string;
 }
-const { id, kicker, title } = Astro.props;
+const { id, kicker, title, kickerLang } = Astro.props;
 ---
 <div class="feature" id={id}>
   <div class="feature-text">
-    <span class="kicker">{kicker}</span>
+    <span class="kicker" lang={kickerLang}>{kicker}</span>
     <h2>{title}</h2>
     <slot />
   </div>

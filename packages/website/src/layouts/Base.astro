@@ -4,18 +4,26 @@
    A nav item marked `external` leaves the site and gets an arrow. */
 import '../styles/global.css';
 import { base } from '../lib/base.js';
+import { defaultLocale, locales, localizeHref, localeMetadata, websiteLocale } from '../lib/locales.js';
 import { logo, products } from '../lib/marks.js';
 
 const { title, description, product, version, nav = [], github, download } = Astro.props;
+const { locale, t, href } = websiteLocale(Astro.url, base);
+const alternatives = locales.map(([tag, label]) => ({ tag, label, href: localizeHref(Astro.url.pathname, tag, base) }));
+const metadata = localeMetadata(Astro.url, base);
+const canonical = new URL(metadata.canonicalPath, Astro.site ?? Astro.url);
 const year = new Date().getFullYear();
 ---
 <!doctype html>
-<html lang="en">
+<html lang={locale}>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{title}</title>
 <meta name="description" content={description}>
+<link rel="canonical" href={canonical}>
+{metadata.alternates.map(alternate => <link rel="alternate" hreflang={alternate.tag} href={new URL(alternate.href, canonical)} />)}
+{metadata.alternates.length > 0 && <link rel="alternate" hreflang="x-default" href={new URL(localizeHref(Astro.url.pathname, defaultLocale, base), canonical)}>}
 <link rel="icon" href={`${base}canonic.svg`} type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -23,22 +31,22 @@ const year = new Date().getFullYear();
 <script is:inline>document.documentElement.classList.add("js");</script>
 </head>
 <body>
-<a class="skip" href="#content">Skip to content</a>
+<a class="skip" href="#content">{t('Skip to content')}</a>
 
 <header class="top">
-  <nav class="products" aria-label="Products">
+  <nav class="products" aria-label={t('Products')}>
     <div class="wrap">
-      <a class="logo" href={base} aria-label="Canonic home">
+      <a class="logo" href={href(base)} aria-label={t('Canonic home')}>
         <svg viewBox={logo.viewBox} role="img" aria-label="canonic" set:html={logo.body} />
       </a>
       <div class="tabs">
         {products.map(p => p.name === product ? (
-          <a class="tab" href={`${base}${p.name.toLowerCase()}/`} aria-current="page">
+          <a class="tab" href={href(`${base}${p.name.toLowerCase()}/`)} aria-current="page">
             <svg viewBox={p.viewBox} aria-hidden="true"><path d={p.base} fill="currentColor" /><path d={p.accent} class="accent" /></svg>
             {p.name}
           </a>
         ) : p.module ? (
-          <a class="tab" href={`${base}${p.name.toLowerCase()}/`}>
+          <a class="tab" href={href(`${base}${p.name.toLowerCase()}/`)}>
             <svg viewBox={p.viewBox} aria-hidden="true"><path d={p.base} fill="currentColor" /><path d={p.accent} class="accent" /></svg>
             {p.name}
           </a>
@@ -46,8 +54,8 @@ const year = new Date().getFullYear();
           <span class="tab is-soon">
             <svg viewBox={p.viewBox} aria-hidden="true"><path d={p.base} fill="currentColor" /><path d={p.accent} fill="currentColor" /></svg>
             {p.name}
-            <span class="soon">Soon</span>
-            <span class="tip" aria-hidden="true">{p.name}: {p.tagline}, coming soon</span>
+            <span class="soon">{t('Soon')}</span>
+            <span class="tip" aria-hidden="true">{t('{product}: {tagline}, coming soon', { product: p.name, tagline: t(p.tagline) })}</span>
           </span>
         ))}
       </div>
@@ -62,9 +70,9 @@ const year = new Date().getFullYear();
       <div class="sub-links">
         {nav.map(item => item.external
           ? <a href={item.href} target="_blank" rel="noopener">{item.label} <span aria-hidden="true">↗</span></a>
-          : <a href={item.href} aria-current={item.current ? 'page' : undefined}>{item.label}</a>)}
+          : <a href={href(item.href)} aria-current={item.current ? 'page' : undefined}>{t(item.label)}</a>)}
       </div>
-      {download && <a class="btn btn-sm" href={download.href}>{download.label}</a>}
+      {download && <a class="btn btn-sm" href={href(download.href)}>{t(download.label)}</a>}
     </div>
   </nav>
 </header>
@@ -76,18 +84,25 @@ const year = new Date().getFullYear();
 <footer class="foot">
   <div class="wrap">
     <div class="foot-top">
-      <a class="logo" href={base} aria-label="Canonic home">
+      <a class="logo" href={href(base)} aria-label={t('Canonic home')}>
         <svg viewBox={logo.viewBox} role="img" aria-label="canonic" set:html={logo.body} />
       </a>
       <div class="foot-col">
-        <span class="foot-head">Products</span>
+        <span class="foot-head">{t('Products')}</span>
         {products.map(p => p.module
-          ? <a href={`${base}${p.name.toLowerCase()}/`}>{p.name}</a>
-          : <span class="foot-soon">{p.name} · Soon</span>)}
+          ? <a href={href(`${base}${p.name.toLowerCase()}/`)}>{p.name}</a>
+          : <span class="foot-soon">{p.name} · {t('Soon')}</span>)}
       </div>
+      <details class="site-language">
+        <summary>{t('Language')} <span lang={locale}>· {alternatives.find(option => option.tag === locale)?.label}</span></summary>
+        <ul>
+          {alternatives.map(option => <li><a href={option.href} lang={option.tag}
+            aria-current={option.tag === locale ? 'page' : undefined}>{option.label}</a></li>)}
+        </ul>
+      </details>
     </div>
     <div class="foot-bottom">
-      <span>© {year} Canonic</span>
+      <span>© {year} Canonic Inc.</span>
       <slot name="footer" />
     </div>
   </div>

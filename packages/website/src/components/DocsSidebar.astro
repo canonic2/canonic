@@ -4,6 +4,7 @@
    list from the docs' search index; without JavaScript it is hidden and the
    list is complete. */
 import { base } from '../lib/base.js';
+import { websiteLocale } from '../lib/locales.js';
 import { docTitle, docsHref } from '../lib/docs.js';
 import { pages } from '../lib/workbench.js';
 
@@ -16,24 +17,26 @@ interface Props {
 }
 const { groups, current, product = 'Workbench', action = { href: pages.install, label: 'Get Workbench' } } = Astro.props;
 const slug = product.toLowerCase();
+const { t, href } = websiteLocale(Astro.url, base);
 ---
 <canonic-docs-sidebar>
   <details class="docs-sidebar" open>
-    <summary>Documentation <span aria-hidden="true">⌄</span></summary>
+    <summary>{t('Docs')} <span aria-hidden="true">⌄</span></summary>
     <div class="docs-sidebar-body">
       <div class="docs-search" hidden>
-        <label for="docs-search">Search the docs</label>
-        <input id="docs-search" type="search" placeholder="Search the docs" autocomplete="off" aria-controls="docs-navigation" data-index={`${docsHref('index', base, slug)}search.json`} />
-        <p class="docs-search-status" role="status"></p>
+        <label for="docs-search">{t('Search docs')}</label>
+        <input id="docs-search" type="search" placeholder={t('Search docs')} autocomplete="off" aria-controls="docs-navigation" data-index={`${docsHref('index', base, slug)}search.json`} />
+        <p class="docs-search-status" role="status" data-matches={t('{count} matching guides')}
+          data-empty={t('No matching guides')} data-unavailable={t('Search unavailable. Browse the guides below.')}></p>
       </div>
-      <nav id="docs-navigation" aria-label="Documentation">
-        {groups.map(group => <div class="docs-group">
+      <nav id="docs-navigation" aria-label={t('Docs')}>
+        {groups.map(group => <div class="docs-group" lang="en">
           <h2>{group.title}</h2>
-          {group.entries.map(page => <a href={docsHref(page.id, base, slug)} data-doc-id={page.id}
+          {group.entries.map(page => <a href={href(docsHref(page.id, base, slug))} data-doc-id={page.id}
             aria-current={page.id === current ? 'page' : undefined}>{docTitle(page)}</a>)}
         </div>)}
       </nav>
-      <a class="docs-install" href={action.href}>{action.label} <span aria-hidden="true">→</span></a>
+      <a class="docs-install" href={href(action.href)}>{action.label} <span aria-hidden="true">→</span></a>
     </div>
   </details>
 </canonic-docs-sidebar>
@@ -75,9 +78,9 @@ const slug = product.toLowerCase();
           const matches = new Set(entries.filter(entry => words.every(word => entry.text.includes(word))).map(entry => entry.id));
           links.forEach(link => { link.hidden = !matches.has(link.dataset.docId || ''); });
           groups.forEach(group => { group.hidden = !group.querySelector('a:not([hidden])'); });
-          status.textContent = matches.size ? `${matches.size} matching guides` : 'No matching guides';
+          status.textContent = matches.size ? (status.dataset.matches || '').replace('{count}', String(matches.size)) : status.dataset.empty || '';
         } catch {
-          if (current === generation) status.textContent = 'Search unavailable. Browse the guides below.';
+          if (current === generation) status.textContent = status.dataset.unavailable || '';
         }
       });
     }

@@ -6,6 +6,8 @@ default slot.
 | Prop | Type | Description |
 | --- | --- | --- |
 | `kicker` | string | The short line above the heading |
+| `lang` | string | Heading language; defaults to `en` |
+| `contentLang` | string | Lede language; defaults to `en` |
 | `title` | string | The page's heading |
 | `width` | `narrow` or `narrower` | The text column's width. Defaults to `narrow`. |
 

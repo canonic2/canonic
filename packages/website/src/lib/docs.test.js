@@ -28,6 +28,16 @@ test('Shield guides and cross-product links use their own routes and deployment 
   assert.equal(rewriteDocLink('getting-started.md', outside), 'getting-started.md');
 });
 
+test('published Markdown links stay in the current locale across guides and products', () => {
+  const options = { relativeGuides: true };
+  const origin = 'https://example.com/canonic/ja/shield/docs/';
+  const within = rewriteDocLink('getting-started.md#install', shieldSource, '/canonic/', options);
+  const cross = rewriteDocLink('../../workbench/docs/configuration.md#scenarios', shieldSource, '/canonic/', options);
+  assert.equal(new URL(within, origin).pathname, '/canonic/ja/shield/docs/getting-started/');
+  assert.equal(new URL(cross, origin).href, 'https://example.com/canonic/ja/workbench/docs/configuration/#scenarios');
+  assert.equal(rewriteDocLink('README.md', shieldSource, '/canonic/', options), './');
+});
+
 test('navigation accepts a product-specific order and includes unlisted guides', () => {
   const entries = [{ id: 'index', body: '# Shield' }, { id: 'extra', body: '# Extra' }, { id: 'install', body: '# Install' }];
   const groups = docsNavigation(entries, [{ title: 'Start', ids: ['install', 'index', 'absent'] }]);
