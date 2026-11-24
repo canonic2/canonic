@@ -14,6 +14,7 @@
 
 mod assertion;
 mod client;
+mod client_assertion;
 mod flow;
 mod jose;
 pub mod store;
@@ -29,12 +30,13 @@ pub use assertion::{
 };
 pub use client::{
     CLIENT_SECRET_BYTES, ClientAuth, ClientOptions, ClientRegistrar, ClientResolver,
-    MAX_CLIENT_DOCUMENT_BYTES, MAX_CLIENT_NAME_BYTES, MAX_CLIENTS, MAX_REDIRECT_URIS,
-    MAX_URI_BYTES, RegisteredClient,
+    DocumentClientGrants, MAX_CLIENT_DOCUMENT_BYTES, MAX_CLIENT_NAME_BYTES, MAX_CLIENTS,
+    MAX_REDIRECT_URIS, MAX_URI_BYTES, RegisteredClient,
 };
+pub use client_assertion::JWT_CLIENT_ASSERTION_TYPE;
 pub use store::{
-    AccessRecord, AssertionRecord, CapacityError, CodeRecord, CodeTake, Digest, FamilyRecord,
-    GrantStore, MemoryStore, PendingRecord, Rotated, Rotation, StoreError,
+    AccessRecord, AssertionRecord, CapacityError, ClientAssertionPool, CodeRecord, CodeTake,
+    Digest, FamilyRecord, GrantStore, MemoryStore, PendingRecord, Rotated, Rotation, StoreError,
 };
 
 use crate::http::{
@@ -44,17 +46,22 @@ use assertion::Assertions;
 use client::Client;
 use serde_json::{Map, Value, json};
 use std::{
+    collections::BTreeMap,
     sync::Arc,
     time::{Duration, SystemTime},
 };
 
 #[cfg(test)]
 mod tests;
+#[cfg(all(test, feature = "http-server"))]
+pub(crate) use tests::client_assertions::{test_client_assertion, test_client_jwks};
 
 /// The well-known prefix of authorization server metadata (RFC 8414).
 pub const METADATA_PREFIX: &str = "/.well-known/oauth-authorization-server";
-/// The largest authorization query, token or revocation form, or registration.
+/// The largest authorization query, revocation form, or registration body.
 pub const MAX_FORM_BYTES: usize = 16 * 1024;
+/// The largest token form, including room for both types of JWT assertion.
+pub const MAX_TOKEN_FORM_BYTES: usize = MAX_FORM_BYTES + MAX_ASSERTION_BYTES + 256;
 /// The largest request body routed to an [`Interaction`].
 pub const MAX_INTERACTION_BODY_BYTES: usize = 64 * 1024;
 /// The largest response body an [`Interaction`] may return.
@@ -131,6 +138,11 @@ pub struct AuthorizationServerOptions {
     pub issuer: String,
     /// Pre-registered clients, at most [`MAX_CLIENTS`].
     pub clients: Vec<ClientOptions>,
+    /// Public JSON Web Key Set bytes by pre-registered `PrivateKeyJwt` client ID.
+    pub client_jwks: BTreeMap<String, Vec<u8>>,
+    /// Out-of-band grant permissions by Client ID Metadata Document URL,
+    /// at most [`MAX_CLIENTS`]. Effective only when a resolver is installed.
+    pub document_client_grants: BTreeMap<String, DocumentClientGrants>,
     /// Scopes granted when a request names none.
     pub default_scopes: Vec<String>,
     /// Scopes listed in the metadata; also what resolved and registered
@@ -156,6 +168,8 @@ impl AuthorizationServerOptions {
         Self {
             issuer: issuer.into(),
             clients: Vec::new(),
+            client_jwks: BTreeMap::new(),
+            document_client_grants: BTreeMap::new(),
             default_scopes: Vec::new(),
             scopes_supported: None,
             interaction_path: interaction_path.into(),
@@ -190,6 +204,12 @@ pub enum AuthorizationServerError {
     /// The per-client grant limit is out of range.
     #[error("client_grants must be from 1 to {MAX_CLIENT_GRANTS}")]
     ClientGrants,
+    /// The configured key sets do not match the pre-registered private-key clients.
+    #[error("client_jwks must name exactly the pre-registered private_key_jwt clients")]
+    ClientKeys,
+    /// There are too many document client grant entries or an invalid client ID URL.
+    #[error("document_client_grants must name up to {MAX_CLIENTS} metadata document URLs")]
+    DocumentClientGrants,
     /// The trusted issuer at this index is invalid, repeated or this server's
     /// own issuer, or the list is empty or longer than [`MAX_TRUSTED_ISSUERS`].
     #[error("trusted issuer {0} is invalid or repeated, or the issuer list is empty or too long")]
@@ -263,6 +283,7 @@ pub struct AuthorizationServer {
     issuer_path: String,
     resource: String,
     clients: Vec<Client>,
+    document_client_grants: BTreeMap<String, DocumentClientGrants>,
     default_scopes: Vec<String>,
     scopes_supported: Option<Vec<String>>,
     interaction_path: String,
@@ -318,16 +339,14 @@ impl AuthorizationServer {
             .filter(|issuer| issuer.strict)
             .filter(|_| resource.authorization_servers().contains(&options.issuer))
             .ok_or(AuthorizationServerError::Issuer)?;
-        if options.clients.len() > MAX_CLIENTS {
-            return Err(AuthorizationServerError::Client(MAX_CLIENTS));
-        }
-        for (index, client) in options.clients.iter().enumerate() {
-            let repeated = options.clients[..index]
-                .iter()
-                .any(|other| other.client_id == client.client_id);
-            if repeated || !client::valid_options(client) || !scope_list(&client.scopes) {
-                return Err(AuthorizationServerError::Client(index));
-            }
+        let clients = client::configured_clients(&options)?;
+        if options.document_client_grants.len() > MAX_CLIENTS
+            || !options
+                .document_client_grants
+                .keys()
+                .all(|id| client::is_document_id(id))
+        {
+            return Err(AuthorizationServerError::DocumentClientGrants);
         }
         let supported = options.scopes_supported.as_deref();
         if !scope_list(&options.default_scopes)
@@ -348,7 +367,8 @@ impl AuthorizationServer {
             secure_cookies: issuer.origin.starts_with("https://"),
             issuer_path,
             resource: resource.resource().to_owned(),
-            clients: options.clients.iter().map(Client::configured).collect(),
+            clients,
+            document_client_grants: options.document_client_grants,
             default_scopes: options.default_scopes,
             scopes_supported: options.scopes_supported,
             interaction_path: options.interaction_path,
@@ -508,7 +528,12 @@ impl AuthorizationServer {
             response.headers.push(("Allow", expected.to_owned().into()));
             return response;
         }
-        if body.len() > MAX_FORM_BYTES && !matches!(route, Route::Interaction) {
+        let body_limit = if matches!(route, Route::Token) {
+            MAX_TOKEN_FORM_BYTES
+        } else {
+            MAX_FORM_BYTES
+        };
+        if body.len() > body_limit && !matches!(route, Route::Interaction) {
             return wire::oauth_error(413, "invalid_request", "The request is too large");
         }
         match route {
@@ -521,35 +546,33 @@ impl AuthorizationServer {
         }
     }
 
-    fn prepare_metadata(&mut self) {
-        let base = self.issuer.trim_end_matches('/');
-        // A confidential client accepts either secret method.
-        let mut methods = self
-            .clients
-            .iter()
-            .flat_map(|client| {
-                if client.confidential() {
-                    vec![
-                        ClientAuth::SecretBasic.name(),
-                        ClientAuth::SecretPost.name(),
-                    ]
-                } else {
-                    vec![ClientAuth::None.name()]
-                }
-            })
-            .collect::<Vec<_>>();
+    fn client_auth_methods(&self) -> Vec<&'static str> {
+        let secret_methods = [
+            ClientAuth::SecretBasic.name(),
+            ClientAuth::SecretPost.name(),
+        ];
+        let mut methods = Vec::new();
+        for client in &self.clients {
+            match client.auth {
+                ClientAuth::SecretBasic | ClientAuth::SecretPost => methods.extend(secret_methods),
+                method => methods.push(method.name()),
+            }
+        }
         if self.resolver.is_some() {
-            methods.push(ClientAuth::None.name());
+            methods.extend([ClientAuth::None.name(), ClientAuth::PrivateKeyJwt.name()]);
         }
         if self.registrar.is_some() {
-            methods.extend([
-                ClientAuth::None.name(),
-                ClientAuth::SecretBasic.name(),
-                ClientAuth::SecretPost.name(),
-            ]);
+            methods.push(ClientAuth::None.name());
+            methods.extend(secret_methods);
         }
         methods.sort_unstable();
         methods.dedup();
+        methods
+    }
+
+    fn prepare_metadata(&mut self) {
+        let base = self.issuer.trim_end_matches('/');
+        let methods = self.client_auth_methods();
         let mut document = Map::new();
         document.insert("issuer".into(), json!(self.issuer));
         document.insert(
@@ -569,11 +592,19 @@ impl AuthorizationServer {
         }
         document.insert("response_types_supported".into(), json!(["code"]));
         let mut grants = vec!["authorization_code", "refresh_token"];
-        if self.clients.iter().any(|client| client.machine) {
+        let document_grants = || {
+            self.document_client_grants
+                .values()
+                .filter(|_| self.resolver.is_some())
+        };
+        if self.clients.iter().any(|client| client.machine)
+            || document_grants().any(|grants| grants.client_credentials)
+        {
             grants.push("client_credentials");
         }
-        let assertions =
-            self.assertions.is_some() && self.clients.iter().any(|client| client.assertions);
+        let assertions = self.assertions.is_some()
+            && (self.clients.iter().any(|client| client.assertions)
+                || document_grants().any(|grants| grants.identity_assertions));
         if assertions {
             grants.push(JWT_BEARER_GRANT);
             document.insert(
@@ -591,6 +622,20 @@ impl AuthorizationServer {
             "revocation_endpoint_auth_methods_supported".into(),
             json!(methods),
         );
+        if methods.contains(&ClientAuth::PrivateKeyJwt.name()) {
+            let algorithms = [
+                SigningAlgorithm::Rs256.name(),
+                SigningAlgorithm::Es256.name(),
+            ];
+            document.insert(
+                "token_endpoint_auth_signing_alg_values_supported".into(),
+                json!(algorithms),
+            );
+            document.insert(
+                "revocation_endpoint_auth_signing_alg_values_supported".into(),
+                json!(algorithms),
+            );
+        }
         if let Some(scopes) = &self.scopes_supported {
             document.insert("scopes_supported".into(), json!(scopes));
         }
@@ -633,7 +678,12 @@ impl AuthorizationServer {
                 let document = resolver
                     .resolve(client_id)
                     .map_err(|_| "The client metadata document cannot be fetched")?;
-                client::from_document(client_id, &document)
+                let grants = self
+                    .document_client_grants
+                    .get(client_id)
+                    .copied()
+                    .unwrap_or_default();
+                client::from_document(client_id, &document, grants)
             }
             _ => Err("The client is not known"),
         }

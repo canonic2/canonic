@@ -79,6 +79,8 @@ doesn't or if any path collides with the MCP endpoint or its metadata.
 | `issuer` | Required | `https`, or `http` on a loopback host; endpoints sit under its path |
 | `interaction_path` | Required | Your sign-in path; it and paths under it go to your `Interaction` |
 | `clients` | None | Pre-registered clients, at most 256 |
+| `client_jwks` | Empty | Public JSON Web Key Set bytes keyed by pre-registered private-key client ID |
+| `document_client_grants` | Empty | Machine and enterprise grant permissions keyed by exact Client ID Metadata Document URL |
 | `default_scopes` | None | Granted when a client asks for none, within what the client may request |
 | `scopes_supported` | None | Listed in metadata; what document and registered clients may request |
 | `lifetimes` | See below | Record lifetimes |
@@ -140,18 +142,19 @@ sends `access_denied`.
 ## Clients
 
 **Pre-registered.** List them in `clients`. A public client (`ClientAuth::None`)
-sends only its `client_id`; a confidential one (`SecretBasic` or `SecretPost`)
-has a secret of at least 32 bytes, which the library keeps only as a hash, and
-may send it either by HTTP Basic or in the form. Redirect URIs must be `https`
-or loopback `http` and match exactly, except that a loopback IP address such
-as `127.0.0.1` may use any port.
+sends only its `client_id`. A secret-based client (`SecretBasic` or `SecretPost`)
+has a secret of at least 32 bytes, which the library keeps as a hash. It may
+send the secret by HTTP Basic or in the form. A private-key client is also
+confidential. Redirect URIs must be `https` or loopback `http` and match
+exactly, except that a loopback IP address such as `127.0.0.1` may use any port.
 
 **Client ID Metadata Documents.** Call `with_resolver` with a `ClientResolver`
 to accept clients whose `client_id` is an `https` URL. The library never opens
-a network connection: your resolver fetches the document and must refuse
+a network connection. Your resolver fetches the document and must refuse
 private and loopback addresses, redirects and large bodies. The library checks
-that the document names the same `client_id`, has a `client_name`, valid
-redirect URIs and is a public client.
+that the document names the same `client_id`, has a `client_name` and valid
+redirect URIs. Document clients can be public or authenticate with a private key.
+Client IDs can be up to 1,024 bytes, including the full document URL.
 
 **Dynamic registration.** Some clients still register themselves (RFC 7591),
 though the protocol deprecates it. Call `with_registrar` with a
@@ -161,12 +164,58 @@ generates the client ID and secret; your registrar approves it, stores the
 rate limits. Without a registrar, `/register` does not exist and the metadata
 does not advertise it.
 
+## Authenticate with a private key
+
+For a pre-registered client, set `auth: ClientAuth::PrivateKeyJwt` and
+`secret: None`. Add the client's public JSON Web Key Set (JWKS) bytes to
+`AuthorizationServerOptions::client_jwks` under its exact `client_id`.
+Give the private key to the client that signs the assertions.
+
+For a Client ID Metadata Document, set `token_endpoint_auth_method` to
+`private_key_jwt` and publish either an inline `jwks` or an HTTPS `jwks_uri`.
+For a remote key set, implement `ClientResolver::resolve_jwks`. Give those
+fetches the same network protections as document fetches and limit each key
+set to 64 KiB and 32 keys. To allow the client to request machine tokens or
+present enterprise identity grants, add its exact document URL to
+`document_client_grants` with the corresponding `DocumentClientGrants` flag.
+Malformed or oversized key set bytes returned by the resolver get
+`401 invalid_client`. An error from the resolver gets `503`.
+
+Sign a compact JWT using `RS256` or `ES256` and include the key's `kid` when
+the set has more than one key. Set `iss` and `sub` to the client ID, `aud` to
+the issuer or its advertised token endpoint, `exp` to a short expiration at
+most one hour ahead, and `jti` to a new unique value. The server checks the
+signature against the registered keys and records each `jti` until the
+assertion's expiration plus 60 seconds of clock skew. Generate a fresh
+assertion for every token request, revocation or retry.
+
+Private-key sign-ins require a signed client assertion for code exchange,
+refresh and revocation. Changing a document to public authentication applies
+to new sign-ins. Existing private-key grants still require a signed assertion.
+
+For a machine client enabled for `client_credentials`, put the signed JWT in
+`ACME_CLIENT_ASSERTION` and send it in the form:
+
+```sh
+curl -sS https://mcp.example.com/token \
+  -d grant_type=client_credentials \
+  -d client_assertion_type=urn:ietf:params:oauth:client-assertion-type:jwt-bearer \
+  --data-urlencode "client_assertion=$ACME_CLIENT_ASSERTION"
+```
+
+The reply contains an `access_token` for the client. A revocation request sends
+the same two authentication fields with a freshly signed assertion and a
+`token` field. If you send a form `client_id`, it must match the assertion.
+Use the assertion as the request's sole credential. The metadata advertises
+the method and available signing algorithms. [RFC 7523](https://www.rfc-editor.org/rfc/rfc7523.html#section-2.2).
+
 ## Machine clients
 
 Background services, CI jobs and other servers have no user to sign in. Give
-them a confidential pre-registered client with `client_credentials: true`
-(the OAuth Client Credentials extension); it may have no redirect URIs. It
-asks the token endpoint directly:
+them a confidential client with `client_credentials` enabled (the OAuth
+Client Credentials extension). A pre-registered machine client may omit
+redirect URIs. A client that uses a shared secret asks the token endpoint
+directly:
 
 ```sh
 curl -sS https://mcp.example.com/token \
@@ -179,11 +228,12 @@ curl -sS https://mcp.example.com/token \
 The reply has an `access_token` and no `refresh_token`: the client asks again
 when the token expires. The token's grant has the client ID as its subject,
 so `context.authorization()` tells your handler which service called. A
-requested `scope` must be within the client's `scopes`. Without one, the token
-gets the `default_scopes` that the client may request, as at sign-in; when you
-set no default scopes, that is none, and only tools that require no scope
-accept the token. Give machine clients a default, or have them always send
-`scope`. Public clients, registered clients and clients without the flag get
+requested `scope` must be within the pre-registered client's `scopes` or,
+for a document client, the server's `scopes_supported` (falling back to
+`default_scopes`). When the request omits `scope`, the token gets the
+`default_scopes` the client may request. Give machine clients a default, or
+have them always send `scope`. Public clients, dynamically registered clients
+and clients without the flag get
 `unauthorized_client`.
 
 Each client holds at most `client_grants` live tokens (16 unless you set it,
@@ -203,9 +253,8 @@ session_options.extensions.insert(
 );
 ```
 
-Keep machine secrets in a secrets manager and rotate them. Signed JWT client
-assertions (`private_key_jwt`), which the extension recommends, are not
-supported; use an external authorization server for them.
+Keep machine secrets in a secrets manager and rotate them. Clients can also
+[authenticate with a private key](#authenticate-with-a-private-key).
 
 ## Enterprise users
 
@@ -223,10 +272,10 @@ token. The user never sees your sign-in page.
 | Checks its type, audience, client, resource, lifetime and `tenant`, and refuses a replay | Fetch and cache each provider's key set |
 | Issues an access token, without a refresh token | Map each enterprise user to your own subject and scopes |
 
-Register the AI client as a confidential client with `identity_assertions:
-true`, using the client ID and secret the provider's administrator configured
-for your server. It may have no redirect URIs. Then trust the providers and
-supply an `IdentityAssertions` implementation:
+Enable `identity_assertions` for the AI client's ID. A pre-registered client
+may authenticate with a shared secret or a private key and may omit redirect
+URIs. A document client [authenticates with a private key](#authenticate-with-a-private-key).
+Then trust the providers and supply an `IdentityAssertions` implementation:
 
 ```rust,ignore
 use canonic_mcp_kit::oauth::{
@@ -264,7 +313,8 @@ let server = AuthorizationServer::new(issuer, &resource, store, Arc::new(SignInP
     )?;
 ```
 
-The client presents the assertion with its own credentials:
+The client presents the identity grant in `assertion` along with its own
+credentials. This example uses a shared secret:
 
 ```sh
 curl -sS https://mcp.example.com/token \
@@ -292,12 +342,9 @@ repeat.
   hour from when it arrives, with 60 seconds of clock skew. A key set may be
   at most 64 KiB with 32 keys; RSA keys must be 2,048 to 4,096 bits.
 - **Failures.** Anything wrong with the assertion gets `invalid_grant`. A
-  client without a secret gets `invalid_client`, and one without
+  client without valid authentication gets `invalid_client`, and one without
   `identity_assertions` gets `unauthorized_client`. When `key_set` fails, or
   returns something that is not a key set, the client gets `503`.
-- **Not supported.** Sender-constrained assertions (`cnf`), encrypted
-  assertions and clients that authenticate with `private_key_jwt`, including
-  Client ID Metadata Document clients.
 
 Each user holds at most `client_grants` live tokens per client, as machine
 clients do, so one user's tokens never replace another's. Advertise the
@@ -327,15 +374,28 @@ records contain hashes, never usable secrets, so a copied database cannot be
 replayed. The library answers the client as soon as a method returns, so
 return success only after the change survives a restart. This matters most
 for `take_pending`, `take_code`, `rotate`, `revoke_family` and
-`create_assertion_grant`: if one of them is lost, a used code works again, a
+`create_assertion_grant` and `use_client_assertion`. If one of them is lost, a used code works again, a
 replaced refresh token becomes current again, a revoked sign-in comes back,
-or a used identity assertion works again until it expires. A lost insertion only signs someone
+or a used assertion works again until its replay window ends. A lost insertion only signs someone
 out early, and a lost `purge_expired` is harmless. If your backend can lose
 acknowledged writes, tell your operators about that risk.
 
+Persist `requires_private_key` in pending authorizations, authorization codes
+and grant families. `GrantStore::take_code` must atomically match the client ID
+and enforce that requirement before consuming a code or reporting reuse.
+Initialize the flag to `false` for records known to predate private-key client
+authentication. Require a fresh sign-in when the original requirement is unknown.
+
+Implement `GrantStore::use_client_assertion` when enabling private-key client
+authentication with a custom store. Give configured clients, other document
+clients and enterprise identity assertions independent replay capacity. Check
+both client pools for a live digest before recording it in the supplied pool.
+The default returns an unavailable error to preserve replay protection.
+
 The library removes expired records during token requests. A full
 `MemoryStore` drops the oldest pending sign-in, because anyone can start one,
-and otherwise refuses with `503` only when every record is still live.
+and otherwise refuses with `503` when the applicable pool contains only live
+records and has reached capacity.
 
 ## Endpoints and errors
 
@@ -344,7 +404,7 @@ and otherwise refuses with `503` only when every record is still live.
 | `/.well-known/oauth-authorization-server` + issuer path | GET | — |
 | `/authorize` | GET | A `400` page for an unknown client or redirect URI; otherwise a redirect with `error`, `state` and `iss` |
 | `/token` | POST form | RFC 6749 JSON errors: `invalid_client` (`401`), `invalid_grant`, `invalid_scope`, `invalid_target`, `unauthorized_client`, `unsupported_grant_type`; for identity assertions also `access_denied` and `server_error` (`500`) when `admit` widens the scopes or returns an invalid subject; `503` without a body when the store or a key set is unavailable |
-| `/revoke` | POST form | `invalid_client` only |
+| `/revoke` | POST form | `invalid_client` (`401`), `invalid_request`, or `503` when the store or client key set is unavailable |
 | `/register` | POST JSON | `invalid_client_metadata` |
 
 Metadata, token, revocation and registration responses allow any origin and

@@ -5,6 +5,7 @@ use super::*;
 use crate::http::{RequestHead, ResourceOptions};
 
 mod assertions;
+pub(super) mod client_assertions;
 use std::{
     collections::HashMap,
     sync::{Barrier, Mutex},
@@ -104,8 +105,15 @@ impl GrantStore for Recording {
         self.record(&record);
         self.inner.put_code(record)
     }
-    fn take_code(&self, digest: &Digest, now: SystemTime) -> Result<CodeTake, StoreError> {
-        self.inner.take_code(digest, now)
+    fn take_code(
+        &self,
+        digest: &Digest,
+        client_id: &str,
+        authenticated_with_private_key: bool,
+        now: SystemTime,
+    ) -> Result<CodeTake, StoreError> {
+        self.inner
+            .take_code(digest, client_id, authenticated_with_private_key, now)
     }
     fn create_family(
         &self,
@@ -132,6 +140,15 @@ impl GrantStore for Recording {
     }
     fn assertion_redeemed(&self, digest: &Digest, now: SystemTime) -> Result<bool, StoreError> {
         self.inner.assertion_redeemed(digest, now)
+    }
+    fn use_client_assertion(
+        &self,
+        assertion: AssertionRecord,
+        pool: ClientAssertionPool,
+        now: SystemTime,
+    ) -> Result<bool, StoreError> {
+        self.record(&assertion);
+        self.inner.use_client_assertion(assertion, pool, now)
     }
     fn create_assertion_grant(
         &self,
@@ -426,6 +443,15 @@ impl Harness {
     }
 
     fn token(&self, fields: &[(&str, &str)], headers: &[(&str, &[u8])]) -> Response {
+        self.post_form("/token", fields, headers)
+    }
+
+    fn post_form(
+        &self,
+        path: &str,
+        fields: &[(&str, &str)],
+        headers: &[(&str, &[u8])],
+    ) -> Response {
         let body = fields
             .iter()
             .map(|(name, value)| format!("{name}={}", wire::encode_component(value)))
@@ -436,7 +462,7 @@ impl Harness {
             b"application/x-www-form-urlencoded".as_slice(),
         )];
         all.extend_from_slice(headers);
-        self.send("POST", "/token", &all, body.as_bytes())
+        self.send("POST", path, &all, body.as_bytes())
     }
 
     fn exchange(&self, code: &str) -> Response {
@@ -601,7 +627,12 @@ fn metadata_lists_the_issuer_and_only_supported_methods() {
     );
     assert_eq!(
         metadata["token_endpoint_auth_methods_supported"],
-        json!(["client_secret_basic", "client_secret_post", "none"])
+        json!([
+            "client_secret_basic",
+            "client_secret_post",
+            "none",
+            "private_key_jwt"
+        ])
     );
     assert_eq!(
         metadata["authorization_response_iss_parameter_supported"],
@@ -640,6 +671,11 @@ fn metadata_lists_the_issuer_and_only_supported_methods() {
         json!(["client_secret_basic", "client_secret_post", "none"])
     );
     assert!(!plain.routes("/register"));
+    assert!(
+        metadata
+            .get("token_endpoint_auth_signing_alg_values_supported")
+            .is_none()
+    );
 
     let preflight = harness.send("OPTIONS", "/token", &[], b"");
     assert_eq!(preflight.status, 204);
@@ -1665,6 +1701,7 @@ fn memory_store_evicts_old_pending_and_keeps_one_access_token_per_family() {
         id: id.to_owned(),
         subject: "user-1".to_owned(),
         client_id: PUBLIC.to_owned(),
+        requires_private_key: false,
         scopes: Vec::new(),
         resource: RESOURCE.to_owned(),
         created_at: now,
@@ -1686,6 +1723,7 @@ fn memory_store_evicts_old_pending_and_keeps_one_access_token_per_family() {
         digest: wire::digest(&format!("ac_{id}")),
         family_id: id.to_owned(),
         client_id: PUBLIC.to_owned(),
+        requires_private_key: false,
         redirect_uri: REDIRECT.to_owned(),
         challenge: wire::challenge(VERIFIER),
         scopes: Vec::new(),
@@ -1697,7 +1735,7 @@ fn memory_store_evicts_old_pending_and_keeps_one_access_token_per_family() {
     let redeem = |id: &str| {
         store.put_code(code(id)).unwrap();
         assert!(matches!(
-            store.take_code(&code(id).digest, now),
+            store.take_code(&code(id).digest, PUBLIC, false, now),
             Ok(CodeTake::Taken(_))
         ));
         code(id).digest
@@ -1726,6 +1764,7 @@ fn memory_store_purges_visit_only_due_records() {
         digest: wire::digest(&format!("ac_{index}")),
         family_id: format!("family-{index}"),
         client_id: PUBLIC.to_owned(),
+        requires_private_key: false,
         redirect_uri: REDIRECT.to_owned(),
         challenge: wire::challenge(VERIFIER),
         scopes: Vec::new(),
@@ -1738,6 +1777,7 @@ fn memory_store_purges_visit_only_due_records() {
         id: id.to_owned(),
         subject: subject.to_owned(),
         client_id: MACHINE.to_owned(),
+        requires_private_key: false,
         scopes: Vec::new(),
         resource: RESOURCE.to_owned(),
         created_at: now,
@@ -1801,6 +1841,7 @@ fn memory_store_purges_never_exceed_their_limit() {
             id: id.to_owned(),
             subject: id.to_owned(),
             client_id: MACHINE.to_owned(),
+            requires_private_key: false,
             scopes: Vec::new(),
             resource: RESOURCE.to_owned(),
             created_at: now,
@@ -1856,6 +1897,7 @@ fn memory_store_replacements_keep_one_expiry_entry() {
         reference: "pr_acme".to_owned(),
         binding: wire::digest("pb_acme"),
         client_id: PUBLIC.to_owned(),
+        requires_private_key: false,
         client_name: None,
         redirect_uri: REDIRECT.to_owned(),
         challenge: wire::challenge(VERIFIER),
@@ -1875,6 +1917,7 @@ fn memory_store_replacements_keep_one_expiry_entry() {
         digest: wire::digest("ac_acme"),
         family_id: "family-acme".to_owned(),
         client_id: PUBLIC.to_owned(),
+        requires_private_key: false,
         redirect_uri: REDIRECT.to_owned(),
         challenge: wire::challenge(VERIFIER),
         scopes: Vec::new(),
@@ -1887,7 +1930,7 @@ fn memory_store_replacements_keep_one_expiry_entry() {
     store.put_code(code(later)).unwrap();
     assert_eq!(store.purge_expired(soon, 64), Ok(0));
     assert!(matches!(
-        store.take_code(&code(later).digest, soon),
+        store.take_code(&code(later).digest, PUBLIC, false, soon),
         Ok(CodeTake::Taken(_))
     ));
     assert_eq!(store.purge_work().1, 1);
@@ -1899,6 +1942,7 @@ fn memory_store_replacements_keep_one_expiry_entry() {
             id: id.to_owned(),
             subject: "user-1".to_owned(),
             client_id: "acme-agent".to_owned(),
+            requires_private_key: false,
             scopes: Vec::new(),
             resource: RESOURCE.to_owned(),
             created_at: now,

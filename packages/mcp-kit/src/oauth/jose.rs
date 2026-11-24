@@ -1,6 +1,5 @@
-//! Compact JSON Web Signatures and JSON Web Key Sets for identity assertions:
-//! bounded decoding, key set preparation and RS256/ES256 verification. Nothing
-//! here fetches keys; [`super::IdentityAssertions`] supplies key set bytes.
+//! Compact JSON Web Signatures and JSON Web Key Sets for OAuth assertions:
+//! bounded decoding, key set preparation and RS256/ES256 verification.
 
 use super::{
     assertion::{MAX_KEY_SET_BYTES, MAX_KEYS, RSA_MODULUS_BITS, SigningAlgorithm},
@@ -9,6 +8,7 @@ use super::{
 // RS256 hashes with the SHA-256 that `rsa` is built on.
 use rsa::{BoxedUint, pkcs1v15, sha2::Sha256, signature::Verifier as _};
 use serde_json::{Map, Value};
+use std::time::{Duration, SystemTime};
 
 /// The largest RSA public exponent, in bytes.
 const MAX_EXPONENT_BYTES: usize = 8;
@@ -20,8 +20,27 @@ pub(super) struct Compact<'a> {
     pub(super) header: Map<String, Value>,
     pub(super) claims: Map<String, Value>,
     /// `header.payload`, the bytes the signature covers.
-    pub(super) signing_input: &'a [u8],
-    pub(super) signature: Vec<u8>,
+    signing_input: &'a [u8],
+    signature: Vec<u8>,
+}
+
+impl Compact<'_> {
+    /// Verifies the signature, returning `None` when there is no candidate key.
+    pub(super) fn verify_with(
+        &self,
+        keys: &[Key],
+        algorithm: SigningAlgorithm,
+        key_id: Option<&str>,
+    ) -> Option<bool> {
+        let mut candidates = keys
+            .iter()
+            .filter(|key| {
+                key.algorithm() == algorithm && key_id.is_none_or(|id| key.id() == Some(id))
+            })
+            .peekable();
+        candidates.peek()?;
+        Some(candidates.any(|key| key.verify(self.signing_input, &self.signature)))
+    }
 }
 
 /// Splits a compact JWS of at most `limit` bytes into its JSON object header,
@@ -52,6 +71,14 @@ fn object(bytes: &[u8]) -> Option<Map<String, Value>> {
     }
 }
 
+/// Reads an audience expressed as a string or a one-element array.
+pub(super) fn single_audience(value: &Value) -> Option<&str> {
+    match value {
+        Value::Array(values) if values.len() == 1 => values[0].as_str(),
+        value => value.as_str(),
+    }
+}
+
 /// A prepared verification key from an issuer's key set.
 pub(super) enum Key {
     Rs256 {
@@ -65,21 +92,21 @@ pub(super) enum Key {
 }
 
 impl Key {
-    pub(super) fn algorithm(&self) -> SigningAlgorithm {
+    fn algorithm(&self) -> SigningAlgorithm {
         match self {
             Self::Rs256 { .. } => SigningAlgorithm::Rs256,
             Self::Es256 { .. } => SigningAlgorithm::Es256,
         }
     }
 
-    pub(super) fn id(&self) -> Option<&str> {
+    fn id(&self) -> Option<&str> {
         match self {
             Self::Rs256 { id, .. } | Self::Es256 { id, .. } => id.as_deref(),
         }
     }
 
     /// Whether `signature` is this key's signature over `input`.
-    pub(super) fn verify(&self, input: &[u8], signature: &[u8]) -> bool {
+    fn verify(&self, input: &[u8], signature: &[u8]) -> bool {
         match self {
             Self::Rs256 { key, .. } => pkcs1v15::Signature::try_from(signature)
                 .is_ok_and(|signature| key.verify(input, &signature).is_ok()),
@@ -107,7 +134,12 @@ pub(super) fn key_set(bytes: &[u8]) -> Result<Vec<Key>, KeySetError> {
     if bytes.len() > MAX_KEY_SET_BYTES {
         return Err(KeySetError::TooLarge);
     }
-    let document = object(bytes).ok_or(KeySetError::Malformed)?;
+    let document = serde_json::from_slice(bytes).map_err(|_| KeySetError::Malformed)?;
+    key_set_value(&document)
+}
+
+/// Prepares an inline key set from a document already bounded by the caller.
+pub(super) fn key_set_value(document: &Value) -> Result<Vec<Key>, KeySetError> {
     let keys = document
         .get("keys")
         .and_then(Value::as_array)
@@ -116,6 +148,12 @@ pub(super) fn key_set(bytes: &[u8]) -> Result<Vec<Key>, KeySetError> {
         return Err(KeySetError::TooLarge);
     }
     Ok(keys.iter().filter_map(prepare).collect())
+}
+
+/// A JWT `NumericDate`: non-negative seconds since the epoch.
+pub(super) fn time(value: Option<&Value>) -> Option<SystemTime> {
+    let seconds = value?.as_f64().filter(|seconds| *seconds >= 0.0)?;
+    SystemTime::UNIX_EPOCH.checked_add(Duration::try_from_secs_f64(seconds).ok()?)
 }
 
 fn prepare(jwk: &Value) -> Option<Key> {

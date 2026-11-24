@@ -1,15 +1,19 @@
 //! Clients: pre-registered configuration, Client ID Metadata Documents, the
 //! optional registration hook, client authentication and redirect rules.
 
-use super::{store::Digest, wire};
+use super::{
+    AuthorizationServerError, AuthorizationServerOptions, ClientAssertionPool, jose, scope_list,
+    store::Digest, wire,
+};
+use crate::http::auth::MAX_GRANT_IDENTITY_BYTES;
 use serde_json::Value;
-use std::net::IpAddr;
+use std::{net::IpAddr, sync::Arc};
 
 /// The most pre-registered clients.
 pub const MAX_CLIENTS: usize = 256;
 /// The most redirect URIs per client.
 pub const MAX_REDIRECT_URIS: usize = 16;
-/// The longest redirect URI or client ID URL, in bytes.
+/// The longest redirect URI or remote key set URI, in bytes.
 pub const MAX_URI_BYTES: usize = 2048;
 /// The shortest and longest client secret, in bytes.
 pub const CLIENT_SECRET_BYTES: std::ops::RangeInclusive<usize> = 32..=512;
@@ -27,6 +31,8 @@ pub enum ClientAuth {
     SecretBasic,
     /// The client secret in the form body.
     SecretPost,
+    /// A signed JWT verified with the client's registered public keys.
+    PrivateKeyJwt,
 }
 
 impl ClientAuth {
@@ -37,10 +43,11 @@ impl ClientAuth {
             Self::None => "none",
             Self::SecretBasic => "client_secret_basic",
             Self::SecretPost => "client_secret_post",
+            Self::PrivateKeyJwt => "private_key_jwt",
         }
     }
 
-    fn parse(name: &str) -> Option<Self> {
+    fn registration_method(name: &str) -> Option<Self> {
         [Self::None, Self::SecretBasic, Self::SecretPost]
             .into_iter()
             .find(|method| method.name() == name)
@@ -60,7 +67,7 @@ pub struct ClientOptions {
     pub scopes: Vec<String>,
     /// How it authenticates.
     pub auth: ClientAuth,
-    /// The secret of a confidential client, 32 to 512 bytes; kept as a digest.
+    /// The secret for `SecretBasic` or `SecretPost`, 32 to 512 bytes; kept as a digest.
     pub secret: Option<String>,
     /// The client may use the `client_credentials` grant for machine-to-machine
     /// access, with no user. Only confidential clients may; such a client may
@@ -72,6 +79,16 @@ pub struct ClientOptions {
     /// have no redirect URIs.
     ///
     /// [`AuthorizationServer::with_identity_assertions`]: super::AuthorizationServer::with_identity_assertions
+    pub identity_assertions: bool,
+}
+
+/// Grants the server permits for a client identified by a metadata document.
+/// Both grants require `private_key_jwt` client authentication.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct DocumentClientGrants {
+    /// Issue machine access tokens to the client itself.
+    pub client_credentials: bool,
+    /// Accept enterprise identity assertions for this client from trusted issuers.
     pub identity_assertions: bool,
 }
 
@@ -101,6 +118,16 @@ pub trait ClientResolver: Send + Sync {
     /// # Errors
     /// Returns a short reason when the document cannot be fetched or is not trusted.
     fn resolve(&self, client_id: &str) -> Result<Vec<u8>, String>;
+
+    /// Returns the public JSON Web Key Set at a validated HTTPS `jwks_uri`
+    /// from the document for `client_id`. Apply the same fetch protections
+    /// as for the metadata document and enforce the key set size bound.
+    ///
+    /// # Errors
+    /// Returns a short reason when the key set cannot be fetched or is untrusted.
+    fn resolve_jwks(&self, _client_id: &str, _jwks_uri: &str) -> Result<Vec<u8>, String> {
+        Err("Remote client key sets are unavailable".into())
+    }
 }
 
 /// Approves, stores and looks up dynamically registered clients (RFC 7591).
@@ -117,7 +144,7 @@ pub trait ClientRegistrar: Send + Sync {
 }
 
 /// A client resolved for one request.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub(super) struct Client {
     pub(super) id: String,
     pub(super) name: Option<String>,
@@ -125,14 +152,22 @@ pub(super) struct Client {
     pub(super) scopes: Option<Vec<String>>,
     pub(super) auth: ClientAuth,
     pub(super) secret: Option<Digest>,
+    pub(super) keys: Option<ClientKeys>,
+    pub(super) assertion_pool: ClientAssertionPool,
     /// May use the `client_credentials` grant.
     pub(super) machine: bool,
     /// May present identity assertions.
     pub(super) assertions: bool,
 }
 
+#[derive(Clone)]
+pub(super) enum ClientKeys {
+    Inline(Arc<[jose::Key]>),
+    Remote(String),
+}
+
 impl Client {
-    pub(super) fn configured(options: &ClientOptions) -> Self {
+    fn configured(options: &ClientOptions, keys: Option<ClientKeys>) -> Self {
         Self {
             id: options.client_id.clone(),
             name: options.client_name.clone(),
@@ -143,6 +178,8 @@ impl Client {
                 .secret
                 .as_deref()
                 .map(|secret| wire::digest(&format!("cs_{secret}"))),
+            keys,
+            assertion_pool: ClientAssertionPool::Configured,
             machine: options.client_credentials,
             assertions: options.identity_assertions,
         }
@@ -158,14 +195,20 @@ impl Client {
             scopes: None,
             auth: client.auth,
             secret: client.secret,
+            keys: None,
+            assertion_pool: ClientAssertionPool::Document,
             machine: false,
             assertions: false,
         }
     }
 
-    /// Whether the client authenticates with a secret.
+    /// Whether the client authenticates with a secret or a signed assertion.
     pub(super) fn confidential(&self) -> bool {
         self.auth != ClientAuth::None
+    }
+
+    pub(super) fn uses_private_key(&self) -> bool {
+        self.auth == ClientAuth::PrivateKeyJwt
     }
 
     /// Whether `presented` matches a registered redirect URI: exactly, or with
@@ -186,17 +229,53 @@ impl Client {
     }
 }
 
+/// Validates configured clients and prepares each of their public key sets.
+pub(super) fn configured_clients(
+    options: &AuthorizationServerOptions,
+) -> Result<Vec<Client>, AuthorizationServerError> {
+    if options.clients.len() > MAX_CLIENTS {
+        return Err(AuthorizationServerError::Client(MAX_CLIENTS));
+    }
+    let mut clients = Vec::with_capacity(options.clients.len());
+    let mut key_clients = 0;
+    for (index, client) in options.clients.iter().enumerate() {
+        let repeated = options.clients[..index]
+            .iter()
+            .any(|other| other.client_id == client.client_id);
+        if repeated || !valid_options(client) || !scope_list(&client.scopes) {
+            return Err(AuthorizationServerError::Client(index));
+        }
+        let keys = if client.auth == ClientAuth::PrivateKeyJwt {
+            key_clients += 1;
+            let keys = options
+                .client_jwks
+                .get(&client.client_id)
+                .and_then(|bytes| jose::key_set(bytes).ok())
+                .filter(|keys| !keys.is_empty())
+                .ok_or(AuthorizationServerError::Client(index))?;
+            Some(ClientKeys::Inline(keys.into()))
+        } else {
+            None
+        };
+        clients.push(Client::configured(client, keys));
+    }
+    if options.client_jwks.len() != key_clients {
+        return Err(AuthorizationServerError::ClientKeys);
+    }
+    Ok(clients)
+}
+
 /// Validates a pre-registered client.
-pub(super) fn valid_options(options: &ClientOptions) -> bool {
+fn valid_options(options: &ClientOptions) -> bool {
     let secret_fits = match (options.auth, &options.secret) {
-        (ClientAuth::None, None) => true,
+        (ClientAuth::None | ClientAuth::PrivateKeyJwt, None) => true,
         (ClientAuth::SecretBasic | ClientAuth::SecretPost, Some(secret)) => {
             CLIENT_SECRET_BYTES.contains(&secret.len())
         }
         _ => false,
     };
     !options.client_id.is_empty()
-        && options.client_id.len() <= MAX_URI_BYTES
+        && options.client_id.len() <= MAX_GRANT_IDENTITY_BYTES
         && options
             .client_id
             .bytes()
@@ -304,17 +383,22 @@ fn loopback_ip_parts(uri: &str) -> Option<(String, String, String)> {
 
 /// Whether `client_id` names a Client ID Metadata Document.
 pub(super) fn is_document_id(client_id: &str) -> bool {
-    client_id.len() <= MAX_URI_BYTES
-        && !client_id.contains('#')
-        && iri_string::types::UriStr::new(client_id).is_ok()
+    client_id.len() <= MAX_GRANT_IDENTITY_BYTES
+        && valid_redirect(client_id)
         && client_id
             .strip_prefix("https://")
             .and_then(|rest| rest.split_once('/'))
-            .is_some_and(|(authority, path)| !authority.is_empty() && !path.is_empty())
+            .is_some_and(|(authority, path)| {
+                !authority.contains('?') && !host(authority).is_empty() && !path.is_empty()
+            })
 }
 
 /// Validates a fetched Client ID Metadata Document for `client_id`.
-pub(super) fn from_document(client_id: &str, document: &[u8]) -> Result<Client, &'static str> {
+pub(super) fn from_document(
+    client_id: &str,
+    document: &[u8],
+    grants: DocumentClientGrants,
+) -> Result<Client, &'static str> {
     if document.len() > MAX_CLIENT_DOCUMENT_BYTES {
         return Err("The client metadata document is too large");
     }
@@ -330,21 +414,49 @@ pub(super) fn from_document(client_id: &str, document: &[u8]) -> Result<Client, 
     let redirect_uris = strings(&document["redirect_uris"])
         .filter(|uris| valid_redirects(uris))
         .ok_or("The client metadata document has invalid redirect_uris")?;
-    match document.get("token_endpoint_auth_method") {
-        None => {}
-        Some(method) if method == "none" => {}
-        Some(_) => return Err("Client metadata document clients must be public"),
-    }
+    let (auth, keys) = match document.get("token_endpoint_auth_method") {
+        None => (ClientAuth::None, None),
+        Some(method) if method == "none" => (ClientAuth::None, None),
+        Some(method) if method == "private_key_jwt" => {
+            (ClientAuth::PrivateKeyJwt, Some(document_keys(&document)?))
+        }
+        Some(_) => {
+            return Err("The client metadata document has an unsupported authentication method");
+        }
+    };
     Ok(Client {
         id: client_id.to_owned(),
         name: Some(name.to_owned()),
         redirect_uris,
         scopes: None,
-        auth: ClientAuth::None,
+        auth,
         secret: None,
-        machine: false,
-        assertions: false,
+        keys,
+        assertion_pool: if grants.client_credentials || grants.identity_assertions {
+            ClientAssertionPool::Configured
+        } else {
+            ClientAssertionPool::Document
+        },
+        machine: auth == ClientAuth::PrivateKeyJwt && grants.client_credentials,
+        assertions: auth == ClientAuth::PrivateKeyJwt && grants.identity_assertions,
     })
+}
+
+fn document_keys(document: &Value) -> Result<ClientKeys, &'static str> {
+    let invalid = "The client metadata document needs one valid jwks or jwks_uri";
+    match (document.get("jwks"), document.get("jwks_uri")) {
+        (Some(jwks), None) => jose::key_set_value(jwks)
+            .ok()
+            .filter(|keys| !keys.is_empty())
+            .map(|keys| ClientKeys::Inline(keys.into()))
+            .ok_or(invalid),
+        (None, Some(uri)) => uri
+            .as_str()
+            .filter(|uri| uri.starts_with("https://") && valid_redirect(uri))
+            .map(|uri| ClientKeys::Remote(uri.to_owned()))
+            .ok_or(invalid),
+        _ => Err(invalid),
+    }
 }
 
 /// A validated RFC 7591 registration request.
@@ -377,7 +489,7 @@ pub(super) fn registration(body: &[u8]) -> Result<Registration, &'static str> {
         None => ClientAuth::SecretBasic,
         Some(method) => method
             .as_str()
-            .and_then(ClientAuth::parse)
+            .and_then(ClientAuth::registration_method)
             .ok_or("token_endpoint_auth_method is not supported")?,
     };
     // Every client gets both grants; the reply states that (RFC 7591 lets the

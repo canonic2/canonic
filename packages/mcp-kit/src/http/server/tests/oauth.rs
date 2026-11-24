@@ -2,12 +2,14 @@
 //! the code grant and an MCP call with the issued token, all on one listener.
 use super::*;
 use crate::{
-    http::{ResourceOptions, ResourceServer, TokenVerifier},
+    http::{ResourceOptions, ResourceServer, TokenVerifier, auth::MAX_GRANT_IDENTITY_BYTES},
     oauth::{
-        AuthorizationServer, AuthorizationServerOptions, ClientAuth, ClientOptions, Interaction,
-        InteractionOutcome, InteractionRequest, MemoryStore,
+        AuthorizationServer, AuthorizationServerOptions, ClientAuth, ClientOptions, ClientResolver,
+        DocumentClientGrants, Interaction, InteractionOutcome, InteractionRequest,
+        JWT_CLIENT_ASSERTION_TYPE, MemoryStore, test_client_assertion, test_client_jwks,
     },
 };
+use std::time::SystemTime;
 
 const ISSUER: &str = "http://127.0.0.1";
 const RESOURCE: &str = "http://127.0.0.1/mcp";
@@ -36,6 +38,14 @@ fn embedded() -> HttpOptions {
 /// The embedded server with sign-in at `interaction`, serving the root
 /// protected-resource metadata when `root_metadata` is set.
 fn embedded_at(interaction: &str, root_metadata: bool) -> HttpOptions {
+    embedded_with(interaction, root_metadata, |_| None)
+}
+
+fn embedded_with(
+    interaction: &str,
+    root_metadata: bool,
+    configure: impl FnOnce(&mut AuthorizationServerOptions) -> Option<Arc<dyn ClientResolver>>,
+) -> HttpOptions {
     let mut resource = ResourceOptions::new(RESOURCE, vec![ISSUER.to_owned()]);
     resource.serve_root_metadata = root_metadata;
     let resource = ResourceServer::new(resource).unwrap();
@@ -51,15 +61,18 @@ fn embedded_at(interaction: &str, root_metadata: bool) -> HttpOptions {
         client_credentials: false,
         identity_assertions: false,
     }];
-    let server = Arc::new(
-        AuthorizationServer::new(
-            options,
-            &resource,
-            Arc::new(MemoryStore::new()),
-            Arc::new(Approve),
-        )
-        .unwrap(),
-    );
+    let resolver = configure(&mut options);
+    let server = AuthorizationServer::new(
+        options,
+        &resource,
+        Arc::new(MemoryStore::new()),
+        Arc::new(Approve),
+    )
+    .unwrap();
+    let server = Arc::new(match resolver {
+        Some(resolver) => server.with_resolver(resolver),
+        None => server,
+    });
     HttpOptions {
         authorization: Some(HttpAuthorization::new(
             resource,
@@ -83,6 +96,16 @@ fn form_post(path: &str, body: &str, extra: &str) -> Vec<u8> {
         body.len()
     )
     .into_bytes()
+}
+
+fn client_auth(client_id: &str, id: &str) -> String {
+    let expires = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+        + 300;
+    let jwt = test_client_assertion(client_id, ISSUER, id, expires);
+    format!("client_assertion_type={JWT_CLIENT_ASSERTION_TYPE}&client_assertion={jwt}")
 }
 
 #[test]
@@ -146,6 +169,135 @@ fn a_client_signs_in_and_calls_a_tool_on_one_listener() {
         &format!("Authorization: Bearer {access}\r\n"),
     ));
     assert_eq!(whoami.json()["result"]["content"][0]["text"], "user-1");
+}
+
+#[test]
+fn a_private_key_client_uses_token_and_revocation_on_one_listener() {
+    let client_id = "acme-desktop";
+    let server = Server::start(
+        embedded_with("/oauth/sign-in", true, |options| {
+            let client = &mut options.clients[0];
+            client.auth = ClientAuth::PrivateKeyJwt;
+            client.client_credentials = true;
+            options
+                .client_jwks
+                .insert(client_id.to_owned(), test_client_jwks());
+            None
+        }),
+        None,
+    );
+    let metadata = server
+        .exchange(
+            b"GET /.well-known/oauth-authorization-server HTTP/1.1\r\nHost: localhost\r\n\r\n",
+        )
+        .json();
+    assert_eq!(
+        metadata["token_endpoint_auth_methods_supported"],
+        json!(["private_key_jwt"])
+    );
+    assert_eq!(
+        metadata["token_endpoint_auth_signing_alg_values_supported"],
+        json!(["RS256", "ES256"])
+    );
+    let issued = server.exchange(&form_post(
+        "/token",
+        &format!(
+            "grant_type=client_credentials&{}",
+            client_auth(client_id, "issue")
+        ),
+        "",
+    ));
+    assert_eq!(issued.status, 200);
+    let body = issued.json();
+    let access = body["access_token"].as_str().unwrap();
+    let call_tool = || {
+        server.exchange(&call(
+            &json!(1),
+            "acme_whoami",
+            &json!({}),
+            &format!("Authorization: Bearer {access}\r\n"),
+        ))
+    };
+    assert_eq!(
+        call_tool().json()["result"]["content"][0]["text"],
+        client_id
+    );
+
+    let revoke = |id| {
+        server.exchange(&form_post(
+            "/revoke",
+            &format!("token={access}&{}", client_auth(client_id, id)),
+            "",
+        ))
+    };
+    assert_eq!(revoke("issue").json()["error"], "invalid_client");
+    assert_eq!(revoke("revoke").status, 200);
+    assert_eq!(call_tool().status, 401);
+}
+
+#[test]
+fn a_document_machine_client_at_the_identity_bound_can_call_a_tool() {
+    struct Document {
+        id: String,
+        metadata: Vec<u8>,
+    }
+
+    impl ClientResolver for Document {
+        fn resolve(&self, client_id: &str) -> Result<Vec<u8>, String> {
+            assert_eq!(client_id, self.id);
+            Ok(self.metadata.clone())
+        }
+    }
+
+    let base = "https://app.example.com/";
+    let client_id = format!(
+        "{base}{}",
+        "a".repeat(MAX_GRANT_IDENTITY_BYTES - base.len())
+    );
+    let server = Server::start(
+        embedded_with("/oauth/sign-in", true, |options| {
+            options.document_client_grants.insert(
+                client_id.clone(),
+                DocumentClientGrants {
+                    client_credentials: true,
+                    identity_assertions: false,
+                },
+            );
+            let metadata = json!({
+                "client_id": client_id, "client_name": "Acme Machine", "redirect_uris": [REDIRECT],
+                "token_endpoint_auth_method": "private_key_jwt",
+                "jwks": serde_json::from_slice::<serde_json::Value>(&test_client_jwks()).unwrap(),
+            });
+            Some(Arc::new(Document {
+                id: client_id.clone(),
+                metadata: metadata.to_string().into_bytes(),
+            }))
+        }),
+        None,
+    );
+    let request = |id| {
+        server.exchange(&form_post(
+            "/token",
+            &format!("grant_type=client_credentials&{}", client_auth(id, "issue")),
+            "",
+        ))
+    };
+    let issued = request(&client_id);
+    assert_eq!(issued.status, 200);
+    let body = issued.json();
+    let access = body["access_token"].as_str().unwrap();
+    let tool = server.exchange(&call(
+        &json!(1),
+        "acme_whoami",
+        &json!({}),
+        &format!("Authorization: Bearer {access}\r\n"),
+    ));
+    assert_eq!(tool.json()["result"]["content"][0]["text"], client_id);
+
+    let too_long = format!("{client_id}a");
+    let refused = request(&too_long);
+    assert_eq!(refused.status, 401);
+    assert_eq!(refused.json()["error"], "invalid_client");
 }
 
 #[test]

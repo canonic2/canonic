@@ -58,6 +58,8 @@ pub struct PendingRecord {
     pub binding: Digest,
     /// The client.
     pub client_id: String,
+    /// Whether the client must authenticate with a signed assertion to redeem the code.
+    pub requires_private_key: bool,
     /// The client's display name, when it has one.
     pub client_name: Option<String>,
     /// The validated redirect URI.
@@ -83,6 +85,8 @@ pub struct CodeRecord {
     pub family_id: String,
     /// The client.
     pub client_id: String,
+    /// Whether the client must authenticate with a signed assertion to redeem this code.
+    pub requires_private_key: bool,
     /// The redirect URI the code was issued to.
     pub redirect_uri: String,
     /// The S256 code challenge.
@@ -108,6 +112,8 @@ pub struct FamilyRecord {
     pub subject: String,
     /// The client.
     pub client_id: String,
+    /// Whether the client must authenticate with a signed assertion to refresh or revoke.
+    pub requires_private_key: bool,
     /// The approved scopes.
     pub scopes: Vec<String>,
     /// The canonical resource; every token of the family keeps it.
@@ -144,13 +150,22 @@ pub struct AccessRecord {
     pub expires_at: SystemTime,
 }
 
-/// An identity assertion that was redeemed, kept to refuse its replay.
+/// The digest and expiry of a used OAuth assertion, kept to refuse its replay.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AssertionRecord {
     /// The digest of the assertion's issuer and `jti`.
     pub digest: Digest,
     /// When the assertion could no longer be accepted.
     pub expires_at: SystemTime,
+}
+
+/// Which capacity pool records a client authentication assertion.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClientAssertionPool {
+    /// Pre-registered clients and document clients with configured grant permissions.
+    Configured,
+    /// Other Client ID Metadata Document clients.
+    Document,
 }
 
 /// The result of redeeming a code.
@@ -255,11 +270,19 @@ pub trait GrantStore: Send + Sync {
     /// Returns [`StoreError`] when it cannot be stored.
     fn put_code(&self, record: CodeRecord) -> Result<(), StoreError>;
 
-    /// Marks a code consumed and returns it, or reports reuse.
+    /// Marks a live code consumed and returns it, or reports reuse. An
+    /// unrelated client or a missing required client assertion returns
+    /// [`CodeTake::Unknown`] without consuming the code or reporting reuse.
     ///
     /// # Errors
     /// Returns [`StoreError::Unavailable`] when the backend fails.
-    fn take_code(&self, digest: &Digest, now: SystemTime) -> Result<CodeTake, StoreError>;
+    fn take_code(
+        &self,
+        digest: &Digest,
+        client_id: &str,
+        authenticated_with_private_key: bool,
+        now: SystemTime,
+    ) -> Result<CodeTake, StoreError>;
 
     /// Inserts a family with its first access token, atomically with a check
     /// that the consumed code `code` that produced it is still stored for the
@@ -303,6 +326,26 @@ pub trait GrantStore: Send + Sync {
     /// # Errors
     /// Returns [`StoreError::Unavailable`] when the backend fails.
     fn assertion_redeemed(&self, digest: &Digest, now: SystemTime) -> Result<bool, StoreError>;
+
+    /// Atomically records a verified client authentication assertion before
+    /// the endpoint performs any grant or revocation effects. Returns `false`
+    /// if the same digest is still live, including when it was recorded in
+    /// the other client pool. Each client pool and identity assertions have
+    /// independent capacity. Never evict a live assertion to make room.
+    ///
+    /// # Errors
+    /// Returns [`StoreError`] when the record cannot be stored. The default
+    /// fails closed so existing stores can opt into this authentication method.
+    fn use_client_assertion(
+        &self,
+        _assertion: AssertionRecord,
+        _pool: ClientAssertionPool,
+        _now: SystemTime,
+    ) -> Result<bool, StoreError> {
+        Err(StoreError::Unavailable(
+            "Client assertion replay protection is unavailable".into(),
+        ))
+    }
 
     /// Inserts an identity-assertion grant like
     /// [`create_client_grant`](Self::create_client_grant), atomically with
@@ -377,8 +420,8 @@ struct State {
     access: HashMap<Digest, AccessRecord>,
     /// Each client and subject's generation-0 families, oldest first.
     client_grants: HashMap<(String, String), VecDeque<String>>,
-    /// Redeemed identity assertions and when each record may go.
-    assertions: HashMap<Digest, SystemTime>,
+    /// Used OAuth assertions, partitioned by capacity pool.
+    assertions: [HashMap<Digest, SystemTime>; 3],
     /// Every record by when it expires, kept exact by every insertion and
     /// removal, so a purge visits only the records that are due.
     due: BTreeSet<(SystemTime, Record)>,
@@ -395,7 +438,14 @@ enum Record {
     Code(Digest),
     Access(Digest),
     Family(String),
-    Assertion(Digest),
+    Assertion(AssertionPool, Digest),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum AssertionPool {
+    Identity,
+    ConfiguredClient,
+    DocumentClient,
 }
 
 /// When a family stops being live: its absolute or refresh expiry.
@@ -480,8 +530,8 @@ impl State {
                 Record::Access(digest) => {
                     self.drop_access(&digest);
                 }
-                Record::Assertion(digest) => {
-                    self.assertions.remove(&digest);
+                Record::Assertion(pool, digest) => {
+                    self.assertions[pool as usize].remove(&digest);
                 }
             }
         }
@@ -565,12 +615,33 @@ impl State {
         Some(family)
     }
 
-    fn add_assertion(&mut self, digest: Digest, expires_at: SystemTime) {
-        if let Some(old) = self.assertions.remove(&digest) {
-            self.due.remove(&(old, Record::Assertion(digest)));
+    fn add_assertion(&mut self, pool: AssertionPool, digest: Digest, expires_at: SystemTime) {
+        if let Some(old) = self.assertions[pool as usize].insert(digest, expires_at) {
+            self.due.remove(&(old, Record::Assertion(pool, digest)));
         }
-        self.due.insert((expires_at, Record::Assertion(digest)));
-        self.assertions.insert(digest, expires_at);
+        self.due
+            .insert((expires_at, Record::Assertion(pool, digest)));
+    }
+
+    fn assertion_live(&self, pool: AssertionPool, digest: &Digest, now: SystemTime) -> bool {
+        self.assertions[pool as usize]
+            .get(digest)
+            .is_some_and(|expiry| *expiry > now)
+    }
+
+    fn reserve_assertion_room(
+        &mut self,
+        pool: AssertionPool,
+        now: SystemTime,
+        capacity: usize,
+    ) -> Result<(), StoreError> {
+        if self.assertions[pool as usize].len() >= capacity {
+            self.purge(now, usize::MAX);
+            if self.assertions[pool as usize].len() >= capacity {
+                return Err(StoreError::Full);
+            }
+        }
+        Ok(())
     }
 
     /// Inserts a generation-0 family, first removing its client and subject's
@@ -675,13 +746,19 @@ impl GrantStore for MemoryStore {
         Ok(())
     }
 
-    fn take_code(&self, digest: &Digest, now: SystemTime) -> Result<CodeTake, StoreError> {
+    fn take_code(
+        &self,
+        digest: &Digest,
+        client_id: &str,
+        authenticated_with_private_key: bool,
+        now: SystemTime,
+    ) -> Result<CodeTake, StoreError> {
         let mut state = self.lock();
-        let Some(record) = state
-            .codes
-            .get_mut(digest)
-            .filter(|record| record.expires_at > now)
-        else {
+        let Some(record) = state.codes.get_mut(digest).filter(|record| {
+            record.expires_at > now
+                && record.client_id == client_id
+                && (!record.requires_private_key || authenticated_with_private_key)
+        }) else {
             return Ok(CodeTake::Unknown);
         };
         if record.consumed {
@@ -735,9 +812,33 @@ impl GrantStore for MemoryStore {
     fn assertion_redeemed(&self, digest: &Digest, now: SystemTime) -> Result<bool, StoreError> {
         Ok(self
             .lock()
-            .assertions
-            .get(digest)
-            .is_some_and(|expires_at| *expires_at > now))
+            .assertion_live(AssertionPool::Identity, digest, now))
+    }
+
+    fn use_client_assertion(
+        &self,
+        assertion: AssertionRecord,
+        pool: ClientAssertionPool,
+        now: SystemTime,
+    ) -> Result<bool, StoreError> {
+        let mut state = self.lock();
+        let client_pools = [
+            AssertionPool::ConfiguredClient,
+            AssertionPool::DocumentClient,
+        ];
+        if client_pools
+            .into_iter()
+            .any(|pool| state.assertion_live(pool, &assertion.digest, now))
+        {
+            return Ok(false);
+        }
+        let pool = match pool {
+            ClientAssertionPool::Configured => AssertionPool::ConfiguredClient,
+            ClientAssertionPool::Document => AssertionPool::DocumentClient,
+        };
+        state.reserve_assertion_room(pool, now, self.capacity)?;
+        state.add_assertion(pool, assertion.digest, assertion.expires_at);
+        Ok(true)
     }
 
     fn create_assertion_grant(
@@ -749,21 +850,13 @@ impl GrantStore for MemoryStore {
         now: SystemTime,
     ) -> Result<bool, StoreError> {
         let mut state = self.lock();
-        if state
-            .assertions
-            .get(&assertion.digest)
-            .is_some_and(|expires_at| *expires_at > now)
-        {
+        let pool = AssertionPool::Identity;
+        if state.assertion_live(pool, &assertion.digest, now) {
             return Ok(false);
         }
-        if state.assertions.len() >= self.capacity {
-            state.purge(now, usize::MAX);
-            if state.assertions.len() >= self.capacity {
-                return Err(StoreError::Full);
-            }
-        }
+        state.reserve_assertion_room(pool, now, self.capacity)?;
         state.single_grant(self.capacity, family, access, limit)?;
-        state.add_assertion(assertion.digest, assertion.expires_at);
+        state.add_assertion(pool, assertion.digest, assertion.expires_at);
         Ok(true)
     }
 

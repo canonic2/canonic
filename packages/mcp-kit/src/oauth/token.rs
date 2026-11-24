@@ -1,7 +1,9 @@
 //! The token, revocation and registration endpoints and client authentication.
 
 use super::{
-    AuthorizationServer, ClientAuth, RegisteredClient, client, expiry,
+    AuthorizationServer, ClientAuth, RegisteredClient, client,
+    client_assertion::Failure as AssertionFailure,
+    expiry,
     flow::form_body,
     store::{AccessRecord, CodeTake, FamilyRecord, Rotated, Rotation},
     wire,
@@ -33,10 +35,11 @@ impl AuthorizationServer {
         let Some(form) = form_body(headers, body) else {
             return invalid_request("The request must be a form without repeated fields");
         };
-        let client = match self.authenticate(headers, &form) {
+        let client = match self.authenticate(headers, &form, now) {
             Ok(client) => client,
             Err(response) => return *response,
         };
+        let now = self.now();
         if form
             .get("resource")
             .is_some_and(|resource| !self.is_resource(resource))
@@ -56,7 +59,7 @@ impl AuthorizationServer {
     /// token, for a grant that issues only an access token.
     pub(super) fn single_grant(
         &self,
-        client_id: &str,
+        client: &client::Client,
         subject: String,
         scopes: &[String],
         now: SystemTime,
@@ -74,7 +77,8 @@ impl AuthorizationServer {
         let family = FamilyRecord {
             id: family_id,
             subject,
-            client_id: client_id.to_owned(),
+            client_id: client.id.clone(),
+            requires_private_key: client.uses_private_key(),
             scopes: scopes.to_vec(),
             resource: self.resource.clone(),
             created_at: now,
@@ -125,7 +129,7 @@ impl AuthorizationServer {
                 .collect(),
         };
         let Ok((access, family, access_record)) =
-            self.single_grant(&client.id, client.id.clone(), &scopes, now)
+            self.single_grant(client, client.id.clone(), &scopes, now)
         else {
             return unavailable();
         };
@@ -154,7 +158,10 @@ impl AuthorizationServer {
             return invalid_request("code, redirect_uri and code_verifier are required");
         };
         let code = wire::digest(code);
-        let record = match self.store.take_code(&code, now) {
+        let record = match self
+            .store
+            .take_code(&code, &client.id, client.uses_private_key(), now)
+        {
             Ok(CodeTake::Taken(record)) => record,
             Ok(CodeTake::Reused(family)) => {
                 // A second redemption means the code leaked: end what it produced.
@@ -167,7 +174,11 @@ impl AuthorizationServer {
         let pkce = (43..=128).contains(&verifier.len())
             && wire::unreserved(verifier)
             && wire::challenge(verifier) == record.challenge;
-        if record.client_id != client.id || record.redirect_uri != *redirect_uri || !pkce {
+        if record.client_id != client.id
+            || (record.requires_private_key && !client.uses_private_key())
+            || record.redirect_uri != *redirect_uri
+            || !pkce
+        {
             return invalid("The authorization code does not match this request");
         }
         let family_expires = now + self.lifetimes.family;
@@ -188,6 +199,7 @@ impl AuthorizationServer {
             id: record.family_id,
             subject: record.subject,
             client_id: record.client_id,
+            requires_private_key: record.requires_private_key || client.uses_private_key(),
             scopes: record.scopes,
             resource: record.resource,
             created_at: now,
@@ -225,7 +237,7 @@ impl AuthorizationServer {
             return invalid();
         };
         let family = match self.store.get_family(family_id, now) {
-            Ok(Some(family)) if family.client_id == client.id => family,
+            Ok(Some(family)) if family.belongs_to(client) => family,
             Ok(_) => return invalid(),
             Err(_) => return unavailable(),
         };
@@ -315,7 +327,7 @@ impl AuthorizationServer {
         let Some(form) = form_body(headers, body) else {
             return invalid_request("The request must be a form without repeated fields");
         };
-        let client = match self.authenticate(headers, &form) {
+        let client = match self.authenticate(headers, &form, self.now()) {
             Ok(client) => client,
             Err(response) => return *response,
         };
@@ -342,7 +354,7 @@ impl AuthorizationServer {
         } else {
             None
         };
-        if let Some(family) = family.filter(|family| family.client_id == client.id)
+        if let Some(family) = family.filter(|family| family.belongs_to(&client))
             && self.store.revoke_family(&family.id).is_err()
         {
             return unavailable();
@@ -412,10 +424,12 @@ impl AuthorizationServer {
         &self,
         headers: &[(&str, &[u8])],
         form: &HashMap<String, String>,
+        now: SystemTime,
     ) -> Result<client::Client, Box<Response>> {
-        let basic = headers
+        let authorization = headers
             .iter()
-            .find(|(name, _)| name.eq_ignore_ascii_case("authorization"))
+            .find(|(name, _)| name.eq_ignore_ascii_case("authorization"));
+        let basic = authorization
             .and_then(|(_, value)| std::str::from_utf8(value).ok())
             .and_then(|value| {
                 let (scheme, credentials) = value.split_once(' ')?;
@@ -433,6 +447,17 @@ impl AuthorizationServer {
             }
             Box::new(response)
         };
+        if form.contains_key("client_assertion") || form.contains_key("client_assertion_type") {
+            if authorization.is_some() {
+                return Err(refuse(basic.is_some()));
+            }
+            return self
+                .authenticate_assertion(form, now)
+                .map_err(|failure| match failure {
+                    AssertionFailure::Invalid => refuse(false),
+                    AssertionFailure::Unavailable => Box::new(unavailable()),
+                });
+        }
         let (client_id, secret, method) = if let Some(credentials) = basic {
             // RFC 6749 §2.3.1: both parts are form-encoded before base64.
             let decoded = decode_base64(credentials, 2048)
@@ -466,11 +491,11 @@ impl AuthorizationServer {
         let client = self
             .client(&client_id)
             .map_err(|_| refuse(basic.is_some()))?;
-        // A confidential client may send its secret either way (OAuth 2.1
-        // requires Basic support); a public client sends none.
+        // Secret-based clients may send their secret either way.
         let method_fits = match client.auth {
             ClientAuth::None => method == ClientAuth::None,
             ClientAuth::SecretBasic | ClientAuth::SecretPost => method != ClientAuth::None,
+            ClientAuth::PrivateKeyJwt => false,
         };
         let authenticated = method_fits
             && secret
@@ -482,6 +507,12 @@ impl AuthorizationServer {
             ));
         }
         Ok(client)
+    }
+}
+
+impl FamilyRecord {
+    fn belongs_to(&self, client: &client::Client) -> bool {
+        self.client_id == client.id && (!self.requires_private_key || client.uses_private_key())
     }
 }
 

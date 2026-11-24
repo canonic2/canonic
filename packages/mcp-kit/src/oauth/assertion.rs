@@ -11,7 +11,7 @@
 use super::{
     AuthorizationServer, AuthorizationServerError, MAX_REQUESTED_SCOPES,
     client::Client,
-    jose::{self, Compact, Key},
+    jose::{self, Compact, Key, time},
     store::{AssertionRecord, Digest},
     token::{access_only, invalid_request, unavailable},
     wire,
@@ -224,7 +224,7 @@ pub(super) fn validate(
 }
 
 /// A nonempty bounded identifier without control characters.
-fn identifier(text: &str) -> bool {
+pub(super) fn identifier(text: &str) -> bool {
     !text.is_empty() && text.len() <= MAX_ASSERTION_ID_BYTES && !text.chars().any(char::is_control)
 }
 
@@ -303,20 +303,13 @@ impl Assertions {
     ) -> Result<(), Failure> {
         for refresh in [false, true] {
             let keys = self.keys(issuer, refresh)?;
-            let mut candidates = keys.iter().filter(|key| {
-                key.algorithm() == algorithm && key_id.is_none_or(|id| key.id() == Some(id))
-            });
-            let Some(first) = candidates.next() else {
-                continue;
-            };
-            let signed = std::iter::once(first)
-                .chain(candidates)
-                .any(|key| key.verify(compact.signing_input, &compact.signature));
-            return if signed {
-                Ok(())
-            } else {
-                Err(Failure::Invalid("The assertion's signature is not valid"))
-            };
+            match compact.verify_with(&keys, algorithm, key_id) {
+                Some(true) => return Ok(()),
+                Some(false) => {
+                    return Err(Failure::Invalid("The assertion's signature is not valid"));
+                }
+                None => {}
+            }
         }
         Err(Failure::Invalid(
             "No key of the issuer matches the assertion",
@@ -365,14 +358,7 @@ fn claims(
                 && !subject.chars().any(char::is_control)
         })
         .ok_or(Failure::Invalid("The assertion needs a sub"))?;
-    let audience = match claims.get("aud") {
-        Some(Value::String(audience)) => audience == server.issuer(),
-        Some(Value::Array(audiences)) => {
-            audiences.len() == 1 && audiences[0].as_str() == Some(server.issuer())
-        }
-        _ => false,
-    };
-    if !audience {
+    if claims.get("aud").and_then(jose::single_audience) != Some(server.issuer()) {
         return invalid("The assertion is not for this authorization server");
     }
     if text("client_id") != Some(client_id) {
@@ -454,12 +440,6 @@ fn claims(
         scopes,
         claims,
     })
-}
-
-/// A JWT `NumericDate`: non-negative seconds since the epoch.
-fn time(value: Option<&Value>) -> Option<SystemTime> {
-    let seconds = value?.as_f64().filter(|seconds| *seconds >= 0.0)?;
-    SystemTime::UNIX_EPOCH.checked_add(Duration::try_from_secs_f64(seconds).ok()?)
 }
 
 impl AuthorizationServer {
@@ -552,8 +532,7 @@ impl AuthorizationServer {
         if !narrowed || !subject_fits {
             return wire::oauth_error(500, "server_error", "The grant could not be issued");
         }
-        let Ok((access, family, access_record)) =
-            self.single_grant(&client.id, subject, &scopes, now)
+        let Ok((access, family, access_record)) = self.single_grant(client, subject, &scopes, now)
         else {
             return unavailable();
         };

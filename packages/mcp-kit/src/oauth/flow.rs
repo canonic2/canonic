@@ -87,6 +87,7 @@ impl AuthorizationServer {
         let record = PendingRecord {
             reference: reference.clone(),
             binding: wire::digest(&binding),
+            requires_private_key: client.uses_private_key(),
             client_id: client.id,
             client_name: client.name,
             redirect_uri: redirect_uri.to_owned(),
@@ -223,6 +224,7 @@ impl AuthorizationServer {
             digest: wire::digest(&code),
             family_id,
             client_id: record.client_id.clone(),
+            requires_private_key: record.requires_private_key,
             redirect_uri: record.redirect_uri.clone(),
             challenge: record.challenge.clone(),
             scopes,

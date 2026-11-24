@@ -19,7 +19,7 @@ const RSA_KEY: &[u8] = include_bytes!(concat!(
     "/fixtures/oauth/acme-idp-rs256.der"
 ));
 const EC_SCALAR: [u8; 32] = [0x11; 32];
-const T: u64 = 1_900_000_000;
+pub(super) const T: u64 = 1_900_000_000;
 
 /// The subject, email and offered scopes one admission saw.
 type Admitted = (String, Option<String>, Vec<String>);
@@ -27,7 +27,7 @@ type Admitted = (String, Option<String>, Vec<String>);
 /// Serves each issuer's key set, replacing it with the refreshed one on a
 /// refresh, and approves users as `{issuer}#{sub}` unless told otherwise.
 #[derive(Default)]
-struct Enterprise {
+pub(super) struct Enterprise {
     current: Mutex<HashMap<String, Vec<u8>>>,
     refreshed: Mutex<HashMap<String, Vec<u8>>>,
     fetches: Mutex<Vec<(String, bool)>>,
@@ -76,7 +76,7 @@ fn ec_signer() -> EcSigningKey {
     EcSigningKey::from_slice(&EC_SCALAR).unwrap()
 }
 
-fn rsa_jwk(kid: &str) -> Value {
+pub(super) fn rsa_jwk(kid: &str) -> Value {
     let key = rsa_private();
     json!({
         "kty": "RSA",
@@ -88,7 +88,7 @@ fn rsa_jwk(kid: &str) -> Value {
     })
 }
 
-fn ec_jwk(kid: &str) -> Value {
+pub(super) fn ec_jwk(kid: &str) -> Value {
     let point = ec_signer().verifying_key().to_sec1_point(false);
     let bytes = point.as_bytes();
     json!({
@@ -100,12 +100,12 @@ fn ec_jwk(kid: &str) -> Value {
     })
 }
 
-fn key_set(keys: &[Value]) -> Vec<u8> {
+pub(super) fn key_set(keys: &[Value]) -> Vec<u8> {
     serde_json::to_vec(&json!({ "keys": keys })).unwrap()
 }
 
 /// `base` with `changes` applied; a `null` change removes the member.
-fn merged(base: Value, changes: &Value) -> Value {
+pub(super) fn merged(base: Value, changes: &Value) -> Value {
     let (Value::Object(mut base), Value::Object(changes)) = (base, changes.clone()) else {
         panic!("objects only");
     };
@@ -119,7 +119,7 @@ fn merged(base: Value, changes: &Value) -> Value {
     Value::Object(base)
 }
 
-fn claims(changes: &Value) -> Value {
+pub(super) fn claims(changes: &Value) -> Value {
     merged(
         json!({
             "iss": IDP,
@@ -147,7 +147,7 @@ fn jwt(header: &Value, claims: &Value, sign: impl Fn(&[u8]) -> Vec<u8>) -> Strin
     format!("{input}.{}", wire::base64url(&sign(input.as_bytes())))
 }
 
-fn rs256(header: &Value, claims: &Value) -> String {
+pub(super) fn rs256(header: &Value, claims: &Value) -> String {
     let signer = RsaSigningKey::<Sha256>::new(rsa_private());
     let header = merged(
         json!({"alg": "RS256", "typ": "oauth-id-jag+jwt", "kid": "idp-1"}),
@@ -156,7 +156,7 @@ fn rs256(header: &Value, claims: &Value) -> String {
     jwt(&header, claims, |input| signer.sign(input).to_vec())
 }
 
-fn es256(header: &Value, claims: &Value) -> String {
+pub(super) fn es256(header: &Value, claims: &Value) -> String {
     let signer = ec_signer();
     let header = merged(
         json!({"alg": "ES256", "typ": "oauth-id-jag+jwt", "kid": "partner-1"}),
@@ -196,7 +196,14 @@ fn agent() -> ClientOptions {
 }
 
 /// A harness at time `T` whose server trusts [`trusted`] issuers.
-fn enterprise_with(mut options: AuthorizationServerOptions) -> (Harness, Arc<Enterprise>) {
+pub(super) fn enterprise_with(options: AuthorizationServerOptions) -> (Harness, Arc<Enterprise>) {
+    enterprise_with_store(options, MemoryStore::new())
+}
+
+pub(super) fn enterprise_with_store(
+    mut options: AuthorizationServerOptions,
+    memory: MemoryStore,
+) -> (Harness, Arc<Enterprise>) {
     options.clients.push(agent());
     let enterprise = Arc::new(Enterprise::default());
     enterprise.current.lock().unwrap().extend([
@@ -208,7 +215,7 @@ fn enterprise_with(mut options: AuthorizationServerOptions) -> (Harness, Arc<Ent
         store,
         sign_in,
         issued,
-    } = harness_with(options, MemoryStore::new());
+    } = harness_with(options, memory);
     let server = server
         .with_clock(Arc::new(|| SystemTime::UNIX_EPOCH + Duration::from_secs(T)))
         .with_identity_assertions(
@@ -230,7 +237,7 @@ fn enterprise() -> (Harness, Arc<Enterprise>) {
 }
 
 impl Harness {
-    fn present(&self, assertion: &str, extra: &[(&str, &str)]) -> Response {
+    pub(super) fn present(&self, assertion: &str, extra: &[(&str, &str)]) -> Response {
         let mut fields = vec![
             ("grant_type", JWT_BEARER_GRANT),
             ("assertion", assertion),
@@ -241,7 +248,7 @@ impl Harness {
         self.token(&fields, &[])
     }
 
-    fn metadata(&self) -> Value {
+    pub(super) fn metadata(&self) -> Value {
         json_body(&self.send("GET", METADATA_PREFIX, &[], b""))
     }
 }
