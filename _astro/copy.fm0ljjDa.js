@@ -1,0 +1,1 @@
+var e=new WeakMap;function t(t,n){navigator.clipboard&&navigator.clipboard.writeText(n).then(()=>{t.textContent=t.dataset.copied||`Copied`,clearTimeout(e.get(t)),e.set(t,window.setTimeout(()=>{t.textContent=t.dataset.copy||`Copy`},1600))},()=>{})}export{t};

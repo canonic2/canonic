@@ -1,0 +1,313 @@
+<!DOCTYPE html><html lang="en-GB"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Agent tools · Workbench docs · Canonic</title><meta name="description" content="Workbench lets a coding agent render your pages, inspect their structure and styles, check problems, and exercise interactive states. Captures use private browser pages.  view set "><link rel="canonical" href="https://canonic.sh/workbench/docs/agent-tools/"><link rel="icon" href="/canonic.svg" type="image/svg+xml"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Geist+Mono:wght@400;500&display=swap"><script>document.documentElement.classList.add("js");</script><link rel="stylesheet" href="/_astro/Base.CALxgHBr.css"><link rel="stylesheet" href="/_astro/DocsPage.CRDdP4HS.css"></head><body><a class="skip" href="#content">Skip to content</a><header class="top"><nav class="products" aria-label="Products"><div class="wrap"><a class="logo" href="/en-gb/workbench/" aria-label="Canonic home"><svg viewBox="0 -10 197 38" role="img" aria-label="canonic"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTpjMmY5MjI0OC1hYTBiLTQxOGEtYTY2OS0zMzkyM2Y0N2YxYzAAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaDLGWHSl5JoSZ+W85OxqZEYAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDphMzZhOWRjZC0xODZiLTQ4MjgtODE0Yy1lYmEyZjQyZWI5NzJscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoZIhDi0aHiLAMdxEah+RlcQAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggJf4/3u3fYxxWShd1/iioo5k/sQBU1/Wqy+WCnQecuYGkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaPtbRLzQIBR1jlefUBFG8K8AAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCA3ez32oMVE7DJVy4UE2OB9qKRd9zwPrbxDKEVyc71J+WRuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBi3Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOmMyZjkyMjQ4LWFhMGItNDE4YS1hNjY5LTMzOTIzZjQ3ZjFjMC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjJlOGI2OGUyLWJkNDktNGVhNC1hOTUxLTZkMGUxYTYwZWQ0YnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCAl/j/e7d9jHFZKF3X+KKijmT+xAFTX9arL5YKdB5y5gaJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggk7cyZJxWFQae48JCBXcs944XKmTYeSePmNy5IvdaY+2iY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggiM5Szgg1CCf/NInB6jp1+Bqgwf4q8ryHrOZluSHyvO10Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQPqZ+elhJTFKPVyXHvET0pc0IvvFohYSYMYfLPmrTnq8wCSil9Dl9GAkfXGxySYm8FJ1/7M0yG7RRI2RMGDUgJY=</c2pa:manifest></metadata><path fill="currentColor" d="M0 0L24 0L24 7L7 7L7 21L24 21L24 28L0 28ZM30 0L48 0L48 7L37 7L37 21L51 21L51 0L58 0L58 28L30 28ZM64 0L87.96 0L100.08 21L113 21L113 7L100.08 7L97.77 11L93.73 4L96.04 0L120 0L120 28L96.04 28L83.92 7L71 7L71 28L64 28ZM86.23 17L90.27 24L87.96 28L79.88 28ZM126 0L154 0L154 28L147 28L147 7L133 7L133 28L126 28ZM160 0L167 0L167 28L160 28ZM160 -10L167 -10L167 -3L160 -3ZM173 0L197 0L197 7L180 7L180 21L197 21L197 28L173 28Z"/><path class="accent" d="M103 11L109 11L109 17L103 17Z"/></svg></a><div class="tabs"><a class="tab" href="/en-gb/workbench/" aria-current="page"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M12 4L19 4L19 29L44 29L44 36L12 36Z" fill="currentColor"></path><path d="M22 12L36 12L36 26L29 26L29 19L22 19ZM4 12L9 12L9 19L4 19ZM29 39L36 39L36 44L29 44Z" class="accent"></path></svg>Workbench</a><span class="tab is-soon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M4 20.92L22.5 31.6L22.5 40.93L4 30.25ZM44 20.92L25.5 31.6L25.5 40.93L44 30.25Z" fill="currentColor"></path><path d="M5 18.04L24 7.07L43 18.04L36 22.08L24 15.15L12 22.08Z" fill="currentColor"></path></svg>Testrun<span class="soon">Soon</span><span class="tip" aria-hidden="true">Testrun: QA, coming soon</span></span><span class="tab is-soon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M4 5.5L17.5 5.5L17.5 12.5L11 12.5L11 22.5L4 22.5ZM4 25.5L11 25.5L11 35.5L17.5 35.5L17.5 42.5L4 42.5Z" fill="currentColor"></path><path d="M44 5.5L30.5 5.5L30.5 12.5L37 12.5L37 22.5L44 22.5ZM44 25.5L37 25.5L37 35.5L30.5 35.5L30.5 42.5L44 42.5Z" fill="currentColor"></path></svg>Playground<span class="soon">Soon</span><span class="tip" aria-hidden="true">Playground: API playground, coming soon</span></span><a class="tab" href="/en-gb/shield/"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M6.68 14L22.5 4.87L22.5 12.95L6.68 22.08ZM6.68 25.54L6.68 34L22.5 43.13L22.5 35.05L13.68 29.96L13.68 21.5ZM41.32 25.54L41.32 34L25.5 43.13L25.5 35.05L34.32 29.96L34.32 21.5Z" fill="currentColor"></path><path d="M41.32 14L25.5 4.87L25.5 12.95L41.32 22.08Z" class="accent"></path></svg>Shield</a></div><a class="github" href="https://github.com/canonic2/canonic" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a></div></nav><nav class="sub" aria-label="Workbench"><div class="wrap"><span class="sub-name">Workbench<span class="sub-version">v0.23.0</span></span><span class="sub-rule" aria-hidden="true"></span><div class="sub-links"><a href="/en-gb/workbench/">Overview</a><a href="/en-gb/workbench/docs/" aria-current="page">Docs</a><a href="/en-gb/workbench/install/">Install</a><a href="/en-gb/workbench/changelog/">Changelog</a><a href="https://github.com/canonic2/canonic" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a></div><a class="btn btn-sm" href="/en-gb/workbench/install/">Install</a></div></nav></header><main id="content" tabindex="-1"><div class="docs-shell wrap"><canonic-docs-sidebar><details class="docs-sidebar" open><summary>Docs <span aria-hidden="true">⌄</span></summary><div class="docs-sidebar-body"><div class="docs-search" hidden><label for="docs-search">Search docs</label><input id="docs-search" type="search" placeholder="Search docs" autocomplete="off" aria-controls="docs-navigation" data-index="/workbench/docs/search.json"><p class="docs-search-status" role="status" data-matches="{count} matching guides" data-empty="No matching guides" data-unavailable="Search unavailable. Browse the guides below."></p></div><nav id="docs-navigation" aria-label="Docs"><div class="docs-group" lang="en"><h2>Getting started</h2><a href="/en-gb/workbench/docs/" data-doc-id="index">Workbench documentation</a><a href="/en-gb/workbench/docs/getting-started/" data-doc-id="getting-started">Getting started</a><a href="/en-gb/workbench/docs/pages-and-scenarios/" data-doc-id="pages-and-scenarios">Pages and scenarios</a><a href="/en-gb/workbench/docs/docs-pages/" data-doc-id="docs-pages">Docs</a><a href="/en-gb/workbench/docs/canvas/" data-doc-id="canvas">Using the canvas</a><a href="/en-gb/workbench/docs/annotations-and-handoff/" data-doc-id="annotations-and-handoff">Annotations and handoff</a><a href="/en-gb/workbench/docs/spaces/" data-doc-id="spaces">Several spaces</a></div><div class="docs-group" lang="en"><h2>Previews</h2><a href="/en-gb/workbench/docs/workbench-previews/" data-doc-id="workbench-previews">TypeScript Workbench previews</a><a href="/en-gb/workbench/docs/preview-data/" data-doc-id="preview-data">Preview data, mocks, and actions</a><a href="/en-gb/workbench/docs/react/" data-doc-id="react">React previews</a><a href="/en-gb/workbench/docs/react-native-web/" data-doc-id="react-native-web">React Native Web previews</a><a href="/en-gb/workbench/docs/vue/" data-doc-id="vue">Vue previews</a><a href="/en-gb/workbench/docs/astro/" data-doc-id="astro">Astro previews</a><a href="/en-gb/workbench/docs/html/" data-doc-id="html">HTML previews</a><a href="/en-gb/workbench/docs/custom-adapters/" data-doc-id="custom-adapters">Custom adapters and compiler settings</a></div><div class="docs-group" lang="en"><h2>Connect your implementation</h2><a href="/en-gb/workbench/docs/lenses/" data-doc-id="lenses">Lenses and URL implementations</a><a href="/en-gb/workbench/docs/storybook/" data-doc-id="storybook">Storybook</a><a href="/en-gb/workbench/docs/agent-tools/" data-doc-id="agent-tools" aria-current="page">Agent tools</a></div><div class="docs-group" lang="en"><h2>Reference</h2><a href="/en-gb/workbench/docs/configuration/" data-doc-id="configuration">workbench.yaml reference</a><a href="/en-gb/workbench/docs/design-system-export/" data-doc-id="design-system-export">Design-system export</a><a href="/en-gb/workbench/docs/extension/" data-doc-id="extension">The VS Code extension</a><a href="/en-gb/workbench/docs/troubleshooting/" data-doc-id="troubleshooting">Troubleshooting</a></div></nav><a class="docs-install" href="/en-gb/workbench/install/">Get Workbench <span aria-hidden="true">→</span></a></div></details></canonic-docs-sidebar><script type="module">var e=class extends HTMLElement{connectedCallback(){let e=this.querySelector(`.docs-sidebar`),t=matchMedia(`(max-width: 820px)`);e&&(e.open=!t.matches,t.addEventListener(`change`,()=>{e.open=!t.matches}));let n=this.querySelector(`input[type=search]`),r=this.querySelector(`.docs-search-status`);if(!n||!r)return;n.closest(`.docs-search`).hidden=!1;let i=[...this.querySelectorAll(`[data-doc-id]`)],a=[...this.querySelectorAll(`.docs-group`)],o,s=0;n.addEventListener(`input`,async()=>{let e=++s,t=n.value.trim().toLowerCase();if(!t){i.forEach(e=>{e.hidden=!1}),a.forEach(e=>{e.hidden=!1}),r.textContent=``;return}try{o||=fetch(n.dataset.index||``).then(e=>{if(!e.ok)throw Error(`Search unavailable`);return e.json()}).catch(e=>{throw o=void 0,e});let c=await o;if(e!==s)return;let l=t.split(/\s+/),u=new Set(c.filter(e=>l.every(t=>e.text.includes(t))).map(e=>e.id));i.forEach(e=>{e.hidden=!u.has(e.dataset.docId||``)}),a.forEach(e=>{e.hidden=!e.querySelector(`a:not([hidden])`)}),r.textContent=u.size?(r.dataset.matches||``).replace(`{count}`,String(u.size)):r.dataset.empty||``}catch{e===s&&(r.textContent=r.dataset.unavailable||``)}})}};customElements.get(`canonic-docs-sidebar`)||customElements.define(`canonic-docs-sidebar`,e);</script><article class="docs-article"><div class="docs-breadcrumb"><a href="/en-gb/workbench/docs/">Workbench docs</a><span aria-hidden="true">/</span><span lang="en">Connect your implementation</span></div><div class="docs-prose" lang="en"><h1 id="agent-tools">Agent tools</h1>
+<p>Workbench lets a coding agent render your pages, inspect their structure and
+styles, check problems, and exercise interactive states. Captures use private
+browser pages. <code>view set</code> is the command that changes the user’s canvas.</p>
+<h2 id="connect-an-agent">Connect an agent</h2>
+<p>Run setup from a project containing <code>workbench.yaml</code> or
+<code>.config/workbench.yaml</code>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="sh"><code><span class="line"><span style="color:#B392F0">workbench</span><span style="color:#9ECBFF"> mcp</span><span style="color:#9ECBFF"> setup</span></span></code></pre>
+<p>Choose the agents to configure and review the paths, launch command and tool
+approvals before applying. Project scope is the default. A project configured
+for Hub or Box offers a server definition for that host (<code>hub</code> or <code>box</code>); the
+host publishes it to the agents each developer selects. When a project has
+both, setup preselects <code>hub</code>. Direct host choices include <code>claude</code>, <code>codex</code>,
+<code>copilot-vscode</code>, <code>copilot-cli</code>, <code>cursor</code>, <code>gemini</code>, <code>kiro</code>, <code>kilo</code>, <code>kimi</code>,
+<code>opencode</code>, <code>qwen</code>, <code>amp</code> and <code>droid</code>. Other surfaces have user-only or manual
+setup routes, shown by the picker when automatic configuration is unavailable.</p>
+<p>For an explicit, noninteractive workflow, inspect first:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="sh"><code><span class="line"><span style="color:#B392F0">workbench</span><span style="color:#9ECBFF"> mcp</span><span style="color:#9ECBFF"> setup</span><span style="color:#79B8FF"> --agent</span><span style="color:#9ECBFF"> claude</span><span style="color:#79B8FF"> --agent</span><span style="color:#9ECBFF"> codex</span><span style="color:#79B8FF"> --dry-run</span><span style="color:#79B8FF"> --json</span></span>
+<span class="line"><span style="color:#B392F0">workbench</span><span style="color:#9ECBFF"> mcp</span><span style="color:#9ECBFF"> setup</span><span style="color:#79B8FF"> --agent</span><span style="color:#9ECBFF"> claude</span><span style="color:#79B8FF"> --agent</span><span style="color:#9ECBFF"> codex</span><span style="color:#79B8FF"> --yes</span><span style="color:#79B8FF"> --json</span></span></code></pre>
+<p>For Codex and Claude Code, setup also installs the <code>UserPromptSubmit</code> hook
+<code>workbench hook user-prompt</code>. It supplies the current canvas reference on each
+prompt while a canvas is open. Codex uses <code>.codex/hooks.json</code> beside its MCP
+configuration; Claude Code uses <code>.claude/settings.local.json</code> in project scope
+and <code>~/.claude/settings.json</code> in user scope. A Hub or Box definition includes
+this hook for the host to publish to Codex and Claude Code. Other agents use
+<code>view_show</code>.</p>
+<p>Setup edits only Workbench’s server entry, its owned approval rules and prompt
+hook, keeping other servers, settings and hooks. Rerun it to repair an owned
+registration without adding duplicate hooks. <code>--remove</code> removes the selected
+owned registration and hooks; equivalent hooks already present before setup
+remain unowned. It refuses conflicting external edits.
+An existing MCP registration created by another configurator is unowned and
+blocks setup even if it uses the same command. Use one configurator for the
+registration. To hand it over, disable the previous configurator’s Workbench
+integration and remove its generated registration and prompt hook before running
+setup. For a prompt-hook conflict, align the existing group’s fields with the
+requested definition or remove that group; setup preserves unrelated hooks.
+<code>--scope user</code> explicitly chooses personal configuration, and <code>--project</code>
+selects another project. The launch command is <code>workbench mcp serve</code> in both
+scopes, so agents must find <code>workbench</code> on <code>PATH</code>.</p>
+<p>All Workbench tools are selected for approval by default where the host supports
+per-tool settings, including canvas-changing and interactive tools.
+Existing saved choices remain in effect on repair and are labeled in the picker.
+Run <code>workbench mcp setup --agent codex --reset-tool-permissions</code> to restore current
+defaults; add <code>--dry-run --json</code> to preview without writes. Reset conflicts with
+<code>--remove</code> and retains normal setup authorization. Host trust/reload may be
+needed after setup; a successful file write does not prove a live connection.
+No runtime pages or project manager start during setup.</p>
+<p>Configuration written successfully does not establish a live agent connection.
+Reload or reconnect the agent and approve its prompt hook if requested. Inspect
+the agent’s MCP server list to confirm Workbench connected. With a canvas open,
+run <code>workbench view show --json</code> from that checkout to check the current reference,
+and <code>workbench hook user-prompt</code> to check prompt-hook output. Then ask the agent
+which Workbench page is open; it should name the selected page and scenario.
+A hook with no open canvas prints nothing. A failed host connection, a missing
+canvas and a successful registration are separate states.</p>
+<p>Configure your MCP client to run <code>workbench mcp serve</code> from a folder inside
+the project. The server finds <code>workbench.yaml</code> or <code>.config/workbench.yaml</code> in
+that folder or an ancestor. To choose a project explicitly, pass
+<code>--project /path/to/project</code>; to use another manifest, pass
+<code>--config /path/to/workbench.yaml</code> with an absolute path. A <code>--config</code> file
+that is missing fails each tool with <code>config_not_found</code> rather than falling
+back. The CLI agent commands (<code>workbench page</code>, <code>workbench config show</code> and
+the others) take the same two options.
+The <code>workbench</code> command must be on <code>PATH</code>. Page rendering requires the
+Workbench browser runtime on the host; <code>capture_unavailable</code> explains a
+missing runtime or unsupported host.</p>
+<p>Run <code>workbench mcp serve --check</code> to validate and print the installed tool
+catalog as JSON without opening the MCP transport or starting a project manager.</p>
+<p>Every MCP tool has a CLI command that runs the same operation. Add <code>--json</code>
+for its structured result. From your project root, pass a known page source
+path directly.</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="sh"><code><span class="line"><span style="color:#B392F0">workbench</span><span style="color:#9ECBFF"> page</span><span style="color:#9ECBFF"> screenshot</span><span style="color:#9ECBFF"> pages/pricing.html</span><span style="color:#79B8FF"> --size</span><span style="color:#9ECBFF"> mobile</span><span style="color:#79B8FF"> --json</span></span></code></pre>
+<p>Use <code>view_show</code> for “this page”. It identifies the canvas the user used last
+and each artboard’s target. Use <code>config_show</code> to find pages, scenarios, sizes
+and implementation lenses.
+A target names a <code>page</code>, optionally a <code>space</code>, <code>scenario</code>, <code>artboard</code>,
+<code>iteration</code>, <code>lens</code>, and <code>size</code>. Use <code>width</code> and <code>height</code> instead of <code>size</code>
+for explicit CSS dimensions. The CLI takes these as flags. If several spaces
+contain the page, supply <code>--space</code> with its ID from <code>config show</code>.</p>
+<h2 id="read-the-workbench-workflow">Read the Workbench workflow</h2>
+<p>The server publishes the <code>canonic-workbench</code> skill, covering authoring,
+configuration and review workflows. A host with native Skills-over-MCP support
+can discover it through the standard Skills methods. Other resource-capable
+clients can list resources and read:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="text"><code><span class="line"><span>skill://workbench/canonic-workbench/SKILL.md</span></span></code></pre>
+<p>Ask your agent to read it with MCP <code>resources/read</code>. It is bundled
+with the executable and available without a project or running manager.
+Reading it does not install instructions, activate a skill or grant tool
+permissions. Your host owns skill loading and approval. Existing local skill
+copies are not changed by the server.</p>
+<h2 id="check-a-page">Check a page</h2>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="sh"><code><span class="line"><span style="color:#B392F0">workbench</span><span style="color:#9ECBFF"> page</span><span style="color:#9ECBFF"> check</span><span style="color:#9ECBFF"> pages/pricing.html</span><span style="color:#79B8FF"> --sizes</span><span style="color:#9ECBFF"> mobile,laptop</span><span style="color:#79B8FF"> --json</span></span>
+<span class="line"><span style="color:#B392F0">workbench</span><span style="color:#9ECBFF"> page</span><span style="color:#9ECBFF"> inspect</span><span style="color:#9ECBFF"> pages/pricing.html</span><span style="color:#79B8FF"> --selector</span><span style="color:#9ECBFF"> h1</span><span style="color:#79B8FF"> --properties</span><span style="color:#9ECBFF"> font-size,color</span><span style="color:#79B8FF"> --json</span></span>
+<span class="line"><span style="color:#B392F0">workbench</span><span style="color:#9ECBFF"> page</span><span style="color:#9ECBFF"> snapshot</span><span style="color:#9ECBFF"> pages/pricing.html</span><span style="color:#79B8FF"> --size</span><span style="color:#9ECBFF"> mobile</span><span style="color:#79B8FF"> --json</span></span>
+<span class="line"><span style="color:#B392F0">workbench</span><span style="color:#9ECBFF"> page</span><span style="color:#9ECBFF"> console</span><span style="color:#9ECBFF"> pages/pricing.html</span><span style="color:#79B8FF"> --json</span></span></code></pre>
+<p><code>page_check</code> runs build, console and layout checks. Use
+<code>--checks build,console</code> to select checks. Problems carry a severity, message
+and target; compiler diagnostics include their source file and range when
+available. <code>ok</code> means there are no errors; warnings can still need review.
+Layout checks identify document overflow, clipped elements, truncated text,
+overlapping controls, failed images and controls smaller than 24 × 24 CSS
+pixels. Intended clipping and layered controls can produce warnings.</p>
+<p><code>page_inspect</code> returns up to 20 matching elements, their selectors, accessible
+roles and names, border boxes in document CSS pixels, and computed styles.
+Use <code>--role button --name 'Send message'</code> for an accessible name instead of
+a selector. <code>matched</code> and <code>more</code> disclose additional matches.
+<code>page_snapshot</code> returns the accessibility tree and readable text.
+<code>page_console</code> reads errors and warnings by default; <code>--levels</code> selects other
+levels and <code>--after</code> reads entries following an earlier <code>last</code> sequence.</p>
+<h2 id="capture-sizes-and-compare-views">Capture sizes and compare views</h2>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="sh"><code><span class="line"><span style="color:#B392F0">workbench</span><span style="color:#9ECBFF"> page</span><span style="color:#9ECBFF"> sheet</span><span style="color:#9ECBFF"> pages/pricing.html</span><span style="color:#79B8FF"> --sizes</span><span style="color:#9ECBFF"> mobile,laptop</span><span style="color:#79B8FF"> --json</span></span>
+<span class="line"><span style="color:#B392F0">workbench</span><span style="color:#9ECBFF"> page</span><span style="color:#9ECBFF"> compare</span><span style="color:#79B8FF"> --a</span><span style="color:#9ECBFF"> '{"page":"pages/pricing.html","size":"mobile"}'</span><span style="color:#79B8FF"> --b</span><span style="color:#9ECBFF"> '{"page":"pages/pricing.html","scenario":"dark","size":"mobile"}'</span><span style="color:#79B8FF"> --json</span></span></code></pre>
+<p><code>page_sheet</code> returns one labelled PNG with the requested sizes. Without
+<code>--sizes</code>, it uses every supported size, up to 12. Its base target cannot
+include a size or explicit dimensions. Fit and Resizable use 1440 × 900
+when there is no canvas to measure; filled axes use the corresponding
+dimension. Each entry in <code>sizes</code> includes its target and console problems.</p>
+<p><code>page_compare</code> takes two JSON targets or page handles and returns A, B and
+their difference side by side. Both must have the same CSS dimensions.
+<code>changed</code> is the fraction of visibly different pixels, from 0 to 1, at one
+device pixel per CSS pixel. Comparison uses a white background and exact
+pixel equality. <code>bounds</code> contains up to 20 region boxes in those pixels;
+nearby changes can share a box. Each side includes its console problems.</p>
+<p>Both tools return <code>file</code>, the full-resolution PNG, and a capture <code>resource</code>.
+MCP also receives a smaller inline image fitting 1,568 pixels. Composition
+refuses pictures beyond 32 megapixels, 16,384 pixels per edge, 12 MiB of input
+PNGs, or a 16 MiB output PNG; request fewer or smaller sizes when refused.</p>
+<p>For one page, <code>page_screenshot</code> supports <code>--full-page</code>, <code>--clip '#selector'</code>,
+and <code>--device-scale-factor 2</code>. <code>--save</code> also writes that screenshot into
+<code>.canonic/.handoffs/</code>. The MCP catalog marks <code>page_screenshot</code> as write-capable
+because it supports saving. Other captures stay outside the project: MCP captures
+last for their connection, while CLI captures keep the project’s newest 50.</p>
+<h2 id="view-a-capture-in-chat">View a capture in chat</h2>
+<p>When your chat host supports MCP Apps, <code>page_screenshot</code> can display a page
+preview beside its result. Use <strong>Zoom</strong> to fit the captured image or view it
+at 100% or 200% of its image pixels. <strong>Full resolution</strong> loads the retained PNG
+when the host supports resource reads. If it has expired or exceeds the
+resource limit, ask the agent to capture again or use the returned file.</p>
+<p><strong>Refresh</strong> takes another screenshot with the original arguments, except that
+it does not save the capture into handoffs. It requires the host to support
+tool calls from the preview. Captures use the same private browser and leave
+your canvas alone.
+An open page handle keeps its existing lifetime; if it expires, ask the agent
+to start or capture the page again.</p>
+<p>The displayed image updates on capture, not automatically on source edits.
+Chat hosts control whether the UI appears and which operations it can use.
+Hosts without Apps keep the ordinary image, text and structured result.</p>
+<h2 id="exercise-interactive-states">Exercise interactive states</h2>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="sh"><code><span class="line"><span style="color:#B392F0">workbench</span><span style="color:#9ECBFF"> page</span><span style="color:#9ECBFF"> start</span><span style="color:#9ECBFF"> pages/contact.html</span><span style="color:#79B8FF"> --size</span><span style="color:#9ECBFF"> mobile</span><span style="color:#79B8FF"> --json</span></span>
+<span class="line"><span style="color:#B392F0">workbench</span><span style="color:#9ECBFF"> page</span><span style="color:#9ECBFF"> list</span><span style="color:#79B8FF"> --json</span></span>
+<span class="line"><span style="color:#B392F0">workbench</span><span style="color:#9ECBFF"> page</span><span style="color:#9ECBFF"> interact</span><span style="color:#79B8FF"> --handle</span><span style="color:#9ECBFF"> pg_0123456789abcdef</span><span style="color:#79B8FF"> --steps</span><span style="color:#9ECBFF"> '[{"action":"click","target":{"role":"button","name":"Send message"}}]'</span><span style="color:#79B8FF"> --snapshot</span><span style="color:#79B8FF"> --json</span></span>
+<span class="line"><span style="color:#B392F0">workbench</span><span style="color:#9ECBFF"> page</span><span style="color:#9ECBFF"> stop</span><span style="color:#79B8FF"> --handle</span><span style="color:#9ECBFF"> pg_0123456789abcdef</span><span style="color:#79B8FF"> --json</span></span></code></pre>
+<p><code>page list</code> and <code>page_list</code> accept <code>cursor</code> and <code>limit</code> (<code>--cursor</code> and
+<code>--limit</code> in the CLI). Pages are ordered by handle and return <code>pages</code> and
+<code>nextCursor</code>, null at the end. The default limit is 50, maximum 100; zero and
+larger limits are invalid. A 256 KiB encoded item budget can end a page early.
+Pass the cursor with the same selectors to continue. Human output prints the
+next command when more remain.</p>
+<p>Replace the example handle with <code>page_start</code>’s <code>page</code>. Handles retain the
+page’s state between calls; <code>page_interact</code> returns each step’s outcome,
+new console entries and a screenshot, optionally a snapshot. Steps stop at
+the first failure. If evidence collection fails after the steps ran, the
+result keeps the step outcomes and names the missing evidence in <code>evidenceErrors</code>.
+Inspect the page’s current state before repeating an input step whose outcome
+is uncertain. Calls using the same handle run one at a time, including a
+comparison that uses the handle. A handle closes after 10 minutes without a call. CLI
+handles also close when the manager stops, including its idle shutdown.
+MCP handles belong to their connection, while CLI handles belong to the project.
+Pass handles to <code>page_compare</code> to compare states already reached through input.</p>
+<h2 id="inspect-and-edit-images">Inspect and edit images</h2>
+<p>Images handed over for a page are rarely ready to use. Workbench reads and
+writes them itself, with no image tools to install:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="sh"><code><span class="line"><span style="color:#B392F0">workbench</span><span style="color:#9ECBFF"> image</span><span style="color:#9ECBFF"> inspect</span><span style="color:#9ECBFF"> assets/banner.png</span><span style="color:#79B8FF"> --json</span></span>
+<span class="line"><span style="color:#B392F0">workbench</span><span style="color:#9ECBFF"> image</span><span style="color:#9ECBFF"> list</span><span style="color:#9ECBFF"> pages/home.html</span><span style="color:#79B8FF"> --sizes</span><span style="color:#9ECBFF"> mobile,laptop</span><span style="color:#79B8FF"> --json</span></span>
+<span class="line"><span style="color:#B392F0">workbench</span><span style="color:#9ECBFF"> image</span><span style="color:#9ECBFF"> edit</span><span style="color:#9ECBFF"> assets/banner.png</span><span style="color:#79B8FF"> \</span></span>
+<span class="line"><span style="color:#79B8FF">  --steps</span><span style="color:#9ECBFF"> '[{"trim":{}},{"fit":{"ratio":"16:9"}},{"round":{"radius":12}}]'</span><span style="color:#79B8FF"> \</span></span>
+<span class="line"><span style="color:#79B8FF">  --outputs</span><span style="color:#9ECBFF"> '[{"format":"webp","width":320,"densities":[1,2,3]}]'</span><span style="color:#79B8FF"> \</span></span>
+<span class="line"><span style="color:#79B8FF">  --out</span><span style="color:#9ECBFF"> public/images</span></span></code></pre>
+<p><code>image_inspect</code> reports an image’s format, size and aspect ratio, bits per
+channel, colour profile, frame count and file size; its transparency; the box
+its content fills and the padding around it; its edge, corner and dominant
+colours; and a preview over a checkerboard. It reads PNG, JPEG, WebP, GIF,
+TIFF, BMP and ICO files up to 64 MiB, 16,384 pixels an edge and 32
+megapixels. AVIF can be written but not read.</p>
+<p><code>image_list</code> renders a page privately at each requested size and lists every
+<code>&lt;img&gt;</code>, <code>&lt;picture&gt;</code> and CSS background image: its element, the file it
+loads, the size it is shown at and its own pixels. Findings name what to fix:
+<code>undersized</code> (blurry at one of <code>densities</code>, 1 and 2 by default), <code>oversized</code>
+(more than twice the pixels the largest density needs), <code>no_density_variants</code>
+(no <code>srcset</code> or <code>image-set()</code>), <code>aspect_mismatch</code> (stretched or cropped by
+<code>object-fit</code>), <code>heavy</code> (over 50 KiB and more than 1 byte a pixel for JPEG,
+WebP and AVIF, or 3 for other formats) and <code>not_found</code>. An image inside a
+shadow root has no <code>selector</code>; <code>shadowHost</code> names the element that hosts it,
+and <code>image_edit</code> cannot show an edit in its place.</p>
+<p><code>image_edit</code> runs a list of steps, then writes each output:</p>
+<table>
+<thead>
+<tr>
+<th>Step</th>
+<th>Arguments</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>crop</code></td>
+<td><code>x</code>, <code>y</code>, <code>width</code>, <code>height</code> in pixels</td>
+</tr>
+<tr>
+<td><code>trim</code></td>
+<td><code>tolerance</code>, 0–255: crop to the content box</td>
+</tr>
+<tr>
+<td><code>pad</code></td>
+<td><code>all</code>, <code>top</code>, <code>right</code>, <code>bottom</code>, <code>left</code>, <code>colour</code></td>
+</tr>
+<tr>
+<td><code>fit</code></td>
+<td><code>ratio</code> such as <code>16:9</code>, <code>mode</code> <code>pad</code> or <code>crop</code>, <code>anchor</code>, <code>colour</code></td>
+</tr>
+<tr>
+<td><code>resize</code></td>
+<td><code>width</code>, <code>height</code> (one keeps the ratio), <code>filter</code></td>
+</tr>
+<tr>
+<td><code>rotate</code>, <code>flip</code></td>
+<td><code>turns</code> 1–3 clockwise; <code>axis</code> <code>horizontal</code> or <code>vertical</code></td>
+</tr>
+<tr>
+<td><code>round</code></td>
+<td><code>radius</code> in pixels, for rounded corners</td>
+</tr>
+<tr>
+<td><code>mask</code></td>
+<td><code>file</code>, <code>channel</code> <code>alpha</code> or <code>luminance</code></td>
+</tr>
+<tr>
+<td><code>remove_background</code></td>
+<td><code>colour</code> (the top-left pixel’s by default), <code>tolerance</code>, <code>softness</code></td>
+</tr>
+<tr>
+<td><code>adjust</code></td>
+<td><code>brightness</code>, <code>contrast</code>, <code>saturation</code>, each −1 to 1</td>
+</tr>
+<tr>
+<td><code>convert_colour</code></td>
+<td><code>to</code> <code>srgb</code> or <code>display-p3</code></td>
+</tr>
+</tbody>
+</table>
+<p>Colours are <code>#rrggbb</code>, <code>#rrggbbaa</code> or <code>transparent</code>. An output names its
+<code>format</code> (<code>png</code>, <code>jpeg</code>, <code>webp</code>, <code>avif</code>, <code>gif</code>, <code>ico</code>, <code>tiff</code> or <code>bmp</code>) and
+optionally <code>quality</code>, <code>lossless</code> (WebP), <code>colors</code> (a smaller palette PNG),
+<code>effort</code> (PNG and AVIF) and <code>background</code> (behind transparency in JPEG); an
+option the format does not use is refused. Give <code>width</code> or <code>height</code> in CSS
+pixels with <code>densities</code> for <code>@2x</code> files, or <code>widths</code> for a <code>srcset</code> with
+width descriptors. Without outputs, the source’s format is written at its
+size. An edit writes at most 12 files, each within 16,384 pixels an edge and
+32 megapixels (WebP 16,383 an edge, ICO 256).</p>
+<p>The result lists each file with its size and any change the format required,
+such as transparency flattened for JPEG, a before/after picture, and the
+<code>srcset</code> text for the files. Add <code>--page</code> and <code>--selector</code> (<code>target</code> and
+<code>selector</code> for MCP) to see the edited image in its element on the page, before
+and after; the pictures cover the element at both its old and new size. An
+MCP call that reaches its <code>timeout</code> keeps nothing it finished later. A format
+that cannot carry the image’s colour profile, such as
+lossy WebP for a Display P3 image, is refused until a <code>convert_colour</code> step
+converts it.</p>
+<p>Nothing is saved until you give <code>--out</code> (<code>out</code>): a file for one output,
+otherwise a folder where files are named after the source, or <code>--name</code>, with
+<code>@2x</code> or <code>-640w</code>. Existing files are kept unless you add <code>--replace</code>. MCP
+paths are relative to the project; CLI paths to the working directory.
+<code>--steps</code> and <code>--outputs</code> also take <code>@file</code> for a JSON or YAML file, so a
+recipe can live beside its images.</p>
+<h2 id="change-the-canvas">Change the canvas</h2>
+<p>To read the user’s drawings and notes, run:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="sh"><code><span class="line"><span style="color:#B392F0">workbench</span><span style="color:#9ECBFF"> annotation</span><span style="color:#9ECBFF"> list</span><span style="color:#79B8FF"> --json</span></span></code></pre>
+<p><code>annotation_list</code> reads a page of current drawings from the canvas used
+last. Each item includes its annotation identity, artboard and target, plus
+kind, text, anchor,
+box in local CSS pixels and a readable element description when available.
+Arrows point at their visible tip; comments use their pin. Text notes and
+unreadable external pages have no element description. Reading leaves drawings
+and selection intact and does not capture images or resume a preview.</p>
+<p>The result has <code>open</code>, <code>annotations</code> and <code>nextCursor</code>. Use <code>cursor</code> and <code>limit</code>
+(<code>--cursor</code> and <code>--limit</code> in the CLI) to continue until <code>nextCursor</code> is null.
+The default is 50 drawings, maximum 100, with a 256 KiB encoded item budget.
+Order is annotation identity, then artboard identity. Invalid limits are refused;
+a cursor from another canvas is <code>invalid_cursor</code>. A disconnected canvas refuses
+with <code>canvas_closed</code>; reload it and retry. Invalid canvas annotation data returns
+<code>invalid_target</code> with reload guidance. With no open canvas the result is
+<code>open: false</code>, an empty list and null continuation. Published context holds only
+a preview; this reader reaches drawings beyond that preview.</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="sh"><code><span class="line"><span style="color:#B392F0">workbench</span><span style="color:#9ECBFF"> view</span><span style="color:#9ECBFF"> set</span><span style="color:#9ECBFF"> pages/contact.html</span><span style="color:#79B8FF"> --size</span><span style="color:#9ECBFF"> mobile</span><span style="color:#79B8FF"> --json</span></span></code></pre>
+<p><code>view_set</code> replaces the selected artboard of the canvas used last, keeps
+the other artboards, and returns the canvas record after acknowledgement.
+It does not reveal or focus the editor tab. A closed or disconnected canvas
+fails with <code>canvas_closed</code>; open or reload it and retry. If selection changes
+or the call times out, read <code>view_show</code> before retrying. The command uses the
+canvas’s media color scheme; choose a page scenario for dark or light content.</p>
+<p>Calls default to a 60-second deadline; <code>--timeout</code> accepts milliseconds up
+to 120,000. Refusals name the next step. The offline <code>docs list</code>,
+<code>docs search &lt;query&gt;</code> and <code>docs read &lt;path&gt;</code> commands also work outside a project.</p>
+<p>Each docs command accepts <code>--cursor &lt;CURSOR&gt;</code> and <code>--limit &lt;N&gt;</code>. List and search
+default to 50 rows, at most 100; read defaults to 100 lines, at most 400. Search
+also accepts <code>--path</code>. Results return <code>next_cursor</code>; pass it back as <code>cursor</code>
+with the same filters until null. Cursors bind the tool, filters and bundled
+guide digest. An <code>invalid_cursor</code> error means restart without a cursor.
+Pages stop at 256 KiB of serialized rows or line strings, allowing one larger
+first item within transport bounds. Search omits <code>total</code>; a conservative cursor
+can lead to an empty final page. Read’s <code>start_line</code> is output metadata.
+Human output prints the next command; <code>--json</code> carries the same page fields.</p>
+</div><div class="docs-page-footer"><a target="_blank" rel="noopener" href="https://github.com/canonic2/canonic/blob/main/packages/workbench/docs/agent-tools.md">View Markdown on GitHub ↗</a></div><nav class="docs-pagination" aria-label="Guide navigation"><a href="/en-gb/workbench/docs/storybook/"><span>← Previous</span><strong lang="en">Storybook</strong></a><a href="/en-gb/workbench/docs/configuration/"><span>Next →</span><strong lang="en">workbench.yaml reference</strong></a></nav></article><aside class="docs-toc" aria-label="On this page"><h2>On this page</h2><nav lang="en"><a href="#connect-an-agent">Connect an agent</a><a href="#read-the-workbench-workflow">Read the Workbench workflow</a><a href="#check-a-page">Check a page</a><a href="#capture-sizes-and-compare-views">Capture sizes and compare views</a><a href="#view-a-capture-in-chat">View a capture in chat</a><a href="#exercise-interactive-states">Exercise interactive states</a><a href="#inspect-and-edit-images">Inspect and edit images</a><a href="#change-the-canvas">Change the canvas</a></nav><a class="docs-back-top" href="#content">Back to top ↑</a></aside></div></main><footer class="foot"><div class="wrap"><div class="foot-top"><a class="logo" href="/en-gb/workbench/" aria-label="Canonic home"><svg viewBox="0 -10 197 38" role="img" aria-label="canonic"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTpjMmY5MjI0OC1hYTBiLTQxOGEtYTY2OS0zMzkyM2Y0N2YxYzAAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaDLGWHSl5JoSZ+W85OxqZEYAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDphMzZhOWRjZC0xODZiLTQ4MjgtODE0Yy1lYmEyZjQyZWI5NzJscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoZIhDi0aHiLAMdxEah+RlcQAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggJf4/3u3fYxxWShd1/iioo5k/sQBU1/Wqy+WCnQecuYGkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaPtbRLzQIBR1jlefUBFG8K8AAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCA3ez32oMVE7DJVy4UE2OB9qKRd9zwPrbxDKEVyc71J+WRuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBi3Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOmMyZjkyMjQ4LWFhMGItNDE4YS1hNjY5LTMzOTIzZjQ3ZjFjMC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjJlOGI2OGUyLWJkNDktNGVhNC1hOTUxLTZkMGUxYTYwZWQ0YnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCAl/j/e7d9jHFZKF3X+KKijmT+xAFTX9arL5YKdB5y5gaJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggk7cyZJxWFQae48JCBXcs944XKmTYeSePmNy5IvdaY+2iY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggiM5Szgg1CCf/NInB6jp1+Bqgwf4q8ryHrOZluSHyvO10Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQPqZ+elhJTFKPVyXHvET0pc0IvvFohYSYMYfLPmrTnq8wCSil9Dl9GAkfXGxySYm8FJ1/7M0yG7RRI2RMGDUgJY=</c2pa:manifest></metadata><path fill="currentColor" d="M0 0L24 0L24 7L7 7L7 21L24 21L24 28L0 28ZM30 0L48 0L48 7L37 7L37 21L51 21L51 0L58 0L58 28L30 28ZM64 0L87.96 0L100.08 21L113 21L113 7L100.08 7L97.77 11L93.73 4L96.04 0L120 0L120 28L96.04 28L83.92 7L71 7L71 28L64 28ZM86.23 17L90.27 24L87.96 28L79.88 28ZM126 0L154 0L154 28L147 28L147 7L133 7L133 28L126 28ZM160 0L167 0L167 28L160 28ZM160 -10L167 -10L167 -3L160 -3ZM173 0L197 0L197 7L180 7L180 21L197 21L197 28L173 28Z"/><path class="accent" d="M103 11L109 11L109 17L103 17Z"/></svg></a><div class="foot-col"><span class="foot-head">Products</span><a href="/en-gb/workbench/">Workbench</a><span class="foot-soon">Testrun · Soon</span><span class="foot-soon">Playground · Soon</span><a href="/en-gb/shield/">Shield</a></div><details class="site-language"><summary>Language <span lang="en-GB">· English (UK)</span></summary><ul><li><a href="/en-ca/workbench/docs/agent-tools/" lang="en-CA">English (Canada)</a></li><li><a href="/en-gb/workbench/docs/agent-tools/" lang="en-GB" aria-current="page">English (UK)</a></li><li><a href="/workbench/docs/agent-tools/" lang="en-US">English (US)</a></li><li><a href="/fr-ca/workbench/docs/agent-tools/" lang="fr-CA">Français (Canada)</a></li><li><a href="/fr-fr/workbench/docs/agent-tools/" lang="fr-FR">Français (France)</a></li><li><a href="/es/workbench/docs/agent-tools/" lang="es">Español</a></li><li><a href="/de/workbench/docs/agent-tools/" lang="de">Deutsch</a></li><li><a href="/nl/workbench/docs/agent-tools/" lang="nl">Nederlands</a></li><li><a href="/fi/workbench/docs/agent-tools/" lang="fi">Suomi</a></li><li><a href="/sv/workbench/docs/agent-tools/" lang="sv">Svenska</a></li><li><a href="/nb/workbench/docs/agent-tools/" lang="nb">Norsk bokmål</a></li><li><a href="/zh-hans/workbench/docs/agent-tools/" lang="zh-Hans">简体中文</a></li><li><a href="/ja/workbench/docs/agent-tools/" lang="ja">日本語</a></li></ul></details></div><div class="foot-bottom"><span>© 2026 Canonic Inc.</span></div></div></footer></body></html>

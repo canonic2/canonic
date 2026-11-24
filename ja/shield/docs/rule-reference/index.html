@@ -1,0 +1,748 @@
+<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Rule reference · Shield ドキュメント · Canonic</title><meta name="description" content="This reference covers document fields, rule fields, and selectors. For your first rule, start with the rule-writing guide."><link rel="canonical" href="https://canonic.sh/shield/docs/rule-reference/"><link rel="icon" href="/canonic.svg" type="image/svg+xml"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Geist+Mono:wght@400;500&display=swap"><script>document.documentElement.classList.add("js");</script><link rel="stylesheet" href="/_astro/Base.CALxgHBr.css"><link rel="stylesheet" href="/_astro/DocsPage.CRDdP4HS.css"></head><body><a class="skip" href="#content">コンテンツに移動</a><header class="top"><nav class="products" aria-label="製品"><div class="wrap"><a class="logo" href="/ja/workbench/" aria-label="Canonic ホーム"><svg viewBox="0 -10 197 38" role="img" aria-label="canonic"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTpjMmY5MjI0OC1hYTBiLTQxOGEtYTY2OS0zMzkyM2Y0N2YxYzAAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaDLGWHSl5JoSZ+W85OxqZEYAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDphMzZhOWRjZC0xODZiLTQ4MjgtODE0Yy1lYmEyZjQyZWI5NzJscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoZIhDi0aHiLAMdxEah+RlcQAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggJf4/3u3fYxxWShd1/iioo5k/sQBU1/Wqy+WCnQecuYGkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaPtbRLzQIBR1jlefUBFG8K8AAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCA3ez32oMVE7DJVy4UE2OB9qKRd9zwPrbxDKEVyc71J+WRuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBi3Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOmMyZjkyMjQ4LWFhMGItNDE4YS1hNjY5LTMzOTIzZjQ3ZjFjMC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjJlOGI2OGUyLWJkNDktNGVhNC1hOTUxLTZkMGUxYTYwZWQ0YnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCAl/j/e7d9jHFZKF3X+KKijmT+xAFTX9arL5YKdB5y5gaJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggk7cyZJxWFQae48JCBXcs944XKmTYeSePmNy5IvdaY+2iY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggiM5Szgg1CCf/NInB6jp1+Bqgwf4q8ryHrOZluSHyvO10Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQPqZ+elhJTFKPVyXHvET0pc0IvvFohYSYMYfLPmrTnq8wCSil9Dl9GAkfXGxySYm8FJ1/7M0yG7RRI2RMGDUgJY=</c2pa:manifest></metadata><path fill="currentColor" d="M0 0L24 0L24 7L7 7L7 21L24 21L24 28L0 28ZM30 0L48 0L48 7L37 7L37 21L51 21L51 0L58 0L58 28L30 28ZM64 0L87.96 0L100.08 21L113 21L113 7L100.08 7L97.77 11L93.73 4L96.04 0L120 0L120 28L96.04 28L83.92 7L71 7L71 28L64 28ZM86.23 17L90.27 24L87.96 28L79.88 28ZM126 0L154 0L154 28L147 28L147 7L133 7L133 28L126 28ZM160 0L167 0L167 28L160 28ZM160 -10L167 -10L167 -3L160 -3ZM173 0L197 0L197 7L180 7L180 21L197 21L197 28L173 28Z"/><path class="accent" d="M103 11L109 11L109 17L103 17Z"/></svg></a><div class="tabs"><a class="tab" href="/ja/workbench/"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M12 4L19 4L19 29L44 29L44 36L12 36Z" fill="currentColor"></path><path d="M22 12L36 12L36 26L29 26L29 19L22 19ZM4 12L9 12L9 19L4 19ZM29 39L36 39L36 44L29 44Z" class="accent"></path></svg>Workbench</a><span class="tab is-soon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M4 20.92L22.5 31.6L22.5 40.93L4 30.25ZM44 20.92L25.5 31.6L25.5 40.93L44 30.25Z" fill="currentColor"></path><path d="M5 18.04L24 7.07L43 18.04L36 22.08L24 15.15L12 22.08Z" fill="currentColor"></path></svg>Testrun<span class="soon">近日公開</span><span class="tip" aria-hidden="true">Testrun：品質保証、近日公開</span></span><span class="tab is-soon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M4 5.5L17.5 5.5L17.5 12.5L11 12.5L11 22.5L4 22.5ZM4 25.5L11 25.5L11 35.5L17.5 35.5L17.5 42.5L4 42.5Z" fill="currentColor"></path><path d="M44 5.5L30.5 5.5L30.5 12.5L37 12.5L37 22.5L44 22.5ZM44 25.5L37 25.5L37 35.5L30.5 35.5L30.5 42.5L44 42.5Z" fill="currentColor"></path></svg>Playground<span class="soon">近日公開</span><span class="tip" aria-hidden="true">Playground：API プレイグラウンド、近日公開</span></span><a class="tab" href="/ja/shield/" aria-current="page"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M6.68 14L22.5 4.87L22.5 12.95L6.68 22.08ZM6.68 25.54L6.68 34L22.5 43.13L22.5 35.05L13.68 29.96L13.68 21.5ZM41.32 25.54L41.32 34L25.5 43.13L25.5 35.05L34.32 29.96L34.32 21.5Z" fill="currentColor"></path><path d="M41.32 14L25.5 4.87L25.5 12.95L41.32 22.08Z" class="accent"></path></svg>Shield</a></div><a class="github" href="https://github.com/canonic2/canonic" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a></div></nav><nav class="sub" aria-label="Shield"><div class="wrap"><span class="sub-name">Shield</span><span class="sub-rule" aria-hidden="true"></span><div class="sub-links"><a href="/ja/shield/">概要</a><a href="/ja/shield/docs/" aria-current="page">ドキュメント</a><a href="/ja/shield/#install">インストール</a><a href="https://github.com/canonic2/canonic/tree/main/packages/shield" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a></div><a class="btn btn-sm" href="/ja/shield/#install">ソースからビルド</a></div></nav></header><main id="content" tabindex="-1"><div class="docs-shell wrap"><canonic-docs-sidebar><details class="docs-sidebar" open><summary>ドキュメント <span aria-hidden="true">⌄</span></summary><div class="docs-sidebar-body"><div class="docs-search" hidden><label for="docs-search">ドキュメントを検索</label><input id="docs-search" type="search" placeholder="ドキュメントを検索" autocomplete="off" aria-controls="docs-navigation" data-index="/shield/docs/search.json"><p class="docs-search-status" role="status" data-matches="{count} 件のガイドが見つかりました" data-empty="該当するガイドはありません" data-unavailable="検索を利用できません。下のガイドをご覧ください。"></p></div><nav id="docs-navigation" aria-label="ドキュメント"><div class="docs-group" lang="en"><h2>Get started</h2><a href="/ja/shield/docs/" data-doc-id="index">Shield documentation</a><a href="/ja/shield/docs/introduction/" data-doc-id="introduction">What is Shield?</a><a href="/ja/shield/docs/getting-started/" data-doc-id="getting-started">Your first Shield project</a><a href="/ja/shield/docs/policy-decisions/" data-doc-id="policy-decisions">Understand policy decisions</a><a href="/ja/shield/docs/operator-experience/" data-doc-id="operator-experience">Shield in the terminal</a></div><div class="docs-group" lang="en"><h2>Work with your project</h2><a href="/ja/shield/docs/policy-files/" data-doc-id="policy-files">Policy files and settings</a><a href="/ja/shield/docs/project-review/" data-doc-id="project-review">Project policy, approvals and history</a><a href="/ja/shield/docs/local-registry/" data-doc-id="local-registry">Registry sources and packs</a><a href="/ja/shield/docs/claude-project/" data-doc-id="claude-project">Connect Claude Code and Codex</a><a href="/ja/shield/docs/mcp-connections/" data-doc-id="mcp-connections">Configure project MCP servers</a><a href="/ja/shield/docs/troubleshooting/" data-doc-id="troubleshooting">Troubleshoot Shield</a></div><div class="docs-group" lang="en"><h2>Write rules</h2><a href="/ja/shield/docs/policy-rules/" data-doc-id="policy-rules">Writing policy rules</a><a href="/ja/shield/docs/rule-reference/" data-doc-id="rule-reference" aria-current="page">Rule reference</a><a href="/ja/shield/docs/pack-validation/" data-doc-id="pack-validation">Validating permission packs</a></div><div class="docs-group" lang="en"><h2>Integrate Shield</h2><a href="/ja/shield/docs/project-mcp/" data-doc-id="project-mcp">Use Shield from an agent (MCP)</a><a href="/ja/shield/docs/claude-read-only/" data-doc-id="claude-read-only">Claude Agent SDK read-only integration</a><a href="/ja/shield/docs/native-run/" data-doc-id="native-run">Bounded native execution</a><a href="/ja/shield/docs/enforcement-handoff/" data-doc-id="enforcement-handoff">Embedded enforcement handoff</a></div><div class="docs-group" lang="en"><h2>Recovery and development</h2><a href="/ja/shield/docs/compiled-cache/" data-doc-id="compiled-cache">Compiled policy cache</a><a href="/ja/shield/docs/development/" data-doc-id="development">Developing Shield</a></div><div class="docs-group" lang="en"><h2>More guides</h2><a href="/ja/shield/docs/session-grants/" data-doc-id="session-grants">Approve a batch for one conversation</a><a href="/ja/shield/docs/copilot-cli/" data-doc-id="copilot-cli">Connect Copilot CLI</a><a href="/ja/shield/docs/google-agents/" data-doc-id="google-agents">Connect Gemini CLI and Antigravity CLI</a><a href="/ja/shield/docs/opencode/" data-doc-id="opencode">Connect OpenCode V1</a></div></nav><a class="docs-install" href="/ja/shield/#install">Shield を入手 <span aria-hidden="true">→</span></a></div></details></canonic-docs-sidebar><script type="module">var e=class extends HTMLElement{connectedCallback(){let e=this.querySelector(`.docs-sidebar`),t=matchMedia(`(max-width: 820px)`);e&&(e.open=!t.matches,t.addEventListener(`change`,()=>{e.open=!t.matches}));let n=this.querySelector(`input[type=search]`),r=this.querySelector(`.docs-search-status`);if(!n||!r)return;n.closest(`.docs-search`).hidden=!1;let i=[...this.querySelectorAll(`[data-doc-id]`)],a=[...this.querySelectorAll(`.docs-group`)],o,s=0;n.addEventListener(`input`,async()=>{let e=++s,t=n.value.trim().toLowerCase();if(!t){i.forEach(e=>{e.hidden=!1}),a.forEach(e=>{e.hidden=!1}),r.textContent=``;return}try{o||=fetch(n.dataset.index||``).then(e=>{if(!e.ok)throw Error(`Search unavailable`);return e.json()}).catch(e=>{throw o=void 0,e});let c=await o;if(e!==s)return;let l=t.split(/\s+/),u=new Set(c.filter(e=>l.every(t=>e.text.includes(t))).map(e=>e.id));i.forEach(e=>{e.hidden=!u.has(e.dataset.docId||``)}),a.forEach(e=>{e.hidden=!e.querySelector(`a:not([hidden])`)}),r.textContent=u.size?(r.dataset.matches||``).replace(`{count}`,String(u.size)):r.dataset.empty||``}catch{e===s&&(r.textContent=r.dataset.unavailable||``)}})}};customElements.get(`canonic-docs-sidebar`)||customElements.define(`canonic-docs-sidebar`,e);</script><article class="docs-article"><div class="docs-breadcrumb"><a href="/ja/shield/docs/">Shield ドキュメント</a><span aria-hidden="true">/</span><span lang="en">Write rules</span></div><p class="docs-source-language">英語のガイド</p><div class="docs-prose" lang="en"><h1 id="rule-reference">Rule reference</h1>
+<p>This reference covers document fields, rule fields, and selectors. For your
+first rule, start with the <a href="../policy-rules/">rule-writing guide</a>.</p>
+<table>
+<thead>
+<tr>
+<th>You need to look up…</th>
+<th>Section</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The surrounding YAML/JSON document</td>
+<td><a href="#document-format">Document format</a></td>
+</tr>
+<tr>
+<td>A rule’s decision, conditions, or unmet branch</td>
+<td><a href="#rule-fields">Rule fields</a></td>
+</tr>
+<tr>
+<td>Exact text, alternatives, patterns</td>
+<td><a href="#text-selectors">Text selectors</a></td>
+</tr>
+<tr>
+<td>Complete argument lists and optional flags</td>
+<td><a href="#argument-selectors">Argument selectors</a></td>
+</tr>
+<tr>
+<td>Working directories and affected paths</td>
+<td><a href="#locations-and-domains">Locations and domains</a></td>
+</tr>
+<tr>
+<td>Which syntax features to declare</td>
+<td><a href="#capabilities">Capabilities</a></td>
+</tr>
+</tbody>
+</table>
+<h2 id="document-format">Document format</h2>
+<p>Shield accepts UTF-8 JSON or a single YAML document using <code>schema_version: 1</code>.
+Keys must be strings. Unknown fields, duplicate keys, unsupported capabilities,
+and YAML anchors and aliases are rejected. Omit optional source fields instead
+of setting them to null; exact-request payloads can retain their supplied null
+values. Documents support no environment interpolation, command substitution,
+or includes.</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Project custom rules</th>
+<th>Permission pack</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>schema_version</code></td>
+<td>Required integer <code>1</code>.</td>
+<td>Required integer <code>1</code>.</td>
+</tr>
+<tr>
+<td><code>kind</code></td>
+<td>Required <code>custom</code>.</td>
+<td>Required <code>pack</code>.</td>
+</tr>
+<tr>
+<td><code>capabilities</code></td>
+<td>Required list of exactly the capabilities used.</td>
+<td>Same.</td>
+</tr>
+<tr>
+<td><code>rules</code></td>
+<td>Required array with unique rule IDs; may be empty.</td>
+<td>Same.</td>
+</tr>
+<tr>
+<td><code>directory_options</code></td>
+<td>Optional directory option declarations.</td>
+<td>Same.</td>
+</tr>
+<tr>
+<td><code>id</code>, <code>version</code></td>
+<td>Not accepted.</td>
+<td>Required publisher/name and semantic release version.</td>
+</tr>
+<tr>
+<td><code>description</code>, <code>license</code>, <code>maintainers</code></td>
+<td>Not accepted.</td>
+<td>Required nonempty description, license text, and nonempty maintainer list.</td>
+</tr>
+<tr>
+<td><code>engines</code></td>
+<td>Not accepted.</td>
+<td>Required object containing only <code>shield</code>, with its supported semantic-version requirement.</td>
+</tr>
+<tr>
+<td><code>dependencies</code></td>
+<td>Not accepted.</td>
+<td>Optional dependency declarations; see <a href="../local-registry/#pack-dependencies">packs</a>.</td>
+</tr>
+<tr>
+<td><code>variables</code>, <code>preconditions</code></td>
+<td>Not accepted.</td>
+<td>Optional declarations; see <a href="../policy-rules/#pack-variables-preconditions-and-templates">pack variables</a>.</td>
+</tr>
+<tr>
+<td><code>invocations</code>, <code>command_sets</code></td>
+<td>Not accepted.</td>
+<td>Optional shared bodies; see <a href="../policy-rules/#share-rule-bodies-in-a-pack">rule reuse</a>.</td>
+</tr>
+</tbody>
+</table>
+<p>Project configuration selects the rule file. Documents cannot select a project,
+operator identity, or cache root. A saved edit applies to the next request.</p>
+<h2 id="rule-fields">Rule fields</h2>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>id</code></td>
+<td>Required stable identifier, unique within the document: 1–128 ASCII bytes, beginning with a letter or digit, then letters, digits, <code>.</code>, <code>_</code>, <code>:</code>, or <code>-</code>.</td>
+</tr>
+<tr>
+<td><code>decision</code></td>
+<td>Required <code>allow</code>, <code>ask</code>, or <code>deny</code>. Pack rules may instead map all three profiles: <code>loose</code>, <code>recommended</code>, <code>strict</code>.</td>
+</tr>
+<tr>
+<td><code>conditions</code></td>
+<td>Required object with a <code>domain</code> and the predicates that make this rule apply.</td>
+</tr>
+<tr>
+<td><code>requirements</code></td>
+<td>Optional nonempty object of additional predicates, all of which must be verified for the successful decision.</td>
+</tr>
+<tr>
+<td><code>on_unmet</code></td>
+<td>Required exactly when <code>requirements</code> is present; an <code>ask</code> or <code>deny</code> decision with optional <code>message</code> and <code>alternatives</code>.</td>
+</tr>
+<tr>
+<td><code>reason</code></td>
+<td>Optional nonempty explanation, at most 4,096 UTF-8 bytes.</td>
+</tr>
+<tr>
+<td><code>guidance</code></td>
+<td>Optional successful-branch <code>message</code> and/or <code>alternatives</code>.</td>
+</tr>
+<tr>
+<td><code>expires_at</code></td>
+<td>Optional quoted UTC timestamp for custom rules; an expired rule contributes nothing.</td>
+</tr>
+<tr>
+<td><code>fallback</code></td>
+<td>Pack-only <code>true</code>; lets this rule yield to regular decisions from other packs.</td>
+</tr>
+<tr>
+<td><code>invocation</code>, <code>command_set</code></td>
+<td>Pack-only references to shared definitions; <code>command_set</code> requires <code>invocation</code>.</td>
+</tr>
+<tr>
+<td><code>when</code></td>
+<td>Pack-only activation tests on declared variables.</td>
+</tr>
+<tr>
+<td><code>agents</code></td>
+<td>Agent-specific outputs; see <a href="../policy-rules/#codex-prefix-rules">Codex prefix rules</a>.</td>
+</tr>
+</tbody>
+</table>
+<p>Guidance messages are at most 512 UTF-8 bytes. Alternatives contain one to three
+nonempty strings, each at most 256 bytes. They suggest new requests to evaluate;
+they do not authorize or rewrite the current request.</p>
+<p>Rule order does not determine precedence. See
+<a href="../policy-decisions/#how-rules-combine">how rules combine</a>.</p>
+<h2 id="text-selectors">Text selectors</h2>
+<table>
+<thead>
+<tr>
+<th>Shape</th>
+<th>Matches</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>verify</code> or <code>{exact: verify}</code></td>
+<td>The complete literal field.</td>
+</tr>
+<tr>
+<td><code>{prefix: verify}</code></td>
+<td>Text starting with <code>verify</code>.</td>
+</tr>
+<tr>
+<td><code>{one_of: [verify, report]}</code></td>
+<td>One of the listed literal values.</td>
+</tr>
+<tr>
+<td><code>{glob: '*.txt'}</code></td>
+<td>A glob against one field; <code>*</code> does not cross a path separator.</td>
+</tr>
+<tr>
+<td>`{regex: ’get</td>
+<td>describe’}`</td>
+</tr>
+<tr>
+<td><code>{not: {one_of: [prod, admin]}}</code></td>
+<td>A present value the inner selector does not match.</td>
+</tr>
+</tbody>
+</table>
+<p>Selectors do not expand an argument into additional arguments. The shell command
+<code>acme-check "two words"</code> has one argument containing a space, not two arguments.
+Glob and regex selectors require their respective capabilities; <code>not</code> requires
+<code>negated-selectors-v1</code>. A <code>not</code> selector never matches a missing value, so pair
+it with <code>require_all</code> when the option must be present.</p>
+<h2 id="argument-selectors">Argument selectors</h2>
+<p>The <code>arguments</code> condition describes the arguments after the executable.</p>
+<table>
+<thead>
+<tr>
+<th><code>kind</code></th>
+<th>Fields</th>
+<th>Use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>any</code></td>
+<td>No additional fields.</td>
+<td>Accept any argument list.</td>
+</tr>
+<tr>
+<td><code>exact</code></td>
+<td><code>values</code>: literal string array.</td>
+<td>Match the complete argument list, including an empty list.</td>
+</tr>
+<tr>
+<td><code>prefix</code></td>
+<td><code>values</code>: selector array; optional <code>leading</code> grammar.</td>
+<td>Match the start and leave the suffix unrestricted. Leading options require <code>prefix-leading-v1</code>; <code>leading.interleaved: true</code> also accepts them between prefix words and requires <code>interleaved-leading-v1</code>.</td>
+</tr>
+<tr>
+<td><code>sequence</code></td>
+<td><code>prefix</code>: selector array; <code>rest</code>: <code>none</code>, <code>any</code>, or <code>each</code>.</td>
+<td>Match initial tokens and constrain the rest.</td>
+</tr>
+<tr>
+<td><code>options</code></td>
+<td><code>prefix</code>, <code>flags</code>, <code>values</code>, <code>operands</code>; optional parsing controls.</td>
+<td>Accept a declared operation and reviewed options.</td>
+</tr>
+<tr>
+<td><code>risk_tokens</code></td>
+<td><code>prefix</code>, <code>any_of</code>.</td>
+<td>Detect restrictions conservatively; cannot grant Allow.</td>
+</tr>
+</tbody>
+</table>
+<p>For a sequence, <code>rest: {kind: none}</code> rejects remaining arguments;
+<code>rest: {kind: any}</code> accepts them. Use
+<code>rest: {kind: each, match: SELECTOR, min: N, max: N}</code> to constrain each remaining
+argument. Counts default to 0–256.</p>
+<p>An options grammar distinguishes flags from options that consume a value:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">options</span></span>
+<span class="line"><span style="color:#85E89D">prefix</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">verify</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">flags</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">--verbose</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">values</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">--format</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">operands</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">false</span></span></code></pre>
+<p>This fragment accepts <code>verify</code>, <code>verify --verbose</code>, and <code>verify --format json</code>.
+It rejects <code>verify --format</code> and <code>verify report.txt</code>. It does not restrict the
+format value to JSON; use <code>{name: --format, match: json}</code> in <code>values</code> for that.</p>
+<p>Declared options are optional unless required. Unknown options fail matching.
+Use <code>require_all</code>, <code>require_any</code>, and <code>forbid</code> to check declared option names.
+<code>leading: {flags: [...], values: [...]}</code> declares global options before the
+operation. <code>operands</code> is <code>false</code>, <code>true</code>, or <code>{match: SELECTOR, min: N, max: N}</code>.
+The <code>--</code> separator ends option parsing; subsequent tokens are operands.</p>
+<p>Some tools read global options anywhere, among options a rule cannot list.
+<code>unknown_options: skip</code> passes over undeclared options so a grammar can still
+check the declared ones; it needs <code>operands: true</code>. <code>long_abbreviations: true</code>
+accepts any unique prefix of a declared long option, as argparse-based tools
+do, so declare the tool’s complete global option set when you use it. This
+requirement accepts any AWS command that names the <code>acme-ro</code> profile, written
+in full or abbreviated, anywhere in the command:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">options</span></span>
+<span class="line"><span style="color:#85E89D">prefix</span><span style="color:#E1E4E8">: []</span></span>
+<span class="line"><span style="color:#85E89D">flags</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">--debug</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">--no-paginate</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">--no-verify-ssl</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">--no-sign-request</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">values</span><span style="color:#E1E4E8">: [{</span><span style="color:#85E89D">name</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">--profile</span><span style="color:#E1E4E8">, </span><span style="color:#85E89D">match</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">acme-ro</span><span style="color:#E1E4E8">}, </span><span style="color:#9ECBFF">--region</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">--output</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">--query</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">--endpoint-url</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">operands</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">true</span></span>
+<span class="line"><span style="color:#85E89D">unknown_options</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">skip</span></span>
+<span class="line"><span style="color:#85E89D">long_abbreviations</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">true</span></span>
+<span class="line"><span style="color:#85E89D">require_all</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">--profile</span><span style="color:#E1E4E8">]</span></span></code></pre>
+<p>It allows <code>aws logs tail g --since 1h --prof acme-ro</code> and refuses
+<code>aws s3 ls --profile acme-admin</code>. The settings require <code>unknown-options-v1</code> and
+<code>option-abbreviations-v1</code>. Skipping says nothing about what the skipped options
+do, so allowances for specific operations keep their declared grammars.</p>
+<p>With abbreviations disabled, skip mode refuses prefixes of declared long names
+such as <code>--prof</code> or <code>--prof=value</code> for <code>--profile</code>. Unrelated undeclared options
+are still skipped.</p>
+<p>Skip mode also refuses short-option tokens containing a declared option behind
+an undeclared letter. For example, a requirement on <code>-X</code> refuses <code>-kXPOST</code> when
+<code>-k</code> is undeclared, since skipping it could hide an override of <code>-X</code>. Declare
+<code>-k</code> as a flag to parse that cluster normally. A declared valued option still
+consumes its attached suffix as a value.</p>
+<p>For a worked example of forwarding <code>--watch</code> to a project script, see
+<a href="../policy-rules/#match-text-and-arguments">argument matching</a>. Use requirements
+with an <code>on_unmet</code> branch when an option violation should contribute a rejection
+instead of making the entire rule miss.</p>
+<h2 id="locations-and-domains">Locations and domains</h2>
+<p>An <code>argv</code> rule can match the executable, arguments, and cwd. File rules match
+typed file operations. Shell rules match shell input. Web rules match searches,
+fetches and supported loopback HTTP requests. MCP rules match MCP requests.
+<code>exact_request</code> binds the complete
+normalized input and context rather than just the command arguments. The guided
+CLI defaults to that exact-request form; explicitly choosing <code>argv</code> broadens the
+vendor/environment binding.</p>
+<p>Path predicates use <code>exact</code>, <code>within</code>, or <code>outside</code>. References use <code>project</code>,
+<code>absolute</code>, <code>read</code>, or <code>write</code> roots. Read/write roots require
+<code>access-paths-v1</code>; their configured directories are described in
+<a href="../project-review/#additional-access-paths">additional access paths</a>.</p>
+<p>Use a cwd predicate to constrain where a command starts. Use target predicates
+to constrain its observed file effects. Use <code>argument_paths</code> to check explicit
+path operands without claiming a complete model of the tool’s effects.
+See <a href="../policy-rules/#restrict-paths">path restrictions and supported operations</a>
+and <a href="../policy-rules/#allow-searches-and-documentation-fetches">web rules</a>.</p>
+<p>MCP rules can check explicit path arguments with <code>field_paths</code>, for example
+<code>field_paths: {/project: {path: {within: {root: write}}, absolute: true}}</code>.
+This requires <code>field-paths-v1</code>, <code>location-v1</code> and <code>access-paths-v1</code>. Paths use
+filesystem observations, including symlink resolution; unavailable evidence
+does not establish permission. <code>absolute: true</code> requires an absolute path.
+Without <code>relative_to</code>, relative paths fail the predicate. Use absolute paths
+when the server’s path base is unknown, <code>relative_to: cwd</code> only when it shares
+the request context’s working folder, or
+<code>relative_to: project</code> when a verified launcher starts the server at the
+enrolled project root.</p>
+<p>To check paths inside an array, point the <code>field_paths</code> key at the array and set
+<code>each</code> to the JSON Pointer for a path within each item, such as <code>/path</code>. An empty
+<code>each</code> checks each item directly. Missing path members are skipped. A malformed
+array, a present non-string path, or more than 128 array items across one
+predicate fails the check. This also requires <code>field-path-arrays-v1</code>.</p>
+<h3 id="local-http-requests">Local HTTP requests</h3>
+<p>Use action <code>request</code> to review a shell HTTP operation by method and endpoint.
+Declare <code>local-http-requests-v1</code> and specify both <code>method</code> and <code>url</code>. The
+following rule permits a POST to one development endpoint on the loopback
+interface.</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">id</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">reload-local-service</span></span>
+<span class="line"><span style="color:#85E89D">decision</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">allow</span></span>
+<span class="line"><span style="color:#85E89D">conditions</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  domain</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">web</span></span>
+<span class="line"><span style="color:#85E89D">  action</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">request</span></span>
+<span class="line"><span style="color:#85E89D">  method</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">POST</span></span>
+<span class="line"><span style="color:#85E89D">  url</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    schemes</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">http</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">    hosts</span><span style="color:#E1E4E8">: [</span><span style="color:#79B8FF">127.0.0.1</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">    ports</span><span style="color:#E1E4E8">: [</span><span style="color:#79B8FF">8080</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">    path</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">exact</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">/-/reload</span><span style="color:#E1E4E8">}</span></span>
+<span class="line"><span style="color:#85E89D">  request_fields</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    /body</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">exact</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">false</span><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>The command can use <code>curl --request POST http://127.0.0.1:8080/-/reload</code>.
+Curl can also pin a <code>localhost</code> or <code>.localhost</code> hostname to loopback.
+Put <code>-q</code> first, pass <code>--noproxy '*'</code>, and use a matching pin such as
+<code>--resolve api.localhost:8080:127.0.0.1</code>. The rule matches the URL’s
+hostname and port. Wget uses the literal <code>127.0.0.1</code> address.
+Use literal paths with percent escapes and dot segments omitted.</p>
+<p>For an endpoint you trust through ordinary hostname resolution, declare
+<code>local-http-hostname-resolution-v1</code> and add <code>/hostname_resolution: {exact: system}</code>.
+This requires one scheme, one exact <code>localhost</code> or <code>.localhost</code> hostname, one
+port and one exact path in <code>conditions.url</code>. It covers host curl commands
+without a <code>--resolve</code> pin. Shield checks command options, client configuration
+and proxy settings. Use a pinned request when the connection must stay on IPv4
+loopback regardless of hostname resolution.</p>
+<p>For example, allow one reviewed read-only MCP tool on a workspace endpoint:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">id</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">query-workspace-metrics</span></span>
+<span class="line"><span style="color:#85E89D">decision</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">allow</span></span>
+<span class="line"><span style="color:#85E89D">conditions</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  domain</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">web</span></span>
+<span class="line"><span style="color:#85E89D">  action</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">request</span></span>
+<span class="line"><span style="color:#85E89D">  method</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">POST</span></span>
+<span class="line"><span style="color:#85E89D">  url</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    schemes</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">http</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">    hosts</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">metrics.workspace.localhost</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">    ports</span><span style="color:#E1E4E8">: [</span><span style="color:#79B8FF">8080</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">    path</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">exact</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">/mcp</span><span style="color:#E1E4E8">}</span></span>
+<span class="line"><span style="color:#85E89D">  request_fields</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    /hostname_resolution</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">exact</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">system</span><span style="color:#E1E4E8">}</span></span>
+<span class="line"><span style="color:#85E89D">    /rpc_method</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">exact</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">tools/call</span><span style="color:#E1E4E8">}</span></span>
+<span class="line"><span style="color:#85E89D">    /rpc_tool</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">exact</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">query_metrics</span><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>Put related endpoint rules into one <code>policy_propose</code> review. Select handshake
+operations by <code>/rpc_method</code>, and tool calls by both <code>/rpc_method</code> and <code>/rpc_tool</code>.
+Review the effect of each tool at the endpoint before allowing it.</p>
+<p><code>request_fields</code> uses JSON Pointer selectors. <code>/client</code> is <code>shell</code> and
+<code>/redirects</code> is <code>none</code>. <code>/body</code> and <code>/basic_auth</code> are booleans.
+<code>/headers</code> is an array of lowercased header names. For a recognized JSON-RPC
+body, <code>/rpc_method</code> contains the method and <code>/rpc_tool</code> contains the tool
+name for <code>tools/call</code>. Header values and credentials are absent from these
+fields. A fetch rule covers its own separate action.</p>
+<h3 id="isolated-docker-validators">Isolated Docker validators</h3>
+<p>The <code>docker_isolated_bind</code> requirement checks a <code>docker --context NAME run</code>
+invocation. Declare <code>docker-isolated-bind-v1</code>, <code>argument-rules-v1</code>,
+<code>requirements-v1</code> and <code>location-v1</code> alongside <code>structured-rules-v1</code>.</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">id</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">validate-local-config</span></span>
+<span class="line"><span style="color:#85E89D">decision</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">allow</span></span>
+<span class="line"><span style="color:#85E89D">conditions</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  domain</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">argv</span></span>
+<span class="line"><span style="color:#85E89D">  executable</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">docker</span></span>
+<span class="line"><span style="color:#85E89D">  arguments</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">options</span></span>
+<span class="line"><span style="color:#85E89D">    prefix</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">--context</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">dev</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">run</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">    flags</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">--rm</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">    values</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">--pull</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">--network</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">--mount</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">--env</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">    require_all</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">--rm</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">--pull</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">--network</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">--mount</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">    parse</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">stop_at_operand</span></span>
+<span class="line"><span style="color:#85E89D">    operands</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">      match</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">one_of</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">"acme/validator:1"</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">check</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">/etc/acme/config.yml</span><span style="color:#E1E4E8">]}</span></span>
+<span class="line"><span style="color:#85E89D">      min</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">3</span></span>
+<span class="line"><span style="color:#85E89D">      max</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">3</span></span>
+<span class="line"><span style="color:#85E89D">  cwd</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">exact</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">root</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">project</span><span style="color:#E1E4E8">}}</span></span>
+<span class="line"><span style="color:#85E89D">requirements</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  docker_isolated_bind</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    context</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">dev</span></span>
+<span class="line"><span style="color:#85E89D">    image</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"acme/validator:1"</span></span>
+<span class="line"><span style="color:#85E89D">    command</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">check</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">/etc/acme/config.yml</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">    source</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">exact</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">root</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">project</span><span style="color:#E1E4E8">, </span><span style="color:#85E89D">path</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">config.yml</span><span style="color:#E1E4E8">}}</span></span>
+<span class="line"><span style="color:#85E89D">    target</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">/etc/acme/config.yml</span></span>
+<span class="line"><span style="color:#85E89D">    environment</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">MODE=validate</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">on_unmet</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  decision</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">ask</span></span></code></pre>
+<p><code>context</code> selects the operator’s Docker context. <code>image</code> and <code>command</code>
+match the literal image reference and its entrypoint arguments. Use a digest
+if the image identity must be immutable. <code>source</code> selects an existing
+regular project file and <code>target</code> names its absolute container path.
+The optional <code>environment</code> lists permitted literal <code>NAME=value</code>
+assignments for <code>--env</code>.</p>
+<p>The run requires <code>--rm</code>, <code>--pull never</code>, <code>--network none</code> and a single
+<code>--mount type=bind,source=…,target=…,readonly</code>. The source check covers the
+CLI host file. Shield still asks about the image entrypoint because the
+Docker daemon resolves the mounted file on its own host.
+For the rule above, the command is:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="sh"><code><span class="line"><span style="color:#B392F0">docker</span><span style="color:#79B8FF"> --context</span><span style="color:#9ECBFF"> dev</span><span style="color:#9ECBFF"> run</span><span style="color:#79B8FF"> --rm</span><span style="color:#79B8FF"> --pull</span><span style="color:#9ECBFF"> never</span><span style="color:#79B8FF"> --network</span><span style="color:#9ECBFF"> none</span><span style="color:#79B8FF"> \</span></span>
+<span class="line"><span style="color:#79B8FF">  --mount</span><span style="color:#9ECBFF"> type=bind,source=./config.yml,target=/etc/acme/config.yml,readonly</span><span style="color:#79B8FF"> \</span></span>
+<span class="line"><span style="color:#79B8FF">  --env</span><span style="color:#9ECBFF"> MODE=validate</span><span style="color:#9ECBFF"> acme/validator:1</span><span style="color:#9ECBFF"> check</span><span style="color:#9ECBFF"> /etc/acme/config.yml</span></span></code></pre>
+<h2 id="graphql-requests">GraphQL requests</h2>
+<p>An argv predicate <code>graphql: {carrier: gh-api, operation: query}</code> verifies a
+supported inline <code>gh api graphql</code> query. It requires <code>graphql-v1</code> and the ordinary
+argument/executable selectors. Parsing does not itself allow the request: the
+rule’s decision, requirements, other policy and host restrictions still apply.
+Custom rules and packs can declare this implemented capability and supply their
+own reviewed selection models. Engine support does not add query permissions to
+installed packs; inspect their actual rules before relying on an allowance.</p>
+<p>The carrier accepts inline <code>-f</code> strings and scalar <code>-F</code> fields, one selected
+query operation, scalar defaults, aliases and fragments. Optional <code>operationName</code>
+selects a named operation. <code>--paginate</code> requires a nullable <code>$endCursor: String</code>
+used only in cursor arguments. Supported output flags are <code>--silent</code>,
+<code>--include</code>/<code>-i</code> and paginated <code>--slurp</code>; explicit method/hostname are limited to
+<code>POST</code> and <code>github.com</code>. Known conflicting host context fails verification.</p>
+<p>File/stdin input, typed placeholders, object-valued variables, list values, mutations,
+custom headers, alternate endpoints/hosts, <code>--jq</code>, templates and unknown syntax
+do not satisfy a query predicate; <a href="#graphql-mutations">mutation predicates</a>
+admit reviewed mutations and their input objects. A query classification
+without <code>selection</code> accepts structurally valid object argument literals and asserts
+no repository scope. Source names and related metadata checks do not attest the
+actual network destination or immutable repository identity.</p>
+<p>An optional <code>selection</code> has <code>root</code> and <code>states</code>. Each state declares accepted
+fragment <code>types</code> and a <code>fields</code> map. A field has either <code>leaf: true</code> or
+<code>select: STATE</code>, plus optional <code>arguments</code>. Query-root fields can instead use
+<code>subtree: true</code> with <code>graphql-subtree-v1</code>: their own arguments are checked, but
+all descendant fields, arguments and fragment types are unrestricted. A subtree
+requires a child selection and can appear only in the root state with exactly
+<code>types: [Query]</code>. It permits related objects outside the named repository.
+Document, variable, directive and resource checks still apply; descendant object
+argument literals are accepted within the existing input-depth bounds, while
+list inputs and object-valued variables remain unsupported.
+Each argument declares <code>match</code> as
+<code>{text: SELECTOR}</code>, <code>{exact: SCALAR}</code> or <code>{scalar: string|integer|number|boolean|enum}</code>,
+with optional <code>required</code>, <code>nullable</code> and <code>cursor</code> booleans defaulting to false.
+Every modeled field and argument must be declared; aliases do not replace actual
+field names. Missing required scope values and unknown modeled traversals fail. A cursor
+declaration must be optional, nullable and <code>{scalar: string}</code>. Pack text selectors
+can use prepared variable projections. Source models contain no executable code
+or live schema queries. Invalid models make the policy files invalid; exhausted analysis
+limits block rather than falling back to an allowance.
+Rules using this predicate cannot export <code>agents.codex.prefixes</code>: a command
+prefix cannot represent query or selection constraints.</p>
+<p>For example, this requirement fragment admits name metadata only from the named
+repository; put it inside an argv rule’s <code>requirements</code> and supply <code>on_unmet</code>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">graphql</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  carrier</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">gh-api</span></span>
+<span class="line"><span style="color:#85E89D">  operation</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">query</span></span>
+<span class="line"><span style="color:#85E89D">  selection</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    root</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">query</span></span>
+<span class="line"><span style="color:#85E89D">    states</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">      query</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">        types</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">Query</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">        fields</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">          repository</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">            arguments</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">              owner</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">required</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">true</span><span style="color:#E1E4E8">, </span><span style="color:#85E89D">match</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">text</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">acme</span><span style="color:#E1E4E8">}}</span></span>
+<span class="line"><span style="color:#85E89D">              name</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">required</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">true</span><span style="color:#E1E4E8">, </span><span style="color:#85E89D">match</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">text</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">web</span><span style="color:#E1E4E8">}}</span></span>
+<span class="line"><span style="color:#85E89D">            select</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">repository</span></span>
+<span class="line"><span style="color:#85E89D">      repository</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">        types</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">Repository</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">        fields</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">          nameWithOwner</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">leaf</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">true</span><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>The query <code>{ repository(owner:"acme", name:"web") { nameWithOwner } }</code> satisfies
+this model; adding <code>parent { nameWithOwner }</code> does not. Use a Deny unmet branch
+when failure must block rather than follow Ask fallback. See
+<a href="../policy-rules/#conditions-versus-requirements">conditions and requirements</a>.</p>
+<p>For a root-only boundary, replace <code>select: repository</code> with <code>subtree: true</code>
+and omit the <code>repository</code> state. Every root must still be declared and match
+its arguments, including roots inside fragments and conditional selections.
+Nested reads such as <code>parent { nameWithOwner }</code> then pass without a field inventory.</p>
+<h3 id="graphql-mutations">GraphQL mutations</h3>
+<p><code>graphql: {carrier: gh-api, operation: mutation, root_fields: [...], selection: ...}</code>
+classifies a selected mutation by the root fields it calls. It requires
+<code>graphql-mutations-v1</code> in addition to <code>graphql-v1</code>. It checks the request’s
+shape, not its target: GitHub mutations name objects by opaque IDs, which Shield
+does not look up, so a mutation predicate never confirms which repository it
+changes.</p>
+<ul>
+<li><code>selection</code> is required, and its root state’s <code>types</code> must be exactly
+<code>[Mutation]</code>. List every mutation you review in that one model, with its
+arguments and the payload fields it may return. A request calling any other
+root field fails the predicate.</li>
+<li><code>root_fields</code> names one class of those mutations. The predicate is met when
+the request calls at least one of them. Give each class its own rule with the
+same model: a request calling fields from several classes meets each of their
+rules, and the strictest decision applies. Fields under fragments or
+<code>@skip</code>/<code>@include</code> count; aliases do not replace actual names.</li>
+<li>An input object argument uses <code>match: {object: {FIELD: ARGUMENT}}</code>, whose
+fields follow the argument rules above and may nest up to four levels. Every
+input field must be declared, and a repeated key fails. Object matchers are
+accepted only in mutation models. Lists, object-typed variables and
+<code>--paginate</code> do not satisfy a mutation predicate.</li>
+</ul>
+<p>For example, this condition matches requests that resolve or unresolve review
+threads and return only the thread’s ID and state:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">graphql</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  carrier</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">gh-api</span></span>
+<span class="line"><span style="color:#85E89D">  operation</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">mutation</span></span>
+<span class="line"><span style="color:#85E89D">  root_fields</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">resolveReviewThread</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">unresolveReviewThread</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">  selection</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    root</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">mutation</span></span>
+<span class="line"><span style="color:#85E89D">    states</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">      mutation</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">        types</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">Mutation</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">        fields</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">          resolveReviewThread</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">            arguments</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">              input</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">                required</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">true</span></span>
+<span class="line"><span style="color:#85E89D">                match</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">                  object</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">                    threadId</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">required</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">true</span><span style="color:#E1E4E8">, </span><span style="color:#85E89D">match</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">scalar</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">string</span><span style="color:#E1E4E8">}}</span></span>
+<span class="line"><span style="color:#85E89D">            select</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">payload</span></span>
+<span class="line"><span style="color:#85E89D">          unresolveReviewThread</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">            arguments</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">              input</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">                required</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">true</span></span>
+<span class="line"><span style="color:#85E89D">                match</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">                  object</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">                    threadId</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">required</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">true</span><span style="color:#E1E4E8">, </span><span style="color:#85E89D">match</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">scalar</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">string</span><span style="color:#E1E4E8">}}</span></span>
+<span class="line"><span style="color:#85E89D">            select</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">payload</span></span>
+<span class="line"><span style="color:#85E89D">      payload</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">        types</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">ResolveReviewThreadPayload</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">UnresolveReviewThreadPayload</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">        fields</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">          thread</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">select</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">thread</span><span style="color:#E1E4E8">}</span></span>
+<span class="line"><span style="color:#85E89D">      thread</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">        types</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">PullRequestReviewThread</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">        fields</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">          id</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">leaf</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">true</span><span style="color:#E1E4E8">}</span></span>
+<span class="line"><span style="color:#85E89D">          isResolved</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">leaf</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">true</span><span style="color:#E1E4E8">}</span></span></code></pre>
+<p><code>mutation { resolveReviewThread(input:{threadId:"T1"}) { thread { id isResolved } } }</code>
+meets it; adding <code>pullRequest { title }</code> under <code>thread</code> does not.</p>
+<h2 id="capabilities">Capabilities</h2>
+<p>Typed JSON field maps (<code>fields</code>, <code>request_fields</code> and MCP <code>connection</code>) accept
+<code>{not: {exact: VALUE}}</code> to match a present value unequal to <code>VALUE</code>. Missing
+fields never match this predicate; a present null remains distinct from absence.
+For example, <code>/env: {not: {exact: {}}}</code> detects supplied non-empty environment
+maps without matching an omitted or empty map. This requires both
+<code>field-negation-v1</code> and <code>negated-selectors-v1</code>. Nested field negation and negated
+text predicates are not accepted; use a text selector’s own <code>not</code> for the latter.</p>
+<p>Declare exactly the capabilities used anywhere in the document, once each.</p>
+<table>
+<thead>
+<tr>
+<th>Capability</th>
+<th>Required for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>structured-rules-v1</code></td>
+<td>Every document.</td>
+</tr>
+<tr>
+<td><code>argument-rules-v1</code></td>
+<td>Argument selectors in argv rules.</td>
+</tr>
+<tr>
+<td><code>argument-paths-v1</code></td>
+<td>Explicit argument-path checks.</td>
+</tr>
+<tr>
+<td><code>docker-isolated-bind-v1</code></td>
+<td>A <code>docker_isolated_bind</code> requirement checks a Docker image invocation and its single read-only project file bind.</td>
+</tr>
+<tr>
+<td><code>local-http-requests-v1</code></td>
+<td>The web <code>request</code> action selects a method and URL for a supported loopback HTTP request.</td>
+</tr>
+<tr>
+<td><code>local-http-hostname-resolution-v1</code></td>
+<td>A web <code>request</code> rule explicitly accepts hostname resolution for one local curl endpoint.</td>
+</tr>
+<tr>
+<td><code>graphql-v1</code></td>
+<td>Parsed inline GitHub GraphQL query predicates and finite selection models.</td>
+</tr>
+<tr>
+<td><code>graphql-mutations-v1</code></td>
+<td>GraphQL predicates with <code>operation: mutation</code>.</td>
+</tr>
+<tr>
+<td><code>graphql-subtree-v1</code></td>
+<td>Query-root fields with unrestricted descendant selections.</td>
+</tr>
+<tr>
+<td><code>field-paths-v1</code></td>
+<td>Explicit path checks on MCP JSON fields.</td>
+</tr>
+<tr>
+<td><code>field-path-arrays-v1</code></td>
+<td>Path checks on all items of a bounded MCP JSON array.</td>
+</tr>
+<tr>
+<td><code>glob-v1</code>, <code>regex-v1</code></td>
+<td>Their respective text selectors.</td>
+</tr>
+<tr>
+<td><code>location-v1</code></td>
+<td>Path references/predicates, cwd, file domains, or targets.</td>
+</tr>
+<tr>
+<td><code>access-paths-v1</code></td>
+<td><code>read</code> or <code>write</code> root unions.</td>
+</tr>
+<tr>
+<td><code>requirements-v1</code></td>
+<td>Requirements and their unmet branches.</td>
+</tr>
+<tr>
+<td><code>possible-effects-v1</code></td>
+<td>Possible-effect predicates.</td>
+</tr>
+<tr>
+<td><code>fallback-rules-v1</code></td>
+<td>Pack fallback rules.</td>
+</tr>
+<tr>
+<td><code>dependencies-v1</code></td>
+<td>A dependencies array, including an empty one.</td>
+</tr>
+<tr>
+<td><code>invocation-groups-v1</code>, <code>command-sets-v1</code></td>
+<td>References to their respective shared pack definitions.</td>
+</tr>
+<tr>
+<td><code>prefix-leading-v1</code></td>
+<td>Leading options on a prefix argument selector.</td>
+</tr>
+<tr>
+<td><code>interleaved-leading-v1</code></td>
+<td><code>interleaved: true</code> in a <code>leading</code> grammar, on <code>prefix</code> or <code>options</code> selectors.</td>
+</tr>
+<tr>
+<td><code>variables-v1</code></td>
+<td>Pack variables, variable selectors, or activation tests.</td>
+</tr>
+<tr>
+<td><code>variable-parts-v1</code></td>
+<td>Literal parts of string/choice variables selected with <code>split</code>.</td>
+</tr>
+<tr>
+<td><code>variable-prefixes-v1</code></td>
+<td>A <code>prefix</code> text selector joined from literal text and string/choice variables.</td>
+</tr>
+<tr>
+<td><code>variable-list-branches-v1</code></td>
+<td>A precondition <code>requires_any</code> branch that splits a list variable or uses it as a prefix part, repeated once per item.</td>
+</tr>
+<tr>
+<td><code>preconditions-v1</code></td>
+<td>Pack preconditions.</td>
+</tr>
+<tr>
+<td><code>directory-options-v1</code></td>
+<td>Directory option declarations.</td>
+</tr>
+<tr>
+<td><code>templates-v1</code></td>
+<td>Variable templates in pack explanation text.</td>
+</tr>
+<tr>
+<td><code>agent-outputs-v1</code></td>
+<td>Agent-specific rule outputs.</td>
+</tr>
+<tr>
+<td><code>mcp-integrations-v1</code></td>
+<td>Pack MCP integration definitions and defaults.</td>
+</tr>
+<tr>
+<td><code>mcp-connection-facts-v1</code></td>
+<td>Typed <code>connection</code> predicates over reviewed MCP facts.</td>
+</tr>
+<tr>
+<td><code>mcp-effective-fields-v1</code></td>
+<td>Pack mappings from request fields and reviewed defaults to effective facts.</td>
+</tr>
+<tr>
+<td><code>mcp-command-fields-v1</code></td>
+<td>Declared MCP fields evaluated as literal fixed-executable commands.</td>
+</tr>
+<tr>
+<td><code>field-negation-v1</code></td>
+<td>Typed JSON field predicates using <code>{not: {exact: VALUE}}</code>.</td>
+</tr>
+<tr>
+<td><code>unknown-options-v1</code></td>
+<td><code>unknown_options: skip</code> in an options grammar.</td>
+</tr>
+<tr>
+<td><code>option-abbreviations-v1</code></td>
+<td><code>long_abbreviations: true</code> in an option phase.</td>
+</tr>
+<tr>
+<td><code>negated-selectors-v1</code></td>
+<td><code>not</code> text selectors.</td>
+</tr>
+</tbody>
+</table>
+<p>An argv rule with an argument selector needs <code>structured-rules-v1</code> and
+<code>argument-rules-v1</code>. Add <code>location-v1</code> for a cwd predicate and <code>requirements-v1</code>
+for requirements and their unmet branch. Plain string selectors need neither
+<code>regex-v1</code> nor <code>glob-v1</code>.</p>
+<p>Use <a href="../pack-validation/">pack validation</a> to check documents without activating
+them. Validation checks syntax and policy structure; review the tool’s behavior
+before granting permission.</p>
+</div><div class="docs-page-footer"><a target="_blank" rel="noopener" href="https://github.com/canonic2/canonic/blob/main/packages/shield/docs/rule-reference.md">GitHub で Markdown を見る ↗</a></div><nav class="docs-pagination" aria-label="ガイドのナビゲーション"><a href="/ja/shield/docs/policy-rules/"><span>← 前へ</span><strong lang="en">Writing policy rules</strong></a><a href="/ja/shield/docs/pack-validation/"><span>次へ →</span><strong lang="en">Validating permission packs</strong></a></nav></article><aside class="docs-toc" aria-label="このページの内容"><h2>このページの内容</h2><nav lang="en"><a href="#document-format">Document format</a><a href="#rule-fields">Rule fields</a><a href="#text-selectors">Text selectors</a><a href="#argument-selectors">Argument selectors</a><a href="#locations-and-domains">Locations and domains</a><a href="#local-http-requests" class="docs-toc-sub">Local HTTP requests</a><a href="#isolated-docker-validators" class="docs-toc-sub">Isolated Docker validators</a><a href="#graphql-requests">GraphQL requests</a><a href="#graphql-mutations" class="docs-toc-sub">GraphQL mutations</a><a href="#capabilities">Capabilities</a></nav><a class="docs-back-top" href="#content">ページの先頭へ ↑</a></aside></div></main><footer class="foot"><div class="wrap"><div class="foot-top"><a class="logo" href="/ja/workbench/" aria-label="Canonic ホーム"><svg viewBox="0 -10 197 38" role="img" aria-label="canonic"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTpjMmY5MjI0OC1hYTBiLTQxOGEtYTY2OS0zMzkyM2Y0N2YxYzAAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaDLGWHSl5JoSZ+W85OxqZEYAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDphMzZhOWRjZC0xODZiLTQ4MjgtODE0Yy1lYmEyZjQyZWI5NzJscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoZIhDi0aHiLAMdxEah+RlcQAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggJf4/3u3fYxxWShd1/iioo5k/sQBU1/Wqy+WCnQecuYGkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaPtbRLzQIBR1jlefUBFG8K8AAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCA3ez32oMVE7DJVy4UE2OB9qKRd9zwPrbxDKEVyc71J+WRuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBi3Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOmMyZjkyMjQ4LWFhMGItNDE4YS1hNjY5LTMzOTIzZjQ3ZjFjMC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjJlOGI2OGUyLWJkNDktNGVhNC1hOTUxLTZkMGUxYTYwZWQ0YnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCAl/j/e7d9jHFZKF3X+KKijmT+xAFTX9arL5YKdB5y5gaJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggk7cyZJxWFQae48JCBXcs944XKmTYeSePmNy5IvdaY+2iY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggiM5Szgg1CCf/NInB6jp1+Bqgwf4q8ryHrOZluSHyvO10Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQPqZ+elhJTFKPVyXHvET0pc0IvvFohYSYMYfLPmrTnq8wCSil9Dl9GAkfXGxySYm8FJ1/7M0yG7RRI2RMGDUgJY=</c2pa:manifest></metadata><path fill="currentColor" d="M0 0L24 0L24 7L7 7L7 21L24 21L24 28L0 28ZM30 0L48 0L48 7L37 7L37 21L51 21L51 0L58 0L58 28L30 28ZM64 0L87.96 0L100.08 21L113 21L113 7L100.08 7L97.77 11L93.73 4L96.04 0L120 0L120 28L96.04 28L83.92 7L71 7L71 28L64 28ZM86.23 17L90.27 24L87.96 28L79.88 28ZM126 0L154 0L154 28L147 28L147 7L133 7L133 28L126 28ZM160 0L167 0L167 28L160 28ZM160 -10L167 -10L167 -3L160 -3ZM173 0L197 0L197 7L180 7L180 21L197 21L197 28L173 28Z"/><path class="accent" d="M103 11L109 11L109 17L103 17Z"/></svg></a><div class="foot-col"><span class="foot-head">製品</span><a href="/ja/workbench/">Workbench</a><span class="foot-soon">Testrun · 近日公開</span><span class="foot-soon">Playground · 近日公開</span><a href="/ja/shield/">Shield</a></div><details class="site-language"><summary>言語 <span lang="ja">· 日本語</span></summary><ul><li><a href="/en-ca/shield/docs/rule-reference/" lang="en-CA">English (Canada)</a></li><li><a href="/en-gb/shield/docs/rule-reference/" lang="en-GB">English (UK)</a></li><li><a href="/shield/docs/rule-reference/" lang="en-US">English (US)</a></li><li><a href="/fr-ca/shield/docs/rule-reference/" lang="fr-CA">Français (Canada)</a></li><li><a href="/fr-fr/shield/docs/rule-reference/" lang="fr-FR">Français (France)</a></li><li><a href="/es/shield/docs/rule-reference/" lang="es">Español</a></li><li><a href="/de/shield/docs/rule-reference/" lang="de">Deutsch</a></li><li><a href="/nl/shield/docs/rule-reference/" lang="nl">Nederlands</a></li><li><a href="/fi/shield/docs/rule-reference/" lang="fi">Suomi</a></li><li><a href="/sv/shield/docs/rule-reference/" lang="sv">Svenska</a></li><li><a href="/nb/shield/docs/rule-reference/" lang="nb">Norsk bokmål</a></li><li><a href="/zh-hans/shield/docs/rule-reference/" lang="zh-Hans">简体中文</a></li><li><a href="/ja/shield/docs/rule-reference/" lang="ja" aria-current="page">日本語</a></li></ul></details></div><div class="foot-bottom"><span>© 2026 Canonic Inc.</span></div></div></footer></body></html>

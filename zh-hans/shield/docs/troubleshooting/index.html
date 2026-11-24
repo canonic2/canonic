@@ -1,0 +1,281 @@
+<!DOCTYPE html><html lang="zh-Hans"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Troubleshoot Shield · Shield 文档 · Canonic</title><meta name="description" content="Run  shield status  and  shield doctor  in the affected project. Follow any reported recovery command, or find your symptom below. In an agent session, ask the agent to use the  st"><link rel="canonical" href="https://canonic.sh/shield/docs/troubleshooting/"><link rel="icon" href="/canonic.svg" type="image/svg+xml"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Geist+Mono:wght@400;500&display=swap"><script>document.documentElement.classList.add("js");</script><link rel="stylesheet" href="/_astro/Base.CALxgHBr.css"><link rel="stylesheet" href="/_astro/DocsPage.CRDdP4HS.css"></head><body><a class="skip" href="#content">跳转到内容</a><header class="top"><nav class="products" aria-label="产品"><div class="wrap"><a class="logo" href="/zh-hans/workbench/" aria-label="Canonic 首页"><svg viewBox="0 -10 197 38" role="img" aria-label="canonic"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTpjMmY5MjI0OC1hYTBiLTQxOGEtYTY2OS0zMzkyM2Y0N2YxYzAAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaDLGWHSl5JoSZ+W85OxqZEYAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDphMzZhOWRjZC0xODZiLTQ4MjgtODE0Yy1lYmEyZjQyZWI5NzJscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoZIhDi0aHiLAMdxEah+RlcQAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggJf4/3u3fYxxWShd1/iioo5k/sQBU1/Wqy+WCnQecuYGkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaPtbRLzQIBR1jlefUBFG8K8AAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCA3ez32oMVE7DJVy4UE2OB9qKRd9zwPrbxDKEVyc71J+WRuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBi3Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOmMyZjkyMjQ4LWFhMGItNDE4YS1hNjY5LTMzOTIzZjQ3ZjFjMC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjJlOGI2OGUyLWJkNDktNGVhNC1hOTUxLTZkMGUxYTYwZWQ0YnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCAl/j/e7d9jHFZKF3X+KKijmT+xAFTX9arL5YKdB5y5gaJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggk7cyZJxWFQae48JCBXcs944XKmTYeSePmNy5IvdaY+2iY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggiM5Szgg1CCf/NInB6jp1+Bqgwf4q8ryHrOZluSHyvO10Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQPqZ+elhJTFKPVyXHvET0pc0IvvFohYSYMYfLPmrTnq8wCSil9Dl9GAkfXGxySYm8FJ1/7M0yG7RRI2RMGDUgJY=</c2pa:manifest></metadata><path fill="currentColor" d="M0 0L24 0L24 7L7 7L7 21L24 21L24 28L0 28ZM30 0L48 0L48 7L37 7L37 21L51 21L51 0L58 0L58 28L30 28ZM64 0L87.96 0L100.08 21L113 21L113 7L100.08 7L97.77 11L93.73 4L96.04 0L120 0L120 28L96.04 28L83.92 7L71 7L71 28L64 28ZM86.23 17L90.27 24L87.96 28L79.88 28ZM126 0L154 0L154 28L147 28L147 7L133 7L133 28L126 28ZM160 0L167 0L167 28L160 28ZM160 -10L167 -10L167 -3L160 -3ZM173 0L197 0L197 7L180 7L180 21L197 21L197 28L173 28Z"/><path class="accent" d="M103 11L109 11L109 17L103 17Z"/></svg></a><div class="tabs"><a class="tab" href="/zh-hans/workbench/"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M12 4L19 4L19 29L44 29L44 36L12 36Z" fill="currentColor"></path><path d="M22 12L36 12L36 26L29 26L29 19L22 19ZM4 12L9 12L9 19L4 19ZM29 39L36 39L36 44L29 44Z" class="accent"></path></svg>Workbench</a><span class="tab is-soon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M4 20.92L22.5 31.6L22.5 40.93L4 30.25ZM44 20.92L25.5 31.6L25.5 40.93L44 30.25Z" fill="currentColor"></path><path d="M5 18.04L24 7.07L43 18.04L36 22.08L24 15.15L12 22.08Z" fill="currentColor"></path></svg>Testrun<span class="soon">即将推出</span><span class="tip" aria-hidden="true">Testrun：质量保障，即将推出</span></span><span class="tab is-soon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M4 5.5L17.5 5.5L17.5 12.5L11 12.5L11 22.5L4 22.5ZM4 25.5L11 25.5L11 35.5L17.5 35.5L17.5 42.5L4 42.5Z" fill="currentColor"></path><path d="M44 5.5L30.5 5.5L30.5 12.5L37 12.5L37 22.5L44 22.5ZM44 25.5L37 25.5L37 35.5L30.5 35.5L30.5 42.5L44 42.5Z" fill="currentColor"></path></svg>Playground<span class="soon">即将推出</span><span class="tip" aria-hidden="true">Playground：API 试验场，即将推出</span></span><a class="tab" href="/zh-hans/shield/" aria-current="page"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M6.68 14L22.5 4.87L22.5 12.95L6.68 22.08ZM6.68 25.54L6.68 34L22.5 43.13L22.5 35.05L13.68 29.96L13.68 21.5ZM41.32 25.54L41.32 34L25.5 43.13L25.5 35.05L34.32 29.96L34.32 21.5Z" fill="currentColor"></path><path d="M41.32 14L25.5 4.87L25.5 12.95L41.32 22.08Z" class="accent"></path></svg>Shield</a></div><a class="github" href="https://github.com/canonic2/canonic" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a></div></nav><nav class="sub" aria-label="Shield"><div class="wrap"><span class="sub-name">Shield</span><span class="sub-rule" aria-hidden="true"></span><div class="sub-links"><a href="/zh-hans/shield/">概览</a><a href="/zh-hans/shield/docs/" aria-current="page">文档</a><a href="/zh-hans/shield/#install">安装</a><a href="https://github.com/canonic2/canonic/tree/main/packages/shield" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a></div><a class="btn btn-sm" href="/zh-hans/shield/#install">从源码构建</a></div></nav></header><main id="content" tabindex="-1"><div class="docs-shell wrap"><canonic-docs-sidebar><details class="docs-sidebar" open><summary>文档 <span aria-hidden="true">⌄</span></summary><div class="docs-sidebar-body"><div class="docs-search" hidden><label for="docs-search">搜索文档</label><input id="docs-search" type="search" placeholder="搜索文档" autocomplete="off" aria-controls="docs-navigation" data-index="/shield/docs/search.json"><p class="docs-search-status" role="status" data-matches="{count} 篇匹配的指南" data-empty="没有匹配的指南" data-unavailable="搜索暂不可用。请浏览下方的指南。"></p></div><nav id="docs-navigation" aria-label="文档"><div class="docs-group" lang="en"><h2>Get started</h2><a href="/zh-hans/shield/docs/" data-doc-id="index">Shield documentation</a><a href="/zh-hans/shield/docs/introduction/" data-doc-id="introduction">What is Shield?</a><a href="/zh-hans/shield/docs/getting-started/" data-doc-id="getting-started">Your first Shield project</a><a href="/zh-hans/shield/docs/policy-decisions/" data-doc-id="policy-decisions">Understand policy decisions</a><a href="/zh-hans/shield/docs/operator-experience/" data-doc-id="operator-experience">Shield in the terminal</a></div><div class="docs-group" lang="en"><h2>Work with your project</h2><a href="/zh-hans/shield/docs/policy-files/" data-doc-id="policy-files">Policy files and settings</a><a href="/zh-hans/shield/docs/project-review/" data-doc-id="project-review">Project policy, approvals and history</a><a href="/zh-hans/shield/docs/local-registry/" data-doc-id="local-registry">Registry sources and packs</a><a href="/zh-hans/shield/docs/claude-project/" data-doc-id="claude-project">Connect Claude Code and Codex</a><a href="/zh-hans/shield/docs/mcp-connections/" data-doc-id="mcp-connections">Configure project MCP servers</a><a href="/zh-hans/shield/docs/troubleshooting/" data-doc-id="troubleshooting" aria-current="page">Troubleshoot Shield</a></div><div class="docs-group" lang="en"><h2>Write rules</h2><a href="/zh-hans/shield/docs/policy-rules/" data-doc-id="policy-rules">Writing policy rules</a><a href="/zh-hans/shield/docs/rule-reference/" data-doc-id="rule-reference">Rule reference</a><a href="/zh-hans/shield/docs/pack-validation/" data-doc-id="pack-validation">Validating permission packs</a></div><div class="docs-group" lang="en"><h2>Integrate Shield</h2><a href="/zh-hans/shield/docs/project-mcp/" data-doc-id="project-mcp">Use Shield from an agent (MCP)</a><a href="/zh-hans/shield/docs/claude-read-only/" data-doc-id="claude-read-only">Claude Agent SDK read-only integration</a><a href="/zh-hans/shield/docs/native-run/" data-doc-id="native-run">Bounded native execution</a><a href="/zh-hans/shield/docs/enforcement-handoff/" data-doc-id="enforcement-handoff">Embedded enforcement handoff</a></div><div class="docs-group" lang="en"><h2>Recovery and development</h2><a href="/zh-hans/shield/docs/compiled-cache/" data-doc-id="compiled-cache">Compiled policy cache</a><a href="/zh-hans/shield/docs/development/" data-doc-id="development">Developing Shield</a></div><div class="docs-group" lang="en"><h2>More guides</h2><a href="/zh-hans/shield/docs/session-grants/" data-doc-id="session-grants">Approve a batch for one conversation</a><a href="/zh-hans/shield/docs/copilot-cli/" data-doc-id="copilot-cli">Connect Copilot CLI</a><a href="/zh-hans/shield/docs/google-agents/" data-doc-id="google-agents">Connect Gemini CLI and Antigravity CLI</a><a href="/zh-hans/shield/docs/opencode/" data-doc-id="opencode">Connect OpenCode V1</a></div></nav><a class="docs-install" href="/zh-hans/shield/#install">获取 Shield <span aria-hidden="true">→</span></a></div></details></canonic-docs-sidebar><script type="module">var e=class extends HTMLElement{connectedCallback(){let e=this.querySelector(`.docs-sidebar`),t=matchMedia(`(max-width: 820px)`);e&&(e.open=!t.matches,t.addEventListener(`change`,()=>{e.open=!t.matches}));let n=this.querySelector(`input[type=search]`),r=this.querySelector(`.docs-search-status`);if(!n||!r)return;n.closest(`.docs-search`).hidden=!1;let i=[...this.querySelectorAll(`[data-doc-id]`)],a=[...this.querySelectorAll(`.docs-group`)],o,s=0;n.addEventListener(`input`,async()=>{let e=++s,t=n.value.trim().toLowerCase();if(!t){i.forEach(e=>{e.hidden=!1}),a.forEach(e=>{e.hidden=!1}),r.textContent=``;return}try{o||=fetch(n.dataset.index||``).then(e=>{if(!e.ok)throw Error(`Search unavailable`);return e.json()}).catch(e=>{throw o=void 0,e});let c=await o;if(e!==s)return;let l=t.split(/\s+/),u=new Set(c.filter(e=>l.every(t=>e.text.includes(t))).map(e=>e.id));i.forEach(e=>{e.hidden=!u.has(e.dataset.docId||``)}),a.forEach(e=>{e.hidden=!e.querySelector(`a:not([hidden])`)}),r.textContent=u.size?(r.dataset.matches||``).replace(`{count}`,String(u.size)):r.dataset.empty||``}catch{e===s&&(r.textContent=r.dataset.unavailable||``)}})}};customElements.get(`canonic-docs-sidebar`)||customElements.define(`canonic-docs-sidebar`,e);</script><article class="docs-article"><div class="docs-breadcrumb"><a href="/zh-hans/shield/docs/">Shield 文档</a><span aria-hidden="true">/</span><span lang="en">Work with your project</span></div><p class="docs-source-language">英文指南</p><div class="docs-prose" lang="en"><h1 id="troubleshoot-shield">Troubleshoot Shield</h1>
+<p>Run <code>shield status</code> and <code>shield doctor</code> in the affected project. Follow any
+reported recovery command, or find your symptom below.
+In an agent session, ask the agent to use the <code>status</code> and <code>doctor</code> MCP tools
+and follow their in-session recovery route. Cache relocation and native
+integration reconciliation have their own confirmation forms; terminal commands
+remain available when you choose to use them directly.</p>
+<table>
+<thead>
+<tr>
+<th>What you observe</th>
+<th>Where to look</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>No apparent Shield checks in the agent</td>
+<td><a href="#the-agent-does-not-seem-to-use-shield">Integration loading</a></td>
+</tr>
+<tr>
+<td>Old behavior after installing a new Shield</td>
+<td><a href="#the-agent-still-uses-the-previous-shield">Reload the new version</a></td>
+</tr>
+<tr>
+<td>A command proceeds despite a recorded Ask</td>
+<td><a href="#a-command-runs-even-though-policy-says-ask">Codex Ask handling</a></td>
+</tr>
+<tr>
+<td>An unexpected Allow or Deny</td>
+<td><a href="#the-request-was-allowed-or-blocked-unexpectedly">Inspect the request and matching rule</a></td>
+</tr>
+<tr>
+<td>A read-only GitHub GraphQL query is blocked</td>
+<td><a href="#a-read-only-github-graphql-query-is-blocked">Check versions, scope and query form</a></td>
+</tr>
+<tr>
+<td>A YAML edit has no effect or requests report invalid policy</td>
+<td><a href="#i-edited-a-rule-but-behavior-did-not-change">Check the policy files</a></td>
+</tr>
+<tr>
+<td>An old proposal cannot be applied</td>
+<td><a href="#a-proposal-is-stale">Stale proposals</a></td>
+</tr>
+<tr>
+<td>A pack proposal reports <code>candidate_error</code></td>
+<td><a href="#a-pack-proposal-reports-candidate_error">Inconsistent pack candidate</a></td>
+</tr>
+<tr>
+<td>Requests fail naming the compiled policy folder</td>
+<td><a href="#the-compiled-policy-cache-cannot-load">Compiled cache</a></td>
+</tr>
+<tr>
+<td>Initialization fails while downloading</td>
+<td><a href="#initialization-cannot-download-the-baseline">Baseline acquisition</a></td>
+</tr>
+<tr>
+<td>Shield’s project folder was moved or copied</td>
+<td><a href="#the-project-was-moved-or-copied">Portable policy</a></td>
+</tr>
+<tr>
+<td>A change cannot obtain confirmation</td>
+<td><a href="#terminal-confirmation-is-unavailable">Terminal confirmation</a></td>
+</tr>
+<tr>
+<td>The hook says Codex cannot request approval</td>
+<td><a href="#the-hook-says-codex-cannot-request-approval">In-session approval connection</a></td>
+</tr>
+<tr>
+<td>Shield says state is briefly locked</td>
+<td><a href="#shield-says-state-is-briefly-locked">Concurrent updates</a></td>
+</tr>
+</tbody>
+</table>
+<h2 id="shield-says-state-is-briefly-locked">Shield says state is briefly locked</h2>
+<p>Project authority and shared registry-trust acquisition wait briefly for an
+active writer. The shared trust guard retries contention for up to 500 ms
+before refusing; it checks current trust after acquiring the lock. Waiting
+does not replay a request or consume a grant.</p>
+<p>Another Shield operation held a required lock beyond this request’s bounded
+wait. The command has not been dispatched, so retry the same request after the
+other operation finishes. This message is contention, not a policy Deny or a
+rejected approval. Final authorization remains blocked until its required
+state can be checked.</p>
+<p>Repeated refusals during ordinary parallel requests need investigation. Use
+<a href="../development/#debug-builds-and-diagnostics">diagnostic logs</a> to distinguish
+policy evaluation, final handoff and optional bookkeeping. Session-context
+capture uses a short metadata transaction and does not prepare policy artifacts
+under the writer lock.</p>
+<h2 id="the-hook-says-codex-cannot-request-approval">The hook says Codex cannot request approval</h2>
+<p>This message refers to the native command hook. A blocked approvable request
+normally names <code>request_approve</code> and its request ID; Shield’s MCP connection
+then shows the human confirmation form. The native-hook message alone does not
+mean an automatic reviewer rejected the request.</p>
+<p>If the hook also says the approval connection is not registered, inspect
+<code>shield status</code> in that exact checkout. An empty <code>registered_integrations</code> list
+or an unowned MCP entry means the hook is checking requests without a registered
+approval connection. Use the reported setup repair route and restart the agent
+after publication. Keep unrelated hooks and MCP servers intact.</p>
+<p>Hub and Box definitions in a fresh worktree are recognized on runtime startup.
+Harmless YAML formatting and the known retired tool entries are compatible;
+changed launchers, hooks, permissions or a foreign private executable pin remain
+subject to review. See <a href="../claude-project/#set-up-through-hub-or-box">Hub and Box setup</a>.</p>
+<h2 id="a-pack-proposal-reports-candidate_error">A pack proposal reports <code>candidate_error</code></h2>
+<p>Shield could not align a candidate’s selected packs with its artifact bytes.
+The proposal changed no policy file. Continue the task without that proposal and report
+the error. Changing valid tool arguments or deleting project state is not a
+recovery for this failure.</p>
+<h2 id="the-project-was-moved-or-copied">The project was moved or copied</h2>
+<p>A Shield project is its files. After a move, rename or copy, and in a worktree or
+clone, Shield keeps working with no follow-up command: the files in <code>.shield/</code>
+are the policy, so the next request is decided by them. A moved or copied folder
+keeps its project ID, history, settings and pending in-session approval
+requests. Pending text-read and checked-run requests are dropped; the agent
+repeats the request. A new clone or worktree starts with fresh history and no
+agent registration; run <code>shield mcp setup</code> there to connect an agent. A one-time
+approval is used once, whichever folder uses it first.</p>
+<p>A clone that lacks a pack release its lock file names fetches it from the
+registry on <code>shield status</code>. Invalid files and missing packs prevent ordinary
+policy authorization. Supported native requests can use exact in-session
+review, with the problem in the message; fixed paths remain closed.
+Corrupt state and unsupported formats are
+separate problems with their own recovery.</p>
+<p>New launch entries resolve <code>shield</code> from PATH and the project from the agent’s
+session folder. Restart an older agent to load the current binary. Do not delete
+<code>.shield/state/</code> or edit project IDs after a move.</p>
+<h2 id="the-agent-does-not-seem-to-use-shield">The agent does not seem to use Shield</h2>
+<p>Check whether the agent is registered with <code>shield status</code>. If it is missing,
+run <code>shield mcp setup --agent claude</code> or <code>shield mcp setup --agent codex</code> in an interactive terminal,
+review the changes, and confirm.</p>
+<p>Restart the agent, trust the project, enable native hooks, and approve the MCP
+connection. Codex also requires reviewing hook definitions through <code>/hooks</code>.
+Use <code>shield doctor</code> to check for missing or changed owned files and binaries.</p>
+<p>In JSON output, <code>enforcement</code> reports <code>installed</code>, <code>defined-for-hub</code> or
+<code>defined-for-box</code> (the Hub or Box definition exists but no published hooks were
+found), <code>degraded</code>, or <code>not-installed</code>. <code>coverage.host_integration</code> describes
+that definition, with <code>agent</code> naming <code>hub</code> or <code>box</code>. Policy-only inspection
+reports <code>not-checked</code> because it does not inspect agent integration files.
+When paused, <code>enforcement</code> reports <code>disabled</code> even when hooks remain installed;
+<code>enabled</code> is false. Protected-file and operator guards remain in place while
+ordinary policy enforcement is paused. Use the MCP <code>enable</code> tool or
+<code>shield enable</code> to review resuming enforcement. For a Hub installation,
+use <code>hub setup --dry-run</code> to review what Hub would publish; for Box, use
+<code>box config sync --server shield --dry-run</code>.</p>
+<p>Check <code>coverage.verification.agents</code> for recorded hook activity and its timestamp.
+Recorded events show that callbacks ran at those times; they do not prove that
+every current session loaded hooks. Missing or unavailable history also does not
+prove that hooks are inactive. Use <code>shield history list</code> and
+<code>shield history show ENTRY</code> to inspect the actual requests and outcomes.</p>
+<p>Interrupted confirmed setup resumes on the next MCP request while preserving
+unrelated settings. If an owned setting conflicts, the agent can request
+<code>mcp_setup {"pending":"review"}</code> to show its replacement for your approval,
+or <code>mcp_setup {"pending":"cancel"}</code> to review cancellation. Manual edits are
+preserved unless you approve their replacement. The optional terminal routes
+are <code>shield mcp setup --pending review</code> and <code>shield mcp setup --pending cancel</code>.</p>
+<p>Hooks must be loaded to check requests. A host may continue execution if it
+skips, disables, kills, or times out a hook. See
+<a href="../claude-project/#load-the-hooks">loading and coverage</a>.</p>
+<h2 id="the-agent-still-uses-the-previous-shield">The agent still uses the previous Shield</h2>
+<p>Hooks start the installed <code>shield</code> for every request, but the MCP server is one
+process that the agent starts with its session. After installing a new build:</p>
+<ol>
+<li>In each project, run <code>shield mcp setup --agent claude</code> or <code>shield mcp setup --agent codex</code> and
+confirm. Setup records the new executable’s digest; until then
+<code>shield status</code> reports that the registered binary changed.</li>
+<li>Exit the agent session and start a new one, so the agent launches the new MCP
+server. Reconnecting the MCP server from the agent (for example <code>/mcp</code> in
+Claude Code) also restarts it. An open session keeps the old server process.</li>
+<li>Run <code>shield doctor</code> to confirm the integration. The new version compiles
+the policy files into a new plan on its first request.</li>
+</ol>
+<p>Policy files, proposals, history and approvals stay in place across updates.
+Do not delete <code>.shield/state/</code> to recover; only the compiled cache is
+disposable.</p>
+<h2 id="the-request-was-allowed-or-blocked-unexpectedly">The request was allowed or blocked unexpectedly</h2>
+<p>Inspect the recorded request:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="sh"><code><span class="line"><span style="color:#B392F0">shield</span><span style="color:#9ECBFF"> history</span><span style="color:#9ECBFF"> list</span></span></code></pre>
+<p>Use an entry ID from that list in place of <code>ENTRY</code>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="sh"><code><span class="line"><span style="color:#B392F0">shield</span><span style="color:#9ECBFF"> history</span><span style="color:#9ECBFF"> show</span><span style="color:#9ECBFF"> ENTRY</span></span>
+<span class="line"><span style="color:#B392F0">shield</span><span style="color:#9ECBFF"> rule</span><span style="color:#9ECBFF"> list</span><span style="color:#79B8FF"> --json</span></span></code></pre>
+<p>Check the command, working directory, matching rule, failed requirements, and
+active revision. Extra arguments or unknown options can stop a rule matching;
+failed requirements can select its Ask or Deny branch.</p>
+<p>Check the host action too: Codex’s Allow fallback can let a policy Ask proceed.</p>
+<p>For <code>rg</code> searches, a missing file or directory within permitted locations can
+proceed when the request meets the other policy requirements. Shield checks its
+existing parent directories and links, and <code>rg</code> reports the missing path. For
+example, <code>rg clientId src/missing.ts</code> can pass policy even when that file is absent.
+The same checks apply to missing pattern files (<code>-f</code>) and <code>--ignore-file</code> paths.
+Missing paths outside permitted roots or under exclusions still fail policy.
+A missing search directory is also checked against excluded subtrees it could
+cover.</p>
+<p>For a blocked search, filesystem access failures, invalid directory components
+and unresolved links have separate messages. Correct the named path or its access
+before retrying. Correcting one operand does not approve other paths or
+unsupported options.</p>
+<p>If the message asks for a rewrite, submit the supported literal form it names.
+If it identifies an unsupported tool, a policy change cannot add that support.
+Native Claude and Codex hooks defer unmodeled internal tools to host permissions;
+the separate <a href="../claude-read-only/">read-only SDK adapter</a> denies tools outside its
+supported reads.
+If policy returns Deny, ordinary approval cannot override it. Review a narrower
+request or an appropriate policy change instead. See
+<a href="../policy-decisions/">policy decisions</a> for precedence and Ask handling.</p>
+<h2 id="a-read-only-github-graphql-query-is-blocked">A read-only GitHub GraphQL query is blocked</h2>
+<p>Inspect <code>shield pack list</code>, <code>shield pack show PACK_SELECTOR</code> and the request’s
+<code>shield history show ENTRY</code> output. The published GitHub 0.3.0 pack asks for raw
+API access when unscoped; its <code>cli-scope</code> precondition rejects API calls when the
+optional <code>repository</code> setting is active. Read-only intent does not establish
+permission, and updating the engine alone does not change installed pack rules.</p>
+<p>Inspect the rule or precondition named in the recorded decision before proposing
+an appropriate policy change. Adding <code>-R</code> does not prove the repository scope of
+a GraphQL query. For custom rules using the implemented <code>graphql-v1</code> capability,
+see the <a href="../rule-reference/#graphql-requests">GraphQL reference</a> for supported
+carriers, selection models and refusal conditions.</p>
+<h2 id="a-command-runs-even-though-policy-says-ask">A command runs even though policy says Ask</h2>
+<p>Check the Ask fallback with <code>shield status</code>. New Codex setups let valid Ask
+requests proceed, including unmatched requests and Strict-profile Asks.
+History still records Ask, without individual operator approval.</p>
+<p>To reject an operation, review a matching Deny rule. Ask or a missing match
+will not block it under the Allow fallback. See
+<a href="../policy-decisions/#what-happens-after-ask">policy decisions</a> and
+<a href="../policy-rules/#match-commands-and-enforce-requirements">requirements with an unmet branch</a>.
+The <a href="../claude-project/">integration guide</a> covers exceptions and saved fallbacks.</p>
+<h2 id="i-edited-a-rule-but-behavior-did-not-change">I edited a rule, but behavior did not change</h2>
+<p>Shield reads the policy files on every request, so a saved edit applies to the
+next one. Run:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="sh"><code><span class="line"><span style="color:#B392F0">shield</span><span style="color:#9ECBFF"> status</span></span></code></pre>
+<p>When policy loading fails and Shield finds Git conflict markers, it reports
+the affected paths and opening lines in the shared configuration, local
+<code>config.local.yml</code>, rules and lock files. Resolve the conflicts and run
+<code>shield status</code> again. Shield resumes using the files as soon as they are valid.
+A supported native request can still use <code>request_approve</code> and an identical
+retry. Supported Git restorations can repair conflicted policy files through
+that review. Direct policy edits, state and caches remain protected. See
+<a href="../project-review/#allowing-one-blocked-request">allowing one blocked request</a>.
+Otherwise inspect the request with
+<code>shield history list</code> to see which rule decided it; another rule may take precedence.
+Use <code>shield pack add</code> to acquire a new pack release rather than replacing its
+artifact by hand.</p>
+<p><code>shield rule add</code>, <code>shield rule edit ID</code> and <code>shield rule remove ID</code> validate a
+change and show it before writing. See
+<a href="../policy-files/">policy files</a> and
+<a href="../project-review/#custom-rules-and-proposed-changes">project policy</a>.</p>
+<h2 id="a-proposal-is-stale">A proposal is stale</h2>
+<p>Another policy or setup change can make a proposal stale. Ask the agent to
+inspect current state and prepare a fresh proposal. Wait for each application
+result before preparing the next; do not reuse old approval arguments. See
+<a href="../project-mcp/#proposals-and-operator-review">proposal review</a>.</p>
+<h2 id="another-shield-operation-is-writing">Another Shield operation is writing</h2>
+<p>A command that writes policy files holds a writer lock, released automatically
+if Shield exits or crashes. A lock error means another operation is still
+writing; retry after it finishes. If the files changed while a command was
+showing its change, Shield refuses and asks you to run the command again.</p>
+<h2 id="the-compiled-policy-cache-cannot-load">The compiled policy cache cannot load</h2>
+<p>Shield compiles missing, corrupt or mismatched plans from the policy files by
+itself. A failure naming the compiled policy folder means Shield cannot use
+the folder. Run <code>shield doctor</code>, then fix the folder’s ownership or permissions,
+or choose another with <code>shield mcp setup --cache-dir /absolute/path</code>. See
+<a href="../compiled-cache/">compiled policy cache</a>.</p>
+<h2 id="initialization-cannot-download-the-baseline">Initialization cannot download the baseline</h2>
+<p>Default initialization needs the pinned main registry. Check the reported
+connection or verification error; failed acquisition leaves a new project
+unenrolled. Retry <code>shield init</code> after resolving that cause.</p>
+<p>If you intend to start without the baseline, use <code>shield init --no-baseline</code>.
+This is a different policy choice, not a way to bypass artifact verification.
+Unmatched requests return Ask. See <a href="../getting-started/">first setup</a>.</p>
+<h2 id="terminal-confirmation-is-unavailable">Terminal confirmation is unavailable</h2>
+<p>Run the command yourself in an interactive, cursor-capable terminal. Redirected
+input, JSON mode, and intercepted agent tool calls cannot provide CLI operator
+confirmation. Enlarge the terminal if a prompt cannot fit.</p>
+<p>On a host that supports in-session confirmation, agents can prepare changes
+with <code>policy_propose</code> and request approval with <code>policy_apply</code>. If confirmation
+prompts are disabled, enable them for the session, then prepare a fresh change
+if it is still needed. If the host cannot present confirmation for a prepared
+review, close that attempt. Use <code>policy_show</code> to inspect its outcome.</p>
+<p>For a host without a supported approval adapter, Shield returns
+<code>operator_review_required</code> before creating a proposal. The agent can use
+inspection tools, report the missing capability, and continue with work the
+active policy allows.
+See <a href="../operator-experience/#controls-and-output">terminal controls</a>.</p>
+</div><div class="docs-page-footer"><a target="_blank" rel="noopener" href="https://github.com/canonic2/canonic/blob/main/packages/shield/docs/troubleshooting.md">在 GitHub 上查看 Markdown ↗</a></div><nav class="docs-pagination" aria-label="指南导航"><a href="/zh-hans/shield/docs/mcp-connections/"><span>← 上一步</span><strong lang="en">Configure project MCP servers</strong></a><a href="/zh-hans/shield/docs/policy-rules/"><span>下一步 →</span><strong lang="en">Writing policy rules</strong></a></nav></article><aside class="docs-toc" aria-label="本页内容"><h2>本页内容</h2><nav lang="en"><a href="#shield-says-state-is-briefly-locked">Shield says state is briefly locked</a><a href="#the-hook-says-codex-cannot-request-approval">The hook says Codex cannot request approval</a><a href="#a-pack-proposal-reports-candidate_error">A pack proposal reports candidate_error</a><a href="#the-project-was-moved-or-copied">The project was moved or copied</a><a href="#the-agent-does-not-seem-to-use-shield">The agent does not seem to use Shield</a><a href="#the-agent-still-uses-the-previous-shield">The agent still uses the previous Shield</a><a href="#the-request-was-allowed-or-blocked-unexpectedly">The request was allowed or blocked unexpectedly</a><a href="#a-read-only-github-graphql-query-is-blocked">A read-only GitHub GraphQL query is blocked</a><a href="#a-command-runs-even-though-policy-says-ask">A command runs even though policy says Ask</a><a href="#i-edited-a-rule-but-behavior-did-not-change">I edited a rule, but behavior did not change</a><a href="#a-proposal-is-stale">A proposal is stale</a><a href="#another-shield-operation-is-writing">Another Shield operation is writing</a><a href="#the-compiled-policy-cache-cannot-load">The compiled policy cache cannot load</a><a href="#initialization-cannot-download-the-baseline">Initialization cannot download the baseline</a><a href="#terminal-confirmation-is-unavailable">Terminal confirmation is unavailable</a></nav><a class="docs-back-top" href="#content">返回顶部 ↑</a></aside></div></main><footer class="foot"><div class="wrap"><div class="foot-top"><a class="logo" href="/zh-hans/workbench/" aria-label="Canonic 首页"><svg viewBox="0 -10 197 38" role="img" aria-label="canonic"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTpjMmY5MjI0OC1hYTBiLTQxOGEtYTY2OS0zMzkyM2Y0N2YxYzAAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaDLGWHSl5JoSZ+W85OxqZEYAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDphMzZhOWRjZC0xODZiLTQ4MjgtODE0Yy1lYmEyZjQyZWI5NzJscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoZIhDi0aHiLAMdxEah+RlcQAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggJf4/3u3fYxxWShd1/iioo5k/sQBU1/Wqy+WCnQecuYGkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaPtbRLzQIBR1jlefUBFG8K8AAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCA3ez32oMVE7DJVy4UE2OB9qKRd9zwPrbxDKEVyc71J+WRuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBi3Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOmMyZjkyMjQ4LWFhMGItNDE4YS1hNjY5LTMzOTIzZjQ3ZjFjMC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjJlOGI2OGUyLWJkNDktNGVhNC1hOTUxLTZkMGUxYTYwZWQ0YnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCAl/j/e7d9jHFZKF3X+KKijmT+xAFTX9arL5YKdB5y5gaJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggk7cyZJxWFQae48JCBXcs944XKmTYeSePmNy5IvdaY+2iY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggiM5Szgg1CCf/NInB6jp1+Bqgwf4q8ryHrOZluSHyvO10Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQPqZ+elhJTFKPVyXHvET0pc0IvvFohYSYMYfLPmrTnq8wCSil9Dl9GAkfXGxySYm8FJ1/7M0yG7RRI2RMGDUgJY=</c2pa:manifest></metadata><path fill="currentColor" d="M0 0L24 0L24 7L7 7L7 21L24 21L24 28L0 28ZM30 0L48 0L48 7L37 7L37 21L51 21L51 0L58 0L58 28L30 28ZM64 0L87.96 0L100.08 21L113 21L113 7L100.08 7L97.77 11L93.73 4L96.04 0L120 0L120 28L96.04 28L83.92 7L71 7L71 28L64 28ZM86.23 17L90.27 24L87.96 28L79.88 28ZM126 0L154 0L154 28L147 28L147 7L133 7L133 28L126 28ZM160 0L167 0L167 28L160 28ZM160 -10L167 -10L167 -3L160 -3ZM173 0L197 0L197 7L180 7L180 21L197 21L197 28L173 28Z"/><path class="accent" d="M103 11L109 11L109 17L103 17Z"/></svg></a><div class="foot-col"><span class="foot-head">产品</span><a href="/zh-hans/workbench/">Workbench</a><span class="foot-soon">Testrun · 即将推出</span><span class="foot-soon">Playground · 即将推出</span><a href="/zh-hans/shield/">Shield</a></div><details class="site-language"><summary>语言 <span lang="zh-Hans">· 简体中文</span></summary><ul><li><a href="/en-ca/shield/docs/troubleshooting/" lang="en-CA">English (Canada)</a></li><li><a href="/en-gb/shield/docs/troubleshooting/" lang="en-GB">English (UK)</a></li><li><a href="/shield/docs/troubleshooting/" lang="en-US">English (US)</a></li><li><a href="/fr-ca/shield/docs/troubleshooting/" lang="fr-CA">Français (Canada)</a></li><li><a href="/fr-fr/shield/docs/troubleshooting/" lang="fr-FR">Français (France)</a></li><li><a href="/es/shield/docs/troubleshooting/" lang="es">Español</a></li><li><a href="/de/shield/docs/troubleshooting/" lang="de">Deutsch</a></li><li><a href="/nl/shield/docs/troubleshooting/" lang="nl">Nederlands</a></li><li><a href="/fi/shield/docs/troubleshooting/" lang="fi">Suomi</a></li><li><a href="/sv/shield/docs/troubleshooting/" lang="sv">Svenska</a></li><li><a href="/nb/shield/docs/troubleshooting/" lang="nb">Norsk bokmål</a></li><li><a href="/zh-hans/shield/docs/troubleshooting/" lang="zh-Hans" aria-current="page">简体中文</a></li><li><a href="/ja/shield/docs/troubleshooting/" lang="ja">日本語</a></li></ul></details></div><div class="foot-bottom"><span>© 2026 Canonic Inc.</span></div></div></footer></body></html>

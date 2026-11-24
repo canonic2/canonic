@@ -1,0 +1,731 @@
+<!DOCTYPE html><html lang="sv"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Developing Shield · Dokumentation för Shield · Canonic</title><meta name="description" content="Shield is one Cargo package ( canonic-shield ), library  shield , and executable  shield . Rust nightly-2026-11-09 (rustc 1.102) is pinned with rustfmt, Clippy and llvm-tools. Carg"><link rel="canonical" href="https://canonic.sh/shield/docs/development/"><link rel="icon" href="/canonic.svg" type="image/svg+xml"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Geist+Mono:wght@400;500&display=swap"><script>document.documentElement.classList.add("js");</script><link rel="stylesheet" href="/_astro/Base.CALxgHBr.css"><link rel="stylesheet" href="/_astro/DocsPage.CRDdP4HS.css"></head><body><a class="skip" href="#content">Hoppa till innehållet</a><header class="top"><nav class="products" aria-label="Produkter"><div class="wrap"><a class="logo" href="/sv/workbench/" aria-label="Canonics startsida"><svg viewBox="0 -10 197 38" role="img" aria-label="canonic"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTpjMmY5MjI0OC1hYTBiLTQxOGEtYTY2OS0zMzkyM2Y0N2YxYzAAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaDLGWHSl5JoSZ+W85OxqZEYAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDphMzZhOWRjZC0xODZiLTQ4MjgtODE0Yy1lYmEyZjQyZWI5NzJscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoZIhDi0aHiLAMdxEah+RlcQAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggJf4/3u3fYxxWShd1/iioo5k/sQBU1/Wqy+WCnQecuYGkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaPtbRLzQIBR1jlefUBFG8K8AAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCA3ez32oMVE7DJVy4UE2OB9qKRd9zwPrbxDKEVyc71J+WRuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBi3Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOmMyZjkyMjQ4LWFhMGItNDE4YS1hNjY5LTMzOTIzZjQ3ZjFjMC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjJlOGI2OGUyLWJkNDktNGVhNC1hOTUxLTZkMGUxYTYwZWQ0YnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCAl/j/e7d9jHFZKF3X+KKijmT+xAFTX9arL5YKdB5y5gaJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggk7cyZJxWFQae48JCBXcs944XKmTYeSePmNy5IvdaY+2iY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggiM5Szgg1CCf/NInB6jp1+Bqgwf4q8ryHrOZluSHyvO10Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQPqZ+elhJTFKPVyXHvET0pc0IvvFohYSYMYfLPmrTnq8wCSil9Dl9GAkfXGxySYm8FJ1/7M0yG7RRI2RMGDUgJY=</c2pa:manifest></metadata><path fill="currentColor" d="M0 0L24 0L24 7L7 7L7 21L24 21L24 28L0 28ZM30 0L48 0L48 7L37 7L37 21L51 21L51 0L58 0L58 28L30 28ZM64 0L87.96 0L100.08 21L113 21L113 7L100.08 7L97.77 11L93.73 4L96.04 0L120 0L120 28L96.04 28L83.92 7L71 7L71 28L64 28ZM86.23 17L90.27 24L87.96 28L79.88 28ZM126 0L154 0L154 28L147 28L147 7L133 7L133 28L126 28ZM160 0L167 0L167 28L160 28ZM160 -10L167 -10L167 -3L160 -3ZM173 0L197 0L197 7L180 7L180 21L197 21L197 28L173 28Z"/><path class="accent" d="M103 11L109 11L109 17L103 17Z"/></svg></a><div class="tabs"><a class="tab" href="/sv/workbench/"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M12 4L19 4L19 29L44 29L44 36L12 36Z" fill="currentColor"></path><path d="M22 12L36 12L36 26L29 26L29 19L22 19ZM4 12L9 12L9 19L4 19ZM29 39L36 39L36 44L29 44Z" class="accent"></path></svg>Workbench</a><span class="tab is-soon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M4 20.92L22.5 31.6L22.5 40.93L4 30.25ZM44 20.92L25.5 31.6L25.5 40.93L44 30.25Z" fill="currentColor"></path><path d="M5 18.04L24 7.07L43 18.04L36 22.08L24 15.15L12 22.08Z" fill="currentColor"></path></svg>Testrun<span class="soon">Snart</span><span class="tip" aria-hidden="true">Testrun: Kvalitetssäkring, kommer snart</span></span><span class="tab is-soon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M4 5.5L17.5 5.5L17.5 12.5L11 12.5L11 22.5L4 22.5ZM4 25.5L11 25.5L11 35.5L17.5 35.5L17.5 42.5L4 42.5Z" fill="currentColor"></path><path d="M44 5.5L30.5 5.5L30.5 12.5L37 12.5L37 22.5L44 22.5ZM44 25.5L37 25.5L37 35.5L30.5 35.5L30.5 42.5L44 42.5Z" fill="currentColor"></path></svg>Playground<span class="soon">Snart</span><span class="tip" aria-hidden="true">Playground: API-testmiljö, kommer snart</span></span><a class="tab" href="/sv/shield/" aria-current="page"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M6.68 14L22.5 4.87L22.5 12.95L6.68 22.08ZM6.68 25.54L6.68 34L22.5 43.13L22.5 35.05L13.68 29.96L13.68 21.5ZM41.32 25.54L41.32 34L25.5 43.13L25.5 35.05L34.32 29.96L34.32 21.5Z" fill="currentColor"></path><path d="M41.32 14L25.5 4.87L25.5 12.95L41.32 22.08Z" class="accent"></path></svg>Shield</a></div><a class="github" href="https://github.com/canonic2/canonic" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a></div></nav><nav class="sub" aria-label="Shield"><div class="wrap"><span class="sub-name">Shield</span><span class="sub-rule" aria-hidden="true"></span><div class="sub-links"><a href="/sv/shield/">Översikt</a><a href="/sv/shield/docs/" aria-current="page">Dokumentation</a><a href="/sv/shield/#install">Installation</a><a href="https://github.com/canonic2/canonic/tree/main/packages/shield" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a></div><a class="btn btn-sm" href="/sv/shield/#install">Bygg från källkod</a></div></nav></header><main id="content" tabindex="-1"><div class="docs-shell wrap"><canonic-docs-sidebar><details class="docs-sidebar" open><summary>Dokumentation <span aria-hidden="true">⌄</span></summary><div class="docs-sidebar-body"><div class="docs-search" hidden><label for="docs-search">Sök i dokumentationen</label><input id="docs-search" type="search" placeholder="Sök i dokumentationen" autocomplete="off" aria-controls="docs-navigation" data-index="/shield/docs/search.json"><p class="docs-search-status" role="status" data-matches="{count} matchande guider" data-empty="Inga matchande guider" data-unavailable="Sökningen är inte tillgänglig. Bläddra bland guiderna nedan."></p></div><nav id="docs-navigation" aria-label="Dokumentation"><div class="docs-group" lang="en"><h2>Get started</h2><a href="/sv/shield/docs/" data-doc-id="index">Shield documentation</a><a href="/sv/shield/docs/introduction/" data-doc-id="introduction">What is Shield?</a><a href="/sv/shield/docs/getting-started/" data-doc-id="getting-started">Your first Shield project</a><a href="/sv/shield/docs/policy-decisions/" data-doc-id="policy-decisions">Understand policy decisions</a><a href="/sv/shield/docs/operator-experience/" data-doc-id="operator-experience">Shield in the terminal</a></div><div class="docs-group" lang="en"><h2>Work with your project</h2><a href="/sv/shield/docs/policy-files/" data-doc-id="policy-files">Policy files and settings</a><a href="/sv/shield/docs/project-review/" data-doc-id="project-review">Project policy, approvals and history</a><a href="/sv/shield/docs/local-registry/" data-doc-id="local-registry">Registry sources and packs</a><a href="/sv/shield/docs/claude-project/" data-doc-id="claude-project">Connect Claude Code and Codex</a><a href="/sv/shield/docs/mcp-connections/" data-doc-id="mcp-connections">Configure project MCP servers</a><a href="/sv/shield/docs/troubleshooting/" data-doc-id="troubleshooting">Troubleshoot Shield</a></div><div class="docs-group" lang="en"><h2>Write rules</h2><a href="/sv/shield/docs/policy-rules/" data-doc-id="policy-rules">Writing policy rules</a><a href="/sv/shield/docs/rule-reference/" data-doc-id="rule-reference">Rule reference</a><a href="/sv/shield/docs/pack-validation/" data-doc-id="pack-validation">Validating permission packs</a></div><div class="docs-group" lang="en"><h2>Integrate Shield</h2><a href="/sv/shield/docs/project-mcp/" data-doc-id="project-mcp">Use Shield from an agent (MCP)</a><a href="/sv/shield/docs/claude-read-only/" data-doc-id="claude-read-only">Claude Agent SDK read-only integration</a><a href="/sv/shield/docs/native-run/" data-doc-id="native-run">Bounded native execution</a><a href="/sv/shield/docs/enforcement-handoff/" data-doc-id="enforcement-handoff">Embedded enforcement handoff</a></div><div class="docs-group" lang="en"><h2>Recovery and development</h2><a href="/sv/shield/docs/compiled-cache/" data-doc-id="compiled-cache">Compiled policy cache</a><a href="/sv/shield/docs/development/" data-doc-id="development" aria-current="page">Developing Shield</a></div><div class="docs-group" lang="en"><h2>More guides</h2><a href="/sv/shield/docs/session-grants/" data-doc-id="session-grants">Approve a batch for one conversation</a><a href="/sv/shield/docs/copilot-cli/" data-doc-id="copilot-cli">Connect Copilot CLI</a><a href="/sv/shield/docs/google-agents/" data-doc-id="google-agents">Connect Gemini CLI and Antigravity CLI</a><a href="/sv/shield/docs/opencode/" data-doc-id="opencode">Connect OpenCode V1</a></div></nav><a class="docs-install" href="/sv/shield/#install">Hämta Shield <span aria-hidden="true">→</span></a></div></details></canonic-docs-sidebar><script type="module">var e=class extends HTMLElement{connectedCallback(){let e=this.querySelector(`.docs-sidebar`),t=matchMedia(`(max-width: 820px)`);e&&(e.open=!t.matches,t.addEventListener(`change`,()=>{e.open=!t.matches}));let n=this.querySelector(`input[type=search]`),r=this.querySelector(`.docs-search-status`);if(!n||!r)return;n.closest(`.docs-search`).hidden=!1;let i=[...this.querySelectorAll(`[data-doc-id]`)],a=[...this.querySelectorAll(`.docs-group`)],o,s=0;n.addEventListener(`input`,async()=>{let e=++s,t=n.value.trim().toLowerCase();if(!t){i.forEach(e=>{e.hidden=!1}),a.forEach(e=>{e.hidden=!1}),r.textContent=``;return}try{o||=fetch(n.dataset.index||``).then(e=>{if(!e.ok)throw Error(`Search unavailable`);return e.json()}).catch(e=>{throw o=void 0,e});let c=await o;if(e!==s)return;let l=t.split(/\s+/),u=new Set(c.filter(e=>l.every(t=>e.text.includes(t))).map(e=>e.id));i.forEach(e=>{e.hidden=!u.has(e.dataset.docId||``)}),a.forEach(e=>{e.hidden=!e.querySelector(`a:not([hidden])`)}),r.textContent=u.size?(r.dataset.matches||``).replace(`{count}`,String(u.size)):r.dataset.empty||``}catch{e===s&&(r.textContent=r.dataset.unavailable||``)}})}};customElements.get(`canonic-docs-sidebar`)||customElements.define(`canonic-docs-sidebar`,e);</script><article class="docs-article"><div class="docs-breadcrumb"><a href="/sv/shield/docs/">Dokumentation för Shield</a><span aria-hidden="true">/</span><span lang="en">Recovery and development</span></div><p class="docs-source-language">Guide på engelska</p><div class="docs-prose" lang="en"><h1 id="developing-shield">Developing Shield</h1>
+<p>Shield is one Cargo package (<code>canonic-shield</code>), library <code>shield</code>, and executable
+<code>shield</code>. Rust nightly-2026-11-09 (rustc 1.102) is pinned with rustfmt, Clippy and llvm-tools. Cargo.lock
+owns dependency versions; there is no root Cargo workspace. The package’s own
+workspace adds only the <code>xtask</code> crate, which holds the development tasks that
+are more than one Cargo command; <code>cargo xtask --help</code> lists them.</p>
+<h2 id="fast-iteration">Fast iteration</h2>
+<p>From this package directory, where rustup selects the pinned toolchain:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="sh"><code><span class="line"><span style="color:#B392F0">cargo</span><span style="color:#9ECBFF"> build</span><span style="color:#79B8FF"> --locked</span></span>
+<span class="line"><span style="color:#B392F0">cargo</span><span style="color:#9ECBFF"> nextest</span><span style="color:#9ECBFF"> run</span><span style="color:#79B8FF"> --locked</span><span style="color:#79B8FF"> --lib</span><span style="color:#9ECBFF"> 'policy::'</span></span>
+<span class="line"><span style="color:#6A737D"># Select integration tests explicitly when needed:</span></span>
+<span class="line"><span style="color:#B392F0">cargo</span><span style="color:#9ECBFF"> nextest</span><span style="color:#9ECBFF"> run</span><span style="color:#79B8FF"> --locked</span><span style="color:#79B8FF"> --test</span><span style="color:#9ECBFF"> integration</span><span style="color:#9ECBFF"> 'selected_test_name'</span></span></code></pre>
+<p><code>cargo build</code> writes an incremental build to <code>target/debug/shield</code>; run it
+directly to try changes. Give nextest a substring filter, with <code>--lib</code> for
+library tests. Replace the integration example’s placeholder with a real test
+name; nextest fails if nothing matches.</p>
+<p>For a pack-add timeout, run the five-second MCP regression with an immutable
+public pack artifact. The fixture copies its rules into test-owned releases;
+it never modifies the artifact or an enrolled project:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="sh"><code><span class="line"><span style="color:#E1E4E8">SHIELD_PACK_PROFILE_ARTIFACT</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">/path/to/pack.yml</span><span style="color:#B392F0"> cargo</span><span style="color:#9ECBFF"> nextest</span><span style="color:#9ECBFF"> run</span><span style="color:#79B8FF"> --locked</span><span style="color:#79B8FF"> --lib</span><span style="color:#9ECBFF"> development_pack_proposals_complete</span></span></code></pre>
+<p>Keep <code>target/</code> between iterations to reuse Cargo’s cache. Use release builds
+for performance measurements.</p>
+<p>To check container shell policy against the published Docker and baseline
+artifacts, pass the registry checkout’s <code>public/</code> directory to the focused
+fixture. It reads pack files and previews policy decisions without running Docker.</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="sh"><code><span class="line"><span style="color:#E1E4E8">SHIELD_DOCKER_TEST_REGISTRY</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">/path/to/shield-registry/public</span><span style="color:#B392F0"> cargo</span><span style="color:#9ECBFF"> nextest</span><span style="color:#9ECBFF"> run</span><span style="color:#79B8FF"> --locked</span><span style="color:#79B8FF"> --lib</span><span style="color:#79B8FF"> --run-ignored</span><span style="color:#9ECBFF"> ignored-only</span><span style="color:#9ECBFF"> published_docker_and_baseline_packs_preserve_container_policy</span></span></code></pre>
+<p>To check the in-place upgrade of a pre-continuity checkpoint written by a
+separately retained executable:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="sh"><code><span class="line"><span style="color:#E1E4E8">SHIELD_PREVIOUS_BINARY</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">/path/to/previous/shield</span><span style="color:#B392F0"> cargo</span><span style="color:#9ECBFF"> nextest</span><span style="color:#9ECBFF"> run</span><span style="color:#79B8FF"> --locked</span><span style="color:#79B8FF"> --test</span><span style="color:#9ECBFF"> integration</span><span style="color:#79B8FF"> --run-ignored</span><span style="color:#9ECBFF"> ignored-only</span><span style="color:#9ECBFF"> previous_binary_unreceipted_checkpoint</span></span></code></pre>
+<p>This opt-in fixture initializes through that previous binary in an isolated
+project and home. It verifies that status reports the pending upgrade without
+changing the record, and that the first ordinary command keeps the project ID,
+converts the checkpoint once to runtime state without a copy of the policy, and
+that later reads leave it unchanged. The supplied binary must predate the
+policy-files format.</p>
+<h2 id="native-linux-development">Native Linux development</h2>
+<p>GNU/Linux builds support x64 and ARM64 with the pinned Rust toolchain, a GNU C
+compiler and ordinary Unix file permissions, terminal leases and native hooks.
+Shield includes MCP Kit, Registry Kit and TUI Kit; Process Kit is not used.
+The CLI needs no Node installation. Interactive commands require terminal
+stdin/stdout and a cursor-capable <code>TERM</code>; hooks and MCP stdio remain noninteractive.</p>
+<p>From this package directory, <code>cargo build --locked</code> builds <code>target/debug/shield</code>.
+The distribution helper additionally requires Python 3.11+ and GNU binutils:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="sh"><code><span class="line"><span style="color:#B392F0">python3</span><span style="color:#9ECBFF"> scripts/release-linux.py</span><span style="color:#9ECBFF"> build</span><span style="color:#79B8FF"> --architecture</span><span style="color:#9ECBFF"> x64</span></span>
+<span class="line"><span style="color:#B392F0">python3</span><span style="color:#9ECBFF"> scripts/release-linux.py</span><span style="color:#9ECBFF"> package</span><span style="color:#79B8FF"> --architecture</span><span style="color:#9ECBFF"> x64</span></span></code></pre>
+<p>Outputs are <code>target/x86_64-unknown-linux-gnu/release/shield</code> and
+<code>dist/shield-&lt;version&gt;-x86_64-unknown-linux-gnu.tar.gz</code>, with a <code>.sha256</code> sidecar.
+<code>CARGO_TARGET_DIR</code> selects another build directory; <code>--output-directory</code> selects
+another package directory. Existing archives/checksums are refused. The helper
+remaps publisher paths in Rust/C code, checks the ELF architecture and scans the
+binary for publisher paths before accepting a build. Clear custom Rust/C flags
+before using it. Package after rebuilding changed code or dependencies.</p>
+<p>For a cross-build from x64, install an <code>aarch64-linux-gnu-gcc</code> cross-compiler
+and its GNU target libraries, then add the pinned Rust target:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="sh"><code><span class="line"><span style="color:#B392F0">rustup</span><span style="color:#9ECBFF"> target</span><span style="color:#9ECBFF"> add</span><span style="color:#79B8FF"> --toolchain</span><span style="color:#9ECBFF"> nightly-2026-11-09</span><span style="color:#9ECBFF"> aarch64-unknown-linux-gnu</span></span>
+<span class="line"><span style="color:#B392F0">python3</span><span style="color:#9ECBFF"> scripts/release-linux.py</span><span style="color:#9ECBFF"> build</span><span style="color:#79B8FF"> --architecture</span><span style="color:#9ECBFF"> arm64</span></span>
+<span class="line"><span style="color:#B392F0">python3</span><span style="color:#9ECBFF"> scripts/release-linux.py</span><span style="color:#9ECBFF"> package</span><span style="color:#79B8FF"> --architecture</span><span style="color:#9ECBFF"> arm64</span></span></code></pre>
+<p>An ARM64 Linux host can build that target with its native C compiler. Cross-builds
+do not establish native ARM64 acceptance. The packager includes Canonic’s license,
+resolved normal/build dependency notices and Rust standard-library notices.
+It normalizes archive ownership and indexes notices in <code>BUILD.json</code>, alongside
+the executable checksum, versioned glibc symbol requirements and a conservative
+minimum glibc baseline at least as new as the selected compiler’s target libc.
+The helper locates <code>libc.so.6</code> through that compiler, checks its architecture
+and reads its release version without executing it. An unavailable or
+unrecognized target libc refuses the build, including cross-builds.
+These are workspace candidates without source-revision attestation.</p>
+<h3 id="linux-installation-and-compatibility">Linux installation and compatibility</h3>
+<p>Extract the archive, then copy its <code>shield</code> executable to a stable folder on PATH,
+for example <code>~/.local/bin/shield</code>, with mode 755. Check <code>shield --version</code> and
+follow <a href="../getting-started/">Your first Shield project</a>. Close Shield and connected
+agents before replacing the executable. Updates at the same installed path
+keep existing registrations; moving the executable requires setting up the
+registered agents again with <code>shield mcp setup --agent &lt;agent&gt;</code>. To remove an
+installation, run <code>shield mcp remove</code> for each connected agent in each project, then delete the
+executable. Preserve project <code>.shield</code> folders to retain policy and history.</p>
+<p>The GNU executable’s minimum glibc version depends on the target toolchain and is
+recorded in <code>BUILD.json</code>. Build on the oldest intended supported GNU system to
+target older hosts; a successful build on a new Ubuntu release does not prove
+compatibility with older distributions. The bounded native runner additionally
+requires a supported glibc 1.1 loader cache, readable kernel procfs, protected
+system images and the exact commands in <a href="../native-run/#supported-contract">native execution</a>.
+Musl-only hosts are outside this GNU build target.</p>
+<p>Linux compatibility completion is owner-accepted for this stage with focused
+x64 checks and other behavior assumed from the shared Unix implementation.
+Full package suites, live Claude/Codex sessions, additional distributions and
+ARM64 build/runtime acceptance are not claimed. Signing and publication remain
+separate distribution work; these scripts perform neither.</p>
+<h2 id="native-windows-development">Native Windows development</h2>
+<p>Use the pinned MSVC Rust toolchain and Visual Studio C++ build tools. From this
+package directory in a Windows developer terminal:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="powershell"><code><span class="line"><span style="color:#E1E4E8">cargo build </span><span style="color:#F97583">--</span><span style="color:#E1E4E8">locked</span></span>
+<span class="line"><span style="color:#E1E4E8">cargo test </span><span style="color:#F97583">--</span><span style="color:#E1E4E8">locked </span><span style="color:#F97583">--</span><span style="color:#E1E4E8">lib windows_opaque_shells_never_use_allow_fallback</span></span></code></pre>
+<p>Run strict native lint separately with
+<code>cargo clippy --locked --all-targets</code>.</p>
+<p>The development binary is <code>target/debug/shield.exe</code>. Windows acceptance covers
+AMD64 source builds, enrollment, setup/repair/removal, native console ownership,
+private ACLs, MCP stdio, and Registry installation/offline reproduction. Claude
+Code 2.1.312 file and PowerShell tools pass Allow/Deny/Ask and missing/timeout-hook checks with
+an isolated local provider. Codex 0.166.0 loads the generated project hooks:
+native command Allow/Deny, configured Ask allowance and prefix-covered Ask
+blocking pass with retained Shield decisions. Unsupported PowerShell source
+is also withheld by the generated hook.</p>
+<p>To prepare an AMD64 release binary from the same developer terminal, run:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="powershell"><code><span class="line"><span style="color:#E1E4E8">powershell </span><span style="color:#F97583">-</span><span style="color:#E1E4E8">NoProfile </span><span style="color:#F97583">-</span><span style="color:#E1E4E8">File scripts</span><span style="color:#F97583">/</span><span style="color:#79B8FF">build-windows.ps1</span></span></code></pre>
+<p>For ARM64, install the Visual Studio C++ ARM64 tools and ARM64 Windows SDK
+libraries, add the pinned Rust target, and use an MSVC developer terminal targeting
+ARM64 (for example, the <strong>x64_arm64 Cross Tools Command Prompt</strong>):</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="powershell"><code><span class="line"><span style="color:#E1E4E8">rustup target add </span><span style="color:#F97583">--</span><span style="color:#E1E4E8">toolchain nightly</span><span style="color:#F97583">-</span><span style="color:#79B8FF">2026</span><span style="color:#F97583">-</span><span style="color:#79B8FF">11</span><span style="color:#F97583">-</span><span style="color:#79B8FF">09</span><span style="color:#E1E4E8"> aarch64</span><span style="color:#F97583">-</span><span style="color:#E1E4E8">pc</span><span style="color:#F97583">-</span><span style="color:#E1E4E8">windows</span><span style="color:#F97583">-</span><span style="color:#E1E4E8">msvc</span></span>
+<span class="line"><span style="color:#E1E4E8">powershell </span><span style="color:#F97583">-</span><span style="color:#E1E4E8">NoProfile </span><span style="color:#F97583">-</span><span style="color:#E1E4E8">File scripts</span><span style="color:#F97583">/</span><span style="color:#79B8FF">build-windows.ps1</span><span style="color:#F97583"> -</span><span style="color:#E1E4E8">Architecture arm64</span></span></code></pre>
+<p>An x64 Windows host can cross-build ARM64; it does not need to run the ARM64
+executable. Native ARM64 development hosts can use an ARM64 developer terminal.
+Both builds include MCP Kit, Registry Kit and TUI Kit. Process Kit is not used.</p>
+<p>The outputs are <code>target/x86_64-pc-windows-msvc/release/shield.exe</code> and
+<code>target/aarch64-pc-windows-msvc/release/shield.exe</code>, respectively. The checked-in
+release configuration requests static C runtime linkage for Shield and its
+dependencies. The script adds neutral source/cache diagnostic paths through a
+private temporary Cargo configuration, then runs the <code>cargo build-windows</code> or
+<code>cargo build-windows-arm64</code> alias. It checks the MSVC terminal’s target architecture
+and the resulting executable’s PE architecture.
+It refuses Rust flag overrides that would replace the verified build settings.
+The explicit target keeps those flags away from host build
+scripts and procedural macros. Inspect the executable’s imported DLLs with
+<code>dumpbin /DEPENDENTS</code> before distributing it; the development build uses the
+toolchain’s default runtime linkage.</p>
+<p>Verify the built executable in a temporary installation with spaces in its path:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="powershell"><code><span class="line"><span style="color:#E1E4E8">$</span><span style="color:#79B8FF">env:</span><span style="color:#E1E4E8">SHIELD_WINDOWS_RELEASE_BINARY </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> Join-Path</span><span style="color:#E1E4E8"> (</span><span style="color:#79B8FF">Get-Location</span><span style="color:#E1E4E8">) </span><span style="color:#9ECBFF">'target\x86_64-pc-windows-msvc\release\shield.exe'</span></span>
+<span class="line"><span style="color:#E1E4E8">cargo test </span><span style="color:#F97583">--</span><span style="color:#E1E4E8">locked </span><span style="color:#F97583">--</span><span style="color:#E1E4E8">test integration windows_release_binary_runs_from_owned_installation </span><span style="color:#F97583">--</span><span style="color:#F97583"> --</span><span style="color:#E1E4E8">ignored</span></span></code></pre>
+<p>This checks startup, confirmed offline enrollment, replacement after exit and
+removal while preserving the enrolled project. It verifies the portable binary;
+package-manager installation and migration between released versions need their
+own acceptance.</p>
+<h3 id="portable-windows-packages">Portable Windows packages</h3>
+<p>After building, optionally Authenticode-sign and timestamp <code>shield.exe</code>, then
+package that final executable from the same checkout and toolchain:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="powershell"><code><span class="line"><span style="color:#E1E4E8">powershell </span><span style="color:#F97583">-</span><span style="color:#E1E4E8">NoProfile </span><span style="color:#F97583">-</span><span style="color:#E1E4E8">File scripts</span><span style="color:#F97583">/</span><span style="color:#E1E4E8">package</span><span style="color:#F97583">-</span><span style="color:#E1E4E8">windows.ps1 </span><span style="color:#F97583">-</span><span style="color:#E1E4E8">Architecture x64</span></span>
+<span class="line"><span style="color:#E1E4E8">powershell </span><span style="color:#F97583">-</span><span style="color:#E1E4E8">NoProfile </span><span style="color:#F97583">-</span><span style="color:#E1E4E8">File scripts</span><span style="color:#F97583">/</span><span style="color:#E1E4E8">package</span><span style="color:#F97583">-</span><span style="color:#E1E4E8">windows.ps1 </span><span style="color:#F97583">-</span><span style="color:#E1E4E8">Architecture arm64</span></span></code></pre>
+<p>Each command writes <code>dist/shield-&lt;version&gt;-&lt;Rust target&gt;.zip</code> and a <code>.sha256</code>
+sidecar. <code>-OutputDirectory C:\Acme\shield-candidates</code> selects another directory;
+existing outputs are refused. <code>CARGO_TARGET_DIR</code>, when set, selects the same
+build directory for both scripts. The packager checks the binary architecture,
+includes the product license, resolved normal/build dependency notices and Rust
+standard-library notices, and indexes them in <code>BUILD.json</code>. Package metadata
+describes a workspace candidate with no source-revision attestation; it is not
+proof of a clean source checkout, a signature or native acceptance. Build again
+after source or dependency changes before packaging.</p>
+<p>The scripts do not sign or publish anything. Sign before packaging and compute
+checksums after signing. ARM64 build/package execution has not been verified;
+its implementation is accepted for this stage without native runtime acceptance.</p>
+<p>To install a portable package, extract it into a stable folder you own and add
+that folder to PATH. Check <code>shield --version</code>, then follow
+<a href="../getting-started/">Your first Shield project</a>. Before an update, close Shield
+and connected agents, replace the executable at the same installed path,
+and restart the agent. After moving the installation, set up its registered
+agents again with <code>shield mcp setup --agent &lt;agent&gt;</code>. To remove it, run
+<code>shield mcp remove</code> for each connected agent in each project, then delete the
+installation folder. Preserve project <code>.shield</code> folders to keep policy/history.</p>
+<h3 id="supported-windows-commands-and-acceptance">Supported Windows commands and acceptance</h3>
+<p>The Windows parsers admit literal native calls to <code>git</code>, <code>rg</code>, <code>node</code>, <code>rustc</code>,
+<code>cargo</code>, <code>make</code>, <code>just</code> and <code>shield</code>, preserving each literal executable for policy.
+PowerShell supports non-expanding quotes, semicolon/newline sequences and the
+literal call operator <code>&amp;</code>. Cmd supports <code>&amp;</code> sequences and <code>&amp;&amp;</code>/<code>||</code> chains;
+apostrophes stay literal there. Empty arguments, embedded quotes, ambiguous
+trailing backslashes, expansions, redirections, cmdlets, batches and unverified
+explicit shell overrides remain outside coverage. PowerShell chain operators
+remain unclassified without a trusted version/mode contract. Reported versions
+are retained as evidence and do not grant more syntax.
+Native handoff blocks unclassified source, including when Ask fallback allows
+ordinary policy Ask requests. Extended Windows sequence/cmd acceptance needs a
+separately scoped native target; portable parser/hook fixtures do not establish it.
+The <a href="../native-run/">checked native runner</a> also supports three bounded System32
+leaf forms on AMD64 and ARM64 Windows, requiring matching native PE images.
+Native AMD64 acceptance covers Allow/Deny/Ask, exact
+one-time grants, replay refusal, timeout, Ctrl-Break and console restoration.
+Checked Git inspections support a protected Git for Windows <code>2.56.0.windows.3</code>
+ucrt64 installation on AMD64, or clangarm64 installation on ARM64. Native AMD64
+acceptance covers helper suppression, index preservation,
+exact grants and refusal of wrappers, local copies and unsupported argv.
+ARM64 checked execution uses the same ACL, held-image, grant and Job contracts;
+it refuses foreign-architecture executables/DLLs, including x64 Git under
+emulation. ARM64 runtime behavior is assumed working for this stage, not tested.
+There are no published Windows installers or native ARM64 acceptance results.</p>
+<p>The ignored native-host fixtures need Node 24+, Git for Windows and isolated
+copies of Claude Code 2.1.312 and Codex 0.166.0. Install the pinned CLIs in an
+owned directory outside the Windows temporary folder, then point
+<code>SHIELD_WINDOWS_AGENTS_ROOT</code> at it:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="powershell"><code><span class="line"><span style="color:#E1E4E8">npm install </span><span style="color:#F97583">--</span><span style="color:#E1E4E8">prefix C:\Acme\shield</span><span style="color:#F97583">-</span><span style="color:#E1E4E8">agent</span><span style="color:#F97583">-</span><span style="color:#E1E4E8">tests </span><span style="color:#F97583">--</span><span style="color:#E1E4E8">no</span><span style="color:#F97583">-</span><span style="color:#E1E4E8">save @anthropic</span><span style="color:#F97583">-</span><span style="color:#E1E4E8">ai</span><span style="color:#F97583">/</span><span style="color:#E1E4E8">claude</span><span style="color:#F97583">-</span><span style="color:#E1E4E8">code@2.1.312 @openai</span><span style="color:#F97583">/</span><span style="color:#E1E4E8">codex@0.166.0</span></span>
+<span class="line"><span style="color:#E1E4E8">$</span><span style="color:#79B8FF">env:</span><span style="color:#E1E4E8">SHIELD_WINDOWS_AGENTS_ROOT </span><span style="color:#F97583">=</span><span style="color:#9ECBFF"> 'C:\Acme\shield-agent-tests'</span></span>
+<span class="line"><span style="color:#E1E4E8">cargo test </span><span style="color:#F97583">--</span><span style="color:#E1E4E8">locked </span><span style="color:#F97583">--</span><span style="color:#E1E4E8">test integration windows_agent_hosts_load_native_hooks_against_local_providers </span><span style="color:#F97583">--</span><span style="color:#F97583"> --</span><span style="color:#E1E4E8">ignored</span></span>
+<span class="line"><span style="color:#E1E4E8">cargo test </span><span style="color:#F97583">--</span><span style="color:#E1E4E8">locked </span><span style="color:#F97583">--</span><span style="color:#E1E4E8">test integration windows_agent_hosts_codex_loads_native_hooks_against_local_provider </span><span style="color:#F97583">--</span><span style="color:#F97583"> --</span><span style="color:#E1E4E8">ignored</span></span></code></pre>
+<p>Run these host checks separately. They use private ConPTY sessions, temporary
+projects/profiles and scripted loopback providers. They make no external model
+requests and do not change your ordinary agent profile. The public fixtures
+include their provider implementation; no private SDK test package is needed.</p>
+<p>With the protected Git version above installed in the default Program Files
+location, run its isolated repository acceptance separately:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="powershell"><code><span class="line"><span style="color:#E1E4E8">cargo test </span><span style="color:#F97583">--</span><span style="color:#E1E4E8">locked </span><span style="color:#F97583">--</span><span style="color:#E1E4E8">test integration windows_git_inspections </span><span style="color:#F97583">--</span><span style="color:#F97583"> --</span><span style="color:#E1E4E8">ignored</span></span></code></pre>
+<h2 id="source-ownership">Source ownership</h2>
+<p>Shield separates policy decisions from filesystem observations, host adapters,
+and operator workflows. Start with the module for the behavior you are changing:</p>
+<table>
+<thead>
+<tr>
+<th>Area</th>
+<th>Source</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Operator commands and routing</td>
+<td><code>src/cli/public.rs</code>, <code>src/cli.rs</code>, <code>src/lib.rs</code></td>
+</tr>
+<tr>
+<td>Policy documents, schema, templates and variables</td>
+<td><code>src/policy.rs</code>, <code>policy/model.rs</code> and <code>policy/model/</code></td>
+</tr>
+<tr>
+<td>Rule predicates, selectors and argv grammars</td>
+<td><code>policy/rules.rs</code> and <code>policy/rules/</code></td>
+</tr>
+<tr>
+<td>Typed requests and resource-evidence interface</td>
+<td><code>policy/resolution/normalized.rs</code>, <code>policy/rules/resources.rs</code></td>
+</tr>
+<tr>
+<td>Filesystem observations and supported command effects</td>
+<td><code>src/location.rs</code>, <code>location/directory.rs</code>, <code>location/text.rs</code>, <code>location/node.rs</code></td>
+</tr>
+<tr>
+<td>Shell parsing, expansion, control flow, directory outcomes and PID provenance</td>
+<td><code>src/shell.rs</code> and <code>shell/</code></td>
+</tr>
+<tr>
+<td>Declared directory options</td>
+<td><code>policy/rules/directories.rs</code></td>
+</tr>
+<tr>
+<td>Compiled plans, indexes, and policy comparison</td>
+<td><code>policy/resolution.rs</code> and <code>policy/resolution/</code></td>
+</tr>
+<tr>
+<td>Pack dependencies and profile bounds</td>
+<td><code>policy/dependencies.rs</code> and <code>policy/dependencies/</code></td>
+</tr>
+<tr>
+<td>Project composition, captured source, and evaluation</td>
+<td><code>src/configuration.rs</code> and <code>configuration/</code></td>
+</tr>
+<tr>
+<td>Shared project, policy and request inspection</td>
+<td><code>review/project.rs</code>, <code>review/history.rs</code>, <code>review/approvals.rs</code></td>
+</tr>
+<tr>
+<td>Pack discovery, acquisition and candidate preparation</td>
+<td><code>review/packs.rs</code>, <code>review/packs/</code>, <code>review/registries.rs</code></td>
+</tr>
+<tr>
+<td>Writing the policy files, writer lease and connection publication</td>
+<td><code>review/files/write.rs</code>, <code>review/publication.rs</code>, <code>review/publication/</code>, <code>review/changes/diff.rs</code></td>
+</tr>
+<tr>
+<td>CLI questions, reviews and confirmation</td>
+<td><code>review/operator/</code></td>
+</tr>
+<tr>
+<td>Agent configuration ownership and repair mechanics</td>
+<td><code>review/integrations.rs</code>, <code>review/integrations/</code>, <code>review/path_access.rs</code></td>
+</tr>
+<tr>
+<td>Approval clocks and request-specific grants</td>
+<td><code>review/clock.rs</code>, <code>review/read_approval.rs</code>, <code>review/run_approval.rs</code></td>
+</tr>
+<tr>
+<td>Following the policy files, disposable cache, and history</td>
+<td><code>review/files.rs</code>, <code>review/cache.rs</code>, <code>review/storage/history.rs</code>, <code>history/correlation.rs</code></td>
+</tr>
+<tr>
+<td>Contained object directories</td>
+<td><code>review/storage/objects.rs</code></td>
+</tr>
+<tr>
+<td>Retained proposal report projections and MCP publication</td>
+<td><code>review/reports.rs</code>, <code>mcp/resources.rs</code></td>
+</tr>
+<tr>
+<td>Request-owned operation stages and MCP progress</td>
+<td><code>review/progress.rs</code>, <code>mcp/progress.rs</code></td>
+</tr>
+<tr>
+<td>Durable preparation, task storage and management</td>
+<td><code>review/changes/preparation.rs</code>, <code>review/preparation_tasks/</code>, <code>mcp/tasks.rs</code></td>
+</tr>
+<tr>
+<td>Agent payloads, setup codecs, and replies</td>
+<td><code>src/agents.rs</code>, <code>agents/claude_code.rs</code>, <code>agents/codex.rs</code>, <code>agents/setup.rs</code></td>
+</tr>
+<tr>
+<td>Shared hook dispatch and feedback</td>
+<td><code>agents/hook.rs</code>, <code>agents/feedback.rs</code>, <code>src/agent_message.rs</code></td>
+</tr>
+<tr>
+<td>Host-specific MCP confirmation</td>
+<td><code>agents/review.rs</code>, <code>agents/*/review.rs</code></td>
+</tr>
+<tr>
+<td>MCP startup, transport handler, and output</td>
+<td><code>src/mcp_io.rs</code>, <code>src/mcp.rs</code>, <code>mcp/response.rs</code>, <code>mcp/messages.rs</code></td>
+</tr>
+<tr>
+<td>MCP tools, schemas, snapshots, and cursors</td>
+<td><code>review/mcp/</code></td>
+</tr>
+<tr>
+<td>Guided input plans and bounded form continuations</td>
+<td><code>review/mcp/elicitation.rs</code>, <code>review/mcp/elicitation/guided.rs</code>, <code>mcp/elicitation.rs</code></td>
+</tr>
+<tr>
+<td>Bundled Markdown guides</td>
+<td><code>build.rs</code>, <code>review/mcp/documentation.rs</code></td>
+</tr>
+<tr>
+<td>Runtime snapshots and protected handoff</td>
+<td><code>src/runtime.rs</code>, <code>review/runtime/consumer.rs</code>, <code>src/enforcement.rs</code></td>
+</tr>
+<tr>
+<td>Supported native launches and cleanup</td>
+<td><code>src/execution.rs</code> and <code>execution/</code></td>
+</tr>
+<tr>
+<td>Document validation and pack fixtures</td>
+<td><code>src/application.rs</code></td>
+</tr>
+<tr>
+<td>Private process diagnostics</td>
+<td><code>src/diagnostics.rs</code></td>
+</tr>
+</tbody>
+</table>
+<p>CLI and MCP map their inputs into shared review operations. History queries use
+an application-owned query type; pack operations expose direct list, show, search,
+info and preparation functions. Shared owners can read files and acquire registry
+artifacts, including retaining verification checkpoints, without opening a terminal.
+CLI prompts and host confirmation run before calling the common publication
+workflow. MCP retains its own paging, diagnostic handles and response projection.</p>
+<p>The policy core performs no filesystem I/O and contains no command permission
+tables. Packs and custom rules supply permissions; <code>location/</code> supplies fresh
+request facts. Shell analysis uses submitted source and available context,
+without attesting execution.</p>
+<p><code>build.rs</code> checks any bundled skill folders under <code>skills/</code> and calls <code>canonic-mcp-kit</code>’s
+documentation build helper, which validates every guide under <code>docs/</code> and
+writes one compressed bundle to <code>OUT_DIR</code>. An invalid guide, such as a symbolic
+link or a page that is not UTF-8, fails the build with its relative path.</p>
+<p>The <code>canonic-registry-kit</code> dependency handles registry identity, authentication,
+acquisition, checkpoints, resolution, and UTC timestamps. Shield owns pack
+declarations and the review that writes acquired artifacts into the policy. <code>canonic-mcp-kit</code>
+handles framing, lifecycle, validation, cancellation, deadlines, and confirmation
+requests; Shield’s handler supplies its tools and limits. Its documentation
+module also supplies the <code>docs_*</code> tool definitions and queries;
+<code>src/review/mcp/documentation.rs</code> embeds the bundle and maps the library’s
+failures into Shield’s result envelope.</p>
+<p>Agent adapters translate vendor payloads and setup formats. They cannot bypass
+core policy or approval checks. To add an agent, implement its adapter and
+registry entry, then verify payload mapping, setup, and real host behavior.
+CLI detection belongs in the adapter’s <code>is_installed</code> method; it inspects PATH
+without starting the tool.</p>
+<p><code>adapters/</code> contains private Node 24+ ESM modules: <code>process-transport/</code> handles
+subprocess I/O and cancellation, <code>enforcement-response/</code> validates receipts,
+and <code>claude-read-only/</code> maps SDK callbacks. <code>adapters/sdk-tests/</code> pins the SDK
+dependencies. Rust integration tests share <code>tests/integration/main.rs</code>.</p>
+<h2 id="check-tools">Check tools</h2>
+<p>Install the developer tools:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="sh"><code><span class="line"><span style="color:#B392F0">cargo</span><span style="color:#9ECBFF"> install</span><span style="color:#79B8FF"> --locked</span><span style="color:#9ECBFF"> cargo-nextest@0.9.146</span><span style="color:#9ECBFF"> cargo-deny@0.20.2</span><span style="color:#9ECBFF"> cargo-llvm-cov@0.9.1</span><span style="color:#9ECBFF"> cargo-insta@1.49.0</span><span style="color:#9ECBFF"> cargo-sweep@0.8.0</span></span></code></pre>
+<p>Tests use assert_cmd, assert_fs, predicates, insta, and proptest. Tool versions
+and dependencies are pinned in the package configuration.</p>
+<p>The retained interceptor’s protocol regression runs with the Rust library tests.
+Its JavaScript receipt-validator interoperability check is opt-in and requires
+Node 24+:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="sh"><code><span class="line"><span style="color:#B392F0">cargo</span><span style="color:#9ECBFF"> nextest</span><span style="color:#9ECBFF"> run</span><span style="color:#79B8FF"> --locked</span><span style="color:#79B8FF"> --lib</span><span style="color:#79B8FF"> --run-ignored</span><span style="color:#9ECBFF"> ignored-only</span><span style="color:#9ECBFF"> historical_interceptor_receipts_pass_legacy_js_validator</span></span></code></pre>
+<h2 id="checks">Checks</h2>
+<p>The default nextest profile runs four tests at a time. Run process-heavy Node,
+SDK and Rust suites separately so fixture startup does not compete across runners.
+Do not rebuild a shared executable while installation fixtures run: registrations
+pin its digest, and replacing it changes the fixture’s protection diagnostics.
+In an agent sandbox, request host access before running integration checks:
+PTY fixtures need controlling terminals and process signals, HTTP/TLS fixtures
+need loopback listeners, and cargo-deny needs its advisory cache. A sandbox
+permission refusal requires the same check with host access; product policy
+changes cannot grant that access.</p>
+<p>Run the <a href="#individual-rust-verification">Make targets below</a> from this package
+directory, where rustup selects the pinned toolchain.</p>
+<p><code>cargo test --locked</code> also runs the behavioral tests. <code>cargo llvm-cov nextest --locked</code> produces a coverage report; it is not a coverage threshold. Cargo
+nextest, deny, and llvm-cov are optional developer tools installed separately.
+Use <code>~/.cargo/bin/cargo</code> when Cargo is not on PATH and <code>--offline</code> only with a
+populated dependency cache.</p>
+<table>
+<thead>
+<tr>
+<th>Area</th>
+<th>Configuration and behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Lint</td>
+<td>Manifest-owned unsafe-code prohibition, unreachable-public-item warnings, Clippy pedantic/unwrap/self-named-module checks; warnings fail the check</td>
+</tr>
+<tr>
+<td>Test runner</td>
+<td>nextest reports every failure; slow tests are flagged after 30 seconds and terminated after two minutes</td>
+</tr>
+<tr>
+<td>CLI fixtures</td>
+<td>assert_cmd/predicates check status/output; assert_fs owns temporary projects and cleanup</td>
+</tr>
+<tr>
+<td>Property tests</td>
+<td>proptest exercises unknown-command refusal and literal argv exact-match boundaries</td>
+</tr>
+<tr>
+<td>Snapshots</td>
+<td>insta records command help and settled human output under tests/integration/</td>
+</tr>
+<tr>
+<td>API docs</td>
+<td><code>[lints.rustdoc]</code> in Cargo.toml: a doc comment linking to a missing or private item fails <code>cargo doc</code></td>
+</tr>
+<tr>
+<td>Dependencies</td>
+<td>cargo-deny checks advisories, licenses, duplicate versions, and crates.io-only sources; wildcard versions fail</td>
+</tr>
+<tr>
+<td>Coverage</td>
+<td>cargo-llvm-cov reports line, region, and function coverage; no minimum threshold</td>
+</tr>
+</tbody>
+</table>
+<p>Clippy’s <code>too_many_lines</code> remains enabled. Use narrow
+<code>#[expect(..., reason = "...")]</code> annotations when justified. Public fallible APIs
+must document their errors.</p>
+<p>Failure fixtures control transport timing while keeping evaluation and subprocess
+I/O real. Wait for readiness before measuring deadlines, and keep setup budgets
+separate from cleanup assertions. SDK acceptance uses production deadlines.</p>
+<h2 id="output-review-and-deeper-testing">Output review and deeper testing</h2>
+<p>For intended output changes, run <code>cargo insta test</code>, then <code>cargo insta review</code>
+and commit the reviewed snapshots. Snapshots complement status and filesystem
+assertions; they do not replace them. Keep paths and secrets out of snapshots;
+insta filters are available when context-dependent output is implemented.
+Human-output fixtures drive the shared TUI in an owned terminal and snapshot
+settled reviews, choices and results. Separate terminal tests verify live regions,
+input safety and mode restoration.</p>
+<p><code>cargo llvm-cov nextest --locked --html</code> writes a browsable report under
+target/llvm-cov/html/. Generated API documentation is written to target/doc/. Reports and generated
+docs remain under ignored target/.</p>
+<h2 id="local-build-and-adapter-checks">Local build and adapter checks</h2>
+<p>From this package:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="sh"><code><span class="line"><span style="color:#B392F0">cargo</span><span style="color:#9ECBFF"> build</span><span style="color:#79B8FF"> --release</span><span style="color:#79B8FF"> --locked</span></span>
+<span class="line"><span style="color:#B392F0">npm</span><span style="color:#79B8FF"> --prefix</span><span style="color:#9ECBFF"> adapters</span><span style="color:#9ECBFF"> test</span></span>
+<span class="line"><span style="color:#B392F0">npm</span><span style="color:#79B8FF"> --prefix</span><span style="color:#9ECBFF"> adapters/sdk-tests</span><span style="color:#9ECBFF"> test</span></span></code></pre>
+<p><code>cargo xtask install</code> installs into <code>~/.local/bin</code>, ad-hoc signed on macOS;
+<code>--prefix DIR</code> selects another root, and Cargo options after <code>--</code> reach
+<code>cargo install</code>, such as <code>cargo xtask install -- --offline</code> to use cached
+dependencies.</p>
+<p>For one adapter or local SDK regression against the current development binary,
+use <code>cargo xtask adapter-test --file adapters/path/to/file.test.mjs --filter 'test name'</code>
+from this package. It builds <code>target/debug/shield</code> and supplies that binary
+through <code>SHIELD_TEST_BINARY</code>. For example:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="sh"><code><span class="line"><span style="color:#B392F0">cargo</span><span style="color:#9ECBFF"> xtask</span><span style="color:#9ECBFF"> adapter-test</span><span style="color:#79B8FF"> --file</span><span style="color:#9ECBFF"> adapters/sdk-tests/action-approval.test.mjs</span><span style="color:#79B8FF"> --filter</span><span style="color:#9ECBFF"> 'interactive SDK action approval'</span></span></code></pre>
+<p>This focused SDK case uses the installed pinned SDK, an owned loopback provider,
+temporary projects and scripted elicitation answers; it makes no cloud model
+requests. The application remains responsible for rendering its human form.</p>
+<h3 id="generated-copilotopencode-acceptance-on-the-selected-mac">Generated Copilot/OpenCode acceptance on the selected Mac</h3>
+<p>The opt-in generated-callback fixture uses installed Copilot CLI <strong>1.0.105</strong> or
+OpenCode V1 <strong>1.14.27</strong>, disposable projects and one isolated test-process home.
+Inspect the installed version/offline contract first without building Shield or
+starting a provider:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="sh"><code><span class="line"><span style="color:#B392F0">cargo</span><span style="color:#9ECBFF"> xtask</span><span style="color:#9ECBFF"> native-preflight</span><span style="color:#79B8FF"> --host</span><span style="color:#9ECBFF"> copilot</span></span>
+<span class="line"><span style="color:#B392F0">cargo</span><span style="color:#9ECBFF"> xtask</span><span style="color:#9ECBFF"> native-preflight</span><span style="color:#79B8FF"> --host</span><span style="color:#9ECBFF"> opencode</span></span></code></pre>
+<p>A different version, missing offline route or missing CLI is a prerequisite
+failure, not a reason to install or silently try a cloud provider. Once that
+preflight passes, select one host:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="sh"><code><span class="line"><span style="color:#B392F0">cargo</span><span style="color:#9ECBFF"> xtask</span><span style="color:#9ECBFF"> native-acceptance</span><span style="color:#79B8FF"> --host</span><span style="color:#9ECBFF"> copilot</span></span>
+<span class="line"><span style="color:#B392F0">cargo</span><span style="color:#9ECBFF"> xtask</span><span style="color:#9ECBFF"> native-acceptance</span><span style="color:#79B8FF"> --host</span><span style="color:#9ECBFF"> opencode</span></span></code></pre>
+<p>Each command builds the development binary without installing it, then checks
+the generated project registration using native file reads for Allow, Deny and
+Ask. Copilot disables the Shield MCP server through its documented client option
+for these focused file-hook cells, leaving generated hooks active; this avoids
+loading the unrelated MCP tool catalog into the fixture model’s context budget.
+It does not establish MCP tool acceptance. Copilot Ask is checked as withheld in
+noninteractive prompt mode; OpenCode
+uses its reviewed standing Deny fallback, not native Ask. Provider tool results
+and Shield history independently establish the observed outcome. The OpenCode
+target also attempts a later plugin argument mutation and requires evidence that
+it actually ran after Shield before attributing the refusal to frozen arguments.</p>
+<p>To reproduce against an already retained executable while other source work is
+in progress, add <code>--binary</code> with that executable’s absolute path to the same
+<code>cargo xtask native-acceptance --host</code> command. It then does not compile or
+install code. Record that executable’s SHA-256 with the result and preserve it
+for the entire run; its result describes that binary, not later source edits.
+Optional <code>--filter</code> selects a named native case when reproducing a failure.</p>
+<p>These targets need an owned loopback listener, operator-confirmation PTYs and
+TERM/KILL of their owned child process groups. Native children inherit an
+explicit credential-free environment, dummy provider keys, local-only provider
+selection and the pinned host’s update/telemetry/fetch disable flags. They do
+not read a real account profile or publish global registrations. Environment
+and provider configuration are not OS network confinement; no such isolation
+claim is made. A host without the established local-only route must not run the
+acceptance cells. Native children have a 40-second deadline, bounded output and
+kill/reap cleanup. Run targets separately from Cargo checks and other native
+campaigns; do not replace the binary while registrations pin it.</p>
+<p>The fixture is excluded unless this explicit target selects its host, so the
+ordinary SDK suite does not add this native campaign. Prepared fixtures alone
+are not installed-host acceptance evidence. Interactive Ask acceptance/cancel,
+other platforms, OpenCode V2 and hook/plugin startup failure protection remain
+separate targets and limits.</p>
+<p>Run Cargo through rustup, from this package, so it selects the pinned
+toolchain; use <code>~/.cargo/bin/cargo</code> when another Cargo comes first on PATH.</p>
+<h2 id="debug-builds-and-diagnostics">Debug builds and diagnostics</h2>
+<p><code>cargo build --profile diagnostic --locked</code> builds <code>target/diagnostic/shield</code>
+with release optimization, debug symbols, debug assertions and automatic JSONL
+logging. Native hook deadlines also apply to diagnostic builds.
+<code>cargo xtask install -- --profile diagnostic</code> installs that build into
+<code>~/.local/bin</code>. <code>cargo xtask install</code> installs the release build, which has logging disabled by default. Replacing
+the installed executable at the same path keeps existing registrations;
+restart the agent to load the new build.</p>
+<p>Automatic logs live in the OS temporary directory under
+<code>shield-logs/shield-&lt;timestamp&gt;-&lt;pid&gt;.jsonl</code>. On macOS, inspect them with
+<code>ls -lt "${TMPDIR%/}/shield-logs"</code>. Each native hook gets its own file; the MCP
+server keeps a file for its process lifetime. Operator commands print their log
+path on stderr. Native hooks and MCP omit that startup message so protocol output
+and ordinary agent feedback remain clean.</p>
+<p>MCP frame logging uses a separate worker with an eight-frame queue. The
+dispatcher submits frames without waiting for parsing or file writes; a full
+queue drops diagnostic frames. Tool names are cached once per process. The
+logging worker drains accepted frames with a 5 ms shutdown allowance. An unfinished
+drain or dropped frames produce a diagnostic stderr warning. Slow storage does
+not block live ping or cancellation dispatch. Frame sizes remain bounded by the
+MCP input and output limits. Frame records include <code>observed_us</code>, captured when
+the observer receives the frame, before worker parsing or file writes.</p>
+<p>Both builds accept <code>--debug-log-dir DIRECTORY</code> to enable logging into another
+directory and <code>--no-debug-log</code> to disable it. <code>SHIELD_DEBUG_LOG_DIR</code> also selects
+the directory for child processes that inherit it; export it before starting the
+agent. Hosts can filter child environments. The CLI directory overrides the environment, and opt-out overrides the
+environment and debug default. Shield uses a directory rather than a single
+file because concurrent native callbacks start separate processes.</p>
+<p>Files are uniquely created, use mode 0600 on Unix, and stop at 8 MiB with a limit
+marker. Startup admission keeps Shield-owned logs within 32 files and 256 MiB,
+reserving each live writer’s full allowance and reclaiming oldest completed
+logs. Live writers and unrelated files are preserved; exhausted capacity disables
+optional logging. A logging failure reports a warning
+on stderr and disables logging without changing authorization or transport output.</p>
+<p>Records include elapsed milliseconds and PID/version/build type,
+native agent/event/tool and session/turn/tool-call IDs, captured input bytes,
+input validity and overflow, project/snapshot preparation, evaluation, native
+handoff and history stage timings, policy decision/fallback/disposition, completion
+history status, response event/decision/context shape, and MCP method/tool/ID,
+request/response sizes and error status. Commands, arguments, tool results,
+policy content, project paths, credentials and raw error text are omitted. Large truncated hook
+input cannot supply parsed IDs; its overflow and captured size are still recorded.
+Pair input/output records by PID and MCP messages by request ID to inspect timing.
+These logs are diagnostic evidence, separate from request history and execution
+attestation. <code>RUST_BACKTRACE=1</code> enables panic backtraces on stderr; debug symbols
+also support native debuggers.</p>
+<p>Request trace records add monotonic microsecond offsets, a wall-clock anchor,
+connection/request/trace IDs and fixed stage names. <code>request_span</code> durations are
+inclusive of child spans; do not sum nested durations into a request total.
+<code>request_end</code> reports work counters, outcome and total handler duration. Counters
+initialized to zero name instrumented work; absent counters have no reported
+observation and must not be interpreted as zero.
+<code>request_incomplete</code> means a request link was dropped without completion, not that
+its mutation rolled back. Fixed events and request records share a nonblocking
+queue capped at 512 records of at most 32 KiB each. Loss appears as
+<code>dropped_records</code>, <code>dropped_records_total</code>, <code>dropped_spans</code> or a diagnostic stderr
+warning. Operator/MCP writer shutdown waits at most 5 ms before reporting an
+unfinished drain. Native callbacks retain fixed hook-stage events without
+creating request spans or waiting for an exit drain; recent events may be lost
+at process exit. Disabled logging does not construct event fields.</p>
+<p>The apply trace covers validation, policy preparation, writer-lock wait, file
+writes, connection publication and durable sync operations. Legacy form continuations retain their request link and measure
+the input or approval wait. Host permission obtained before Shield receives an
+MCP call is outside this measurement. The handler boundary also excludes MCP
+scheduler queueing, schema validation and final wire encoding; round-trip tests
+measure transport overhead separately. Modern form retries have separate traces.
+Proposal spans distinguish base capture, edits, next capture, comparison, plan
+preparation, handle reservation and presentation. <code>policy.source_captures</code> counts
+source validation independently of compiled-plan preparation, so re-parsing packs
+cannot hide behind a zero preparation count. A process validates each exact set
+of policy sources once: following the files, comparing them and rebuilding a
+proposal’s two sides reuse the snapshot of the same bytes, counted by
+<code>policy.source_capture_reuses</code>. Changed bytes, and sources that failed, are
+validated again.
+Pack spans distinguish decoding, source validation, resolution and matcher
+preparation. <code>pattern.compiled</code> and <code>pattern.reused</code> count newly built and exact
+reused matcher programs. Rule/access-path proposal edits borrow matchers from the
+preceding captured snapshot, while validating source and accounting the new
+store’s pattern bytes normally. Fresh compiled plans check their encoded layout
+and retain source validation from typed construction, avoiding duplicate decoding
+and semantic validation of just-encoded records. Untrusted full-image admission
+remains covered separately by compiled-policy tests.
+<code>handle.retain</code> and <code>source.identity</code> spans expose handle admission and canonical
+candidate hashing. <code>handle.admission_encodings</code> counts new-handle size measurements;
+cached handles skip them. <code>source.identity_encodings</code> counts candidate-identity
+encodings, and <code>cursor.rows_copied</code> counts rows projected into a page. Shared JSON
+size checks count encoded UTF-8 bytes without retaining an output string; source
+hashing uses bounded scratch space and preserves existing compact-JSON digests.</p>
+<p>Run the focused development regression with
+<code>cargo nextest run --locked --lib --success-output immediate apply_request_trace_explains_work</code>.
+It creates an isolated project, proposes and applies three batches through real
+stdio, and prints timings and work counts. Optional
+<code>SHIELD_APPLY_PROFILE_PROJECT=/path/to/enrolled-project</code> reads that project’s immutable
+pack artifacts into the temporary fixture. It does not copy settings, custom
+rules, history or identity and does not write to the source project. This is a
+local regression/profile fixture, not a cold-start or cross-platform latency
+acceptance campaign.</p>
+<p><code>cargo nextest run --locked --lib --release --success-output immediate ordinary_request_sweep</code>
+compares fresh and aged stores through retained MCP requests and the CLI inspection
+owners. Optional <code>SHIELD_APPLY_PROFILE_PROJECT</code> selects immutable pack artifacts using
+the read-only fixture described above. The test asserts source/preparation/history
+work limits, including source capture counts, independent of unrelated retained proposals.
+It prints inclusive stage timings as well as round trips. CLI-owner timings exclude
+process startup and output; they are not full CLI latency measurements.</p>
+<p>Production state readers select authority metadata, current source, one proposal
+or optional history explicitly. Current policy readers may reuse its authenticated
+compiled plan after checking source integrity; doctor forces source preparation
+as a separate check. Full-source/history fixture readers are unavailable to
+production code. CLI policy changes retain prepared evidence across review and
+commit, with fresh authority and file checks at publication.</p>
+<h2 id="adapter-and-host-checks">Adapter and host checks</h2>
+<p><code>adapters/sdk-tests/google-interactive.test.mjs</code> drives the installed terminal
+UIs through the owned PTY helper. Gemini uses a local provider to verify ordinary
+Ask acceptance/cancellation and interactive form-unavailable policy refusal.
+Antigravity cases require <code>SHIELD_LIVE_AGY=1</code>, real account access, workspace trust
+and native MCP readiness before submitting a prompt. Run individual cases through
+<code>--test-name-pattern</code>; these fixtures need host PTYs, loopback access and signals.</p>
+<p><code>adapters/sdk-tests/google-native.test.mjs</code> runs installed Gemini CLI 0.67.0
+against a local scripted provider in an isolated trusted workspace. It checks
+Allow, Ask and Deny plus headless policy-change refusal without using a cloud
+account. <code>SHIELD_TEST_BINARY</code> can select an already-built development executable;
+the default is the package release executable. Run this file independently with
+<code>node --test packages/shield/adapters/sdk-tests/google-native.test.mjs</code>.
+It needs loopback access and signals for its owned CLI children. The Antigravity
+case is opt-in through <code>SHIELD_LIVE_AGY=1</code>: it uses installed, logged-in CLI 1.5.1
+with bounded print requests and therefore consumes real account access. Select
+that case explicitly when authorizing live cloud acceptance. Interactive prompts
+and other platforms need separate acceptance; the test is not evidence for them.</p>
+<p>The dependency-free adapter suite requires the actual package release executable.
+The SDK runner executes one test file at a time; each file retains its own
+concurrency assertions and owns its host processes and loopback provider.
+Codex fixtures disable plugin discovery in their isolated host so background
+marketplace clones cannot race project cleanup. Their teardown closes the local
+provider before removing the project, including after a failed assertion.
+The SDK suite uses locked MCP SDK 1.32.1 and Claude Agent SDK 0.3.292 dependencies.
+Its temporary projects and scripted loopback provider exercise canonical MCP
+inspection/proposals, dense deadline/cancellation behavior, supported native reads,
+exact retries, state/operator refusals, host discovery and completion privacy. Native command-hook fixtures also exercise
+Claude native Ask permission callbacks (approval and refusal), policy Deny bypassing
+ordinary approval, Codex approval-unavailable blocking, explicit denial, startup
+failure, and the host’s timeout continuation boundary. Confirmed automatic Ask
+allowance has distinct history/dispatch assertions. Codex’s unsupported Ask and
+ignored approval-field rewrites have separate disposable marker probes.
+PermissionRequest boundary tests cover complete-context Allow, Ask abstention,
+Deny, missing IDs and workdir, mixed batches and event-pinned input failures.
+Codex shell approval with an omitted workdir uses reported session cwd and follows
+policy Allow, Ask or Deny. Missing context remains recorded independently of handoff.
+Do not describe callback translation as a verified human approval flow.
+<code>adapters/sdk-tests/claude-interactive.test.mjs</code> separately runs the installed
+Claude CLI in an owned PTY with the ordinary terminal renderer. Its local provider
+requests policy apply in <code>auto</code> and <code>bypassPermissions</code>; actual keyboard input
+answers Accept, Decline and Escape. The fixture observes the host’s permission
+mode and verifies unchanged policy while input is withheld. It uses neither an
+SDK elicitation callback nor an <code>Elicitation</code> hook. Run it independently with
+<code>node --test --test-concurrency=1 packages/shield/adapters/sdk-tests/claude-interactive.test.mjs</code>
+after <code>cargo build --release --locked</code> in <code>packages/shield</code>. It requires the installed <code>claude</code> command,
+Python 3, PTYs, loopback access and permission to reap its owned child processes.
+For a fresh checkout install SDK test dependencies with
+<code>npm --prefix packages/shield/adapters/sdk-tests ci --ignore-scripts --no-fund --no-audit</code>.
+These SDK and interactive host fixtures are verified on macOS. The separate
+Windows native fixtures and their limits are described
+<a href="#native-windows-development">above</a>. Linux uses focused platform checks and
+owner-accepted shared behavior <a href="#native-linux-development">described above</a>.</p>
+<h2 id="individual-rust-verification">Individual Rust verification</h2>
+<p>Choose the checks needed for your change; there is no aggregate command.
+<code>cargo doc</code> generates HTML in <code>target/doc/</code>; <code>cargo test --doc</code> runs
+documentation examples. Rustdoc may recheck dependencies even with <code>--no-deps</code>,
+which only suppresses their generated pages. Keep Cargo caches between runs.</p>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th>Command from this package</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Apply formatting</td>
+<td><code>cargo fmt</code></td>
+</tr>
+<tr>
+<td>Verify formatting</td>
+<td><code>cargo fmt --check</code></td>
+</tr>
+<tr>
+<td>Strict Clippy and type checking</td>
+<td><code>cargo clippy --locked --workspace --all-targets</code></td>
+</tr>
+<tr>
+<td>Tests</td>
+<td><code>cargo nextest run --locked</code></td>
+</tr>
+<tr>
+<td>Documentation examples</td>
+<td><code>cargo test --doc --locked</code></td>
+</tr>
+<tr>
+<td>API reference HTML</td>
+<td><code>cargo doc --locked --no-deps --document-private-items</code></td>
+</tr>
+<tr>
+<td>Dependency audit</td>
+<td><code>cargo deny check</code></td>
+</tr>
+<tr>
+<td>Free disk space</td>
+<td><code>cargo sweep --time 3</code> (from cargo-sweep), while no build or test uses <code>target/</code></td>
+</tr>
+</tbody>
+</table>
+<p><code>rustfmt --edition 2024 src/cli/public.rs</code> formats the named files and their
+out-of-line child modules. Name only leaf files (files with no out-of-line child
+modules) to keep edits limited to those files. For example, naming <code>src/agents.rs</code>
+also formats modules under <code>src/agents/</code>.</p>
+</div><div class="docs-page-footer"><a target="_blank" rel="noopener" href="https://github.com/canonic2/canonic/blob/main/packages/shield/docs/development.md">Visa Markdown på GitHub ↗</a></div><nav class="docs-pagination" aria-label="Guidenavigering"><a href="/sv/shield/docs/compiled-cache/"><span>← Föregående</span><strong lang="en">Compiled policy cache</strong></a><a href="/sv/shield/docs/session-grants/"><span>Nästa →</span><strong lang="en">Approve a batch for one conversation</strong></a></nav></article><aside class="docs-toc" aria-label="På den här sidan"><h2>På den här sidan</h2><nav lang="en"><a href="#fast-iteration">Fast iteration</a><a href="#native-linux-development">Native Linux development</a><a href="#linux-installation-and-compatibility" class="docs-toc-sub">Linux installation and compatibility</a><a href="#native-windows-development">Native Windows development</a><a href="#portable-windows-packages" class="docs-toc-sub">Portable Windows packages</a><a href="#supported-windows-commands-and-acceptance" class="docs-toc-sub">Supported Windows commands and acceptance</a><a href="#source-ownership">Source ownership</a><a href="#check-tools">Check tools</a><a href="#checks">Checks</a><a href="#output-review-and-deeper-testing">Output review and deeper testing</a><a href="#local-build-and-adapter-checks">Local build and adapter checks</a><a href="#generated-copilotopencode-acceptance-on-the-selected-mac" class="docs-toc-sub">Generated Copilot/OpenCode acceptance on the selected Mac</a><a href="#debug-builds-and-diagnostics">Debug builds and diagnostics</a><a href="#adapter-and-host-checks">Adapter and host checks</a><a href="#individual-rust-verification">Individual Rust verification</a></nav><a class="docs-back-top" href="#content">Till början ↑</a></aside></div></main><footer class="foot"><div class="wrap"><div class="foot-top"><a class="logo" href="/sv/workbench/" aria-label="Canonics startsida"><svg viewBox="0 -10 197 38" role="img" aria-label="canonic"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTpjMmY5MjI0OC1hYTBiLTQxOGEtYTY2OS0zMzkyM2Y0N2YxYzAAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaDLGWHSl5JoSZ+W85OxqZEYAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDphMzZhOWRjZC0xODZiLTQ4MjgtODE0Yy1lYmEyZjQyZWI5NzJscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoZIhDi0aHiLAMdxEah+RlcQAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggJf4/3u3fYxxWShd1/iioo5k/sQBU1/Wqy+WCnQecuYGkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaPtbRLzQIBR1jlefUBFG8K8AAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCA3ez32oMVE7DJVy4UE2OB9qKRd9zwPrbxDKEVyc71J+WRuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBi3Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOmMyZjkyMjQ4LWFhMGItNDE4YS1hNjY5LTMzOTIzZjQ3ZjFjMC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjJlOGI2OGUyLWJkNDktNGVhNC1hOTUxLTZkMGUxYTYwZWQ0YnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCAl/j/e7d9jHFZKF3X+KKijmT+xAFTX9arL5YKdB5y5gaJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggk7cyZJxWFQae48JCBXcs944XKmTYeSePmNy5IvdaY+2iY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggiM5Szgg1CCf/NInB6jp1+Bqgwf4q8ryHrOZluSHyvO10Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQPqZ+elhJTFKPVyXHvET0pc0IvvFohYSYMYfLPmrTnq8wCSil9Dl9GAkfXGxySYm8FJ1/7M0yG7RRI2RMGDUgJY=</c2pa:manifest></metadata><path fill="currentColor" d="M0 0L24 0L24 7L7 7L7 21L24 21L24 28L0 28ZM30 0L48 0L48 7L37 7L37 21L51 21L51 0L58 0L58 28L30 28ZM64 0L87.96 0L100.08 21L113 21L113 7L100.08 7L97.77 11L93.73 4L96.04 0L120 0L120 28L96.04 28L83.92 7L71 7L71 28L64 28ZM86.23 17L90.27 24L87.96 28L79.88 28ZM126 0L154 0L154 28L147 28L147 7L133 7L133 28L126 28ZM160 0L167 0L167 28L160 28ZM160 -10L167 -10L167 -3L160 -3ZM173 0L197 0L197 7L180 7L180 21L197 21L197 28L173 28Z"/><path class="accent" d="M103 11L109 11L109 17L103 17Z"/></svg></a><div class="foot-col"><span class="foot-head">Produkter</span><a href="/sv/workbench/">Workbench</a><span class="foot-soon">Testrun · Snart</span><span class="foot-soon">Playground · Snart</span><a href="/sv/shield/">Shield</a></div><details class="site-language"><summary>Språk <span lang="sv">· Svenska</span></summary><ul><li><a href="/en-ca/shield/docs/development/" lang="en-CA">English (Canada)</a></li><li><a href="/en-gb/shield/docs/development/" lang="en-GB">English (UK)</a></li><li><a href="/shield/docs/development/" lang="en-US">English (US)</a></li><li><a href="/fr-ca/shield/docs/development/" lang="fr-CA">Français (Canada)</a></li><li><a href="/fr-fr/shield/docs/development/" lang="fr-FR">Français (France)</a></li><li><a href="/es/shield/docs/development/" lang="es">Español</a></li><li><a href="/de/shield/docs/development/" lang="de">Deutsch</a></li><li><a href="/nl/shield/docs/development/" lang="nl">Nederlands</a></li><li><a href="/fi/shield/docs/development/" lang="fi">Suomi</a></li><li><a href="/sv/shield/docs/development/" lang="sv" aria-current="page">Svenska</a></li><li><a href="/nb/shield/docs/development/" lang="nb">Norsk bokmål</a></li><li><a href="/zh-hans/shield/docs/development/" lang="zh-Hans">简体中文</a></li><li><a href="/ja/shield/docs/development/" lang="ja">日本語</a></li></ul></details></div><div class="foot-bottom"><span>© 2026 Canonic Inc.</span></div></div></footer></body></html>
