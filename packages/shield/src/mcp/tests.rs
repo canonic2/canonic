@@ -31,9 +31,9 @@ mod tasks;
 #[test]
 fn doctor_nonblocking_storage_warnings_do_not_send_agents_to_repair() {
     let mut envelope = json!({"error":null,"data":{"repair_needed":false,"checks":[{"check":"object_storage","blocking":false}]}});
-    assert!(messages::summary("doctor", None, &envelope).contains("remains usable"));
+    assert!(messages::summary("doctor", None, &envelope).contains("nonblocking warnings"));
     envelope["data"]["checks"][0]["blocking"] = json!(true);
-    assert!(messages::summary("doctor", None, &envelope).contains("needs repair"));
+    assert!(messages::summary("doctor", None, &envelope).contains("exact affected settings"));
 }
 
 /// A fixture project. The temporary root lives as long as this value.
@@ -167,7 +167,7 @@ pub(crate) struct Transport {
     serving: Option<JoinHandle<Result<(), ServeError>>>,
 }
 
-struct Frames {
+pub(crate) struct Frames {
     incoming: mpsc::Receiver<Vec<u8>>,
     current: Cursor<Vec<u8>>,
 }
@@ -184,7 +184,7 @@ impl Read for Frames {
     }
 }
 
-struct Responses {
+pub(crate) struct Responses {
     outgoing: mpsc::SyncSender<Vec<u8>>,
     current: Vec<u8>,
 }
@@ -211,7 +211,7 @@ impl Transport {
         Self::with_runner(move |input, output| serve(server, input, output, &options))
     }
 
-    fn with_runner(
+    pub(crate) fn with_runner(
         run: impl FnOnce(BufReader<Frames>, Responses) -> Result<(), ServeError> + Send + 'static,
     ) -> Self {
         let (input, incoming) = mpsc::sync_channel(8);

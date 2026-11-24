@@ -18,6 +18,7 @@ CLI retains `--dry-run`.
 
 | You want to… | Start here |
 | --- | --- |
+| Set up Shield, including through Hub | Ask the agent to follow the bundled `project-setup` skill. A fresh project connection offers `init`; later integration changes use `mcp_setup`. |
 | Check the active policy and setup | `status`, then `doctor` if needed. |
 | Find a suitable pack | `pack_search`, then `pack_info` to inspect a result. |
 | Understand an existing rule | `rule_list` with its owner-qualified reference. |
@@ -44,6 +45,25 @@ server uses that project's confirmed active policy. You do not need to start
 it manually when using these registrations.
 
 For client implementation, see [transport details](#responses-and-transport-lifetime).
+
+### Initialize from an agent session
+
+A project connection launched with `shield mcp serve` also works before the
+project has Shield configuration. It offers an `init` tool. The agent supplies
+the integrations and an optional baseline profile, then you review and confirm
+the captured setup in the host. Recommended is the default profile. A failed
+baseline download, declined review or unavailable confirmation initializes
+nothing. The normal tools become usable on the same connection after acceptance.
+Existing or malformed project state retains its normal inspection and repair
+path; first-run setup does not overwrite it.
+
+For Hub, initialize its project and publish its agent configuration first, then
+call Shield `init` with `agents: ["hub"]`. Call Hub `setup` again to publish
+Shield's definition and hooks. For direct setup use native IDs, for example
+`agents: ["claude", "codex"]`. Reload affected agents to load new hooks.
+An existing MCP connection lets the agent finish configuration in-session;
+adding a connection to a running host may require a host reload before its tools
+appear. `--skills-only` remains static discovery and cannot initialize a project.
 
 | Category | Tools |
 | --- | --- |
@@ -272,8 +292,10 @@ work without activating any of them. Each skill is served at
 `skill://shield/<name>/SKILL.md`, and each change it proposes still needs your
 approval in the form:
 
-- `project-setup`: ask your agent to set up Shield for an initialized project.
-  It reads every package's development commands and checks what each one runs,
+- `project-setup`: initialize Shield, connect agents or Hub, enable enforcement
+  and check setup; configure additional permission packs and rules when requested.
+  For requested permission configuration, it reads each package's development
+  commands and checks what each one runs,
   then asks you to approve two changes: the packs that match the project's
   tools, and project rules for the development commands no pack covers, listed
   one line per command. It only adds, and anything it leaves out keeps asking.
@@ -1023,7 +1045,8 @@ Shield exposes project inspection, approved policy changes, and diagnostic
 evaluation over stdio using MCP `2025-06-18`, `2025-11-25`, and per-request
 `2026-07-28`. Other clients can
 launch `shield mcp serve --project /workspace/acme` explicitly, replacing
-the example path with an initialized project. Startup failure exits 1 with a
+the example path with the selected project. A project without policy starts with
+in-session initialization available. Startup failure exits 1 with a
 fixed stderr diagnostic and empty stdout.
 Launch from the selected project's directory. Shield serves the nearest
 configured project holding the agent's session folder, or else its working

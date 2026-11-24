@@ -515,13 +515,18 @@ fn call(root: &Path, agent: &str, alias: &str, tool: &str, query: &str) -> Value
 }
 
 fn call_at(root: &Path, cwd: &Path, agent: &str, alias: &str, tool: &str, query: &str) -> Value {
+    let namespace = if agent == "codex" {
+        alias.replace('-', "_")
+    } else {
+        alias.into()
+    };
     let event = if agent == "codex" {
         "PermissionRequest"
     } else {
         "PreToolUse"
     };
     translate_for(root, agent, if agent == "codex" { Event::Permission } else { Event::Before }, &serde_json::to_vec(&json!({"hook_event_name":event,
-        "cwd":cwd,"session_id":"acme-session","tool_use_id":"acme-call","tool_name":format!("mcp__{alias}__{tool}"),
+        "cwd":cwd,"session_id":"acme-session","tool_use_id":"acme-call","tool_name":format!("mcp__{namespace}__{tool}"),
         "tool_input":{"query":query}})).unwrap())
 }
 
@@ -608,7 +613,7 @@ fn automatic_mcp_matching_callbacks_fixture() {
         let root = Path::new(&context.project_root);
         for agent in ["claude", "codex"] {
             http_checks(root, agent, profile);
-            for alias in ["acme_first", "renamed_connector"] {
+            for alias in ["acme_first", "renamed_connector", "1password-mcp"] {
                 let (path, before) = configure(root, agent, alias, "acme-connector");
                 let expected = if profile == "strict" { "ask" } else { "allow" };
                 assert_decision(

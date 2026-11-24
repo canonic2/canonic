@@ -7,7 +7,22 @@ fn fresh(
     version: &str,
     capabilities: &Value,
 ) -> (Transport, Project, std::path::PathBuf) {
+    fresh_with_source_limit(
+        required,
+        version,
+        capabilities,
+        crate::policy::MAX_DOCUMENT_BYTES,
+    )
+}
+
+fn fresh_with_source_limit(
+    required: bool,
+    version: &str,
+    capabilities: &Value,
+    source_limit: usize,
+) -> (Transport, Project, std::path::PathBuf) {
     let (server, project) = fixture(Some("claude"));
+    server.questions.lock().unwrap().source_limit = source_limit;
     let source = std::path::Path::new(&project.review.project_root).join("registry");
     std::fs::create_dir(&source).unwrap();
     let source = source.canonicalize().unwrap();
@@ -539,28 +554,85 @@ fn pack_installation_allows_sixteen_missing_settings_but_refuses_seventeen_witho
 }
 
 #[test]
-fn pack_installation_refuses_more_than_four_mib_of_retained_source_without_proposal() {
-    let (transport, project, source) = fresh(true, VERSION, &json!({"elicitation":{"form":{}}}));
+fn pack_installation_above_four_mib_preserves_capture_and_separate_approval() {
+    for supplied in [false, true] {
+        let (transport, project, source) =
+            fresh(true, VERSION, &json!({"elicitation":{"form":{}}}));
+        let mut bytes = std::fs::read_to_string(source.join("pack.yml")).unwrap();
+        bytes.push_str(&" ".repeat(4 * 1024 * 1024));
+        publish(&source, &[("pack.yml", bytes)]);
+        let before = project.revision();
+        let proposals_before = proposals(&project);
+        let mut arguments = json!({"reference":"fixture/acme/settings","layer":"local"});
+        if supplied {
+            arguments["set"] = values();
+        }
+        let result = transport.call(json!(10), "pack_add", &arguments);
+        // Answers and final approval must use the captured artifact, even for
+        // candidates larger than the MCP response limit.
+        std::fs::remove_file(source.join("catalog.json")).unwrap();
+        std::fs::remove_file(source.join("pack.yml")).unwrap();
+        let proposal = if supplied {
+            result
+        } else {
+            assert_eq!(result["method"], "elicitation/create", "{result}");
+            assert_eq!(proposals(&project), proposals_before);
+            transport.request(&answer(&result, "accept", form_values(&result)))
+        };
+        assert!(data(&proposal)["error"].is_null(), "{proposal}");
+        assert_eq!(data(&proposal)["data"]["status"], "pending");
+        assert_eq!(project.revision(), before);
+        assert_eq!(proposals(&project), proposals_before + 1);
+        approve(&transport, 11, &proposal);
+        assert_ne!(project.revision(), before);
+        let folder = std::path::Path::new(&project.review.project_root).join(".shield");
+        let local: Value = crate::policy::parse(
+            &std::fs::read_to_string(folder.join("config.local.yml")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(local["packs"][0]["variables"], values());
+    }
+}
+
+#[test]
+fn pack_installation_pending_sources_share_a_connection_budget() {
+    let (transport, project, source) = fresh_with_source_limit(
+        true,
+        VERSION,
+        &json!({"elicitation":{"form":{}}}),
+        6 * 1024 * 1024,
+    );
     let mut bytes = std::fs::read_to_string(source.join("pack.yml")).unwrap();
     bytes.push_str(&" ".repeat(4 * 1024 * 1024));
     publish(&source, &[("pack.yml", bytes)]);
-    let before = project.revision();
-    let proposals_before = proposals(&project);
-    let result = transport.call(
-        json!(10),
-        "pack_add",
-        &json!({"reference":"fixture/acme/settings"}),
-    );
-    assert_eq!(result["id"], 10, "{result}");
-    assert_eq!(data(&result)["error"]["code"], "invalid_input", "{result}");
+    let revision = project.revision();
+    let arguments = json!({"reference":"fixture/acme/settings","layer":"local"});
+    let first = transport.call(json!(10), "pack_add", &arguments);
+    assert_eq!(first["method"], "elicitation/create", "{first}");
+    let refused = transport.call(json!(11), "pack_add", &arguments);
     assert!(
-        data(&result)["error"]["message"]
+        refused["error"]["message"]
             .as_str()
             .unwrap()
-            .contains("at most 4 MiB of source")
+            .contains("captured policy source limit"),
+        "{refused}"
     );
-    assert_eq!(project.revision(), before);
-    assert_eq!(proposals(&project), proposals_before);
+    assert_eq!(project.revision(), revision);
+    let declined = transport.request(&answer(&first, "decline", json!({})));
+    assert_eq!(
+        data(&declined)["error"]["code"],
+        "input_declined",
+        "{declined}"
+    );
+    let next = transport.call(json!(12), "pack_add", &arguments);
+    assert_eq!(next["method"], "elicitation/create", "{next}");
+    std::fs::remove_file(source.join("catalog.json")).unwrap();
+    std::fs::remove_file(source.join("pack.yml")).unwrap();
+    let proposal = transport.request(&answer(&next, "accept", form_values(&next)));
+    assert!(data(&proposal)["error"].is_null(), "{proposal}");
+    assert_eq!(project.revision(), revision);
+    approve(&transport, 13, &proposal);
+    assert_ne!(project.revision(), revision);
 }
 
 #[test]

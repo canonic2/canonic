@@ -21,6 +21,10 @@ pub(super) fn denial(mut reply: Reply, receipt: &Value) -> Reply {
         "policy-deny" if resource_failure.is_some() => resource_failure.unwrap_or_default(),
         "policy-deny" if receipt["diagnostics"]["requirement_checks"]
             .as_array()
+            .is_some_and(|checks| checks.iter().any(|check| check["code"] == "evidence_unavailable")) =>
+            "A required check could not be completed. The agent must diagnose the failure before requesting more permission.".into(),
+        "policy-deny" if receipt["diagnostics"]["requirement_checks"]
+            .as_array()
             .is_some_and(|checks| checks.first().is_some_and(|check| check["status"] != "met")) => format!(
             "{} The agent has instructions to revise the request.",
             crate::agent_message::failure(&receipt["diagnostics"]).unwrap_or_default()
@@ -134,6 +138,18 @@ mod tests {
             assert!(!reply.reason.contains("{\""));
             assert!(reply.agent_context.is_some());
         }
+    }
+
+    #[test]
+    fn unavailable_evidence_names_verification_instead_of_missing_permission() {
+        let receipt = json!({"code":"policy-deny","diagnostics":{
+            "message":"Use approved folders.",
+            "requirement_checks":[{"code":"evidence_unavailable","status":"unknown"}]
+        }});
+        let reply = denial(super::super::raw_deny("policy-deny"), &receipt);
+        assert!(reply.reason.contains("check could not be completed"));
+        assert!(!reply.reason.contains("outside the approved folders"));
+        assert!(!reply.reason.contains("revise the request"));
     }
 
     #[test]

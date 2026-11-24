@@ -57,6 +57,21 @@ pub(crate) fn run(
         session_id: input.session_id.clone(),
         tool_use_id: input.tool_use_id.clone(),
     };
+    if !crate::layout::discovery_root(&target) {
+        return match mcp::onboarding::serve(
+            context,
+            log.clone(),
+            process_input(),
+            io::stdout().lock(),
+            &options,
+        ) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("{error}");
+                ExitCode::FAILURE
+            }
+        };
+    }
     log.event("mcp_start", || serde_json::json!({"session_id":context.session_id,"agent":context.agent,"request_timeout_ms":input.request_timeout_ms}));
     let context = match review_context(&context) {
         Ok(context) => context,

@@ -17,7 +17,7 @@ pub(super) fn instructions_for(context: &crate::review::Context) -> String {
 }
 
 fn instructions_with(adapter: &dyn crate::agents::review::ReviewAdapter) -> String {
-    let inspection = "Shield manages project permissions. Inspect decisions with policy_evaluate, rules with rule_list, and installed packs with pack_list or pack_show. If the request is allowed, continue with the normal tool. Use suggestion_list for this session's evidence and existing reviews. \
+    let inspection = "Shield manages project permissions. For setup requests complete missing integration, publication and enable reviews, then check status and doctor. Disabled enforcement and configured hooks do not establish live interception. Inspect decisions with policy_evaluate, rules with rule_list, and installed packs with pack_list or pack_show. If the request is allowed, continue with the normal tool. Use suggestion_list for this session's evidence and existing reviews. \
 Use history_list or history_show with an absolute project path for history in an enrolled nested worktree. For more results, follow next_cursor with the same filters. Restart without a cursor on invalid_cursor. ";
     let host = adapter.guidance().instructions;
     if adapter.confirmation() == crate::agents::review::Confirmation::Terminal {
@@ -202,10 +202,45 @@ fn primary_summary(name: &str, agent: Option<&str>, value: &Value) -> String {
         "docs_read" => "Guide text returned; next_cursor continues this page.".into(),
         "policy_withdraw" => "Policy proposal withdrawn. The policy files are unchanged.".into(),
         "policy_compare" => "Policy comparison returned. Check coverage and unknowns; this preview grants no execution permission.".into(),
-        "doctor" if data["repair_needed"] == true || data["checks"].as_array().is_some_and(|checks| checks.iter().any(|row| row["blocking"] != false)) => "Shield needs repair. Ask the user to follow the returned repair route before retrying blocked requests.".into(),
-        "doctor" if data["checks"].as_array().is_some_and(|checks| !checks.is_empty()) => "Shield remains usable; inspect the nonblocking storage warnings and their paths.".into(),
+        "status" | "doctor" => setup_status(data),
         _ => "Records returned. Check missing and truncated evidence.".into(),
     }
+}
+
+/// Hosts often show only the first text block. Installed hooks and a usable
+/// MCP connection must never be presented as proof of active enforcement.
+fn setup_status(data: &Value) -> String {
+    let mut message = if data["enabled"] == false {
+        "Shield enforcement is disabled. Call enable to review resuming it; protected-file and operator guards still apply.".to_owned()
+    } else if data["policy_files"]["error"].is_string() {
+        "Shield cannot load its policy files. Inspect policy_files.error and the doctor checks."
+            .to_owned()
+    } else {
+        match data["enforcement"].as_str() {
+            Some("installed") => "Shield enforcement is enabled and native hooks are configured.".into(),
+            Some("defined-for-hub") => "Shield is defined for Hub but native hooks are not published. Call Hub's setup tool to review publication.".into(),
+            Some("defined-for-box") => "Shield is defined for Box but native hooks are not published. Use Box's config_sync to review publication.".into(),
+            Some("not-installed") => "Shield has no native hooks configured. Call mcp_setup to review connecting agents.".into(),
+            Some("degraded") => "Shield's integration configuration needs attention.".into(),
+            _ => "Shield configuration inspected.".into(),
+        }
+    };
+    if data["repair_needed"] == true
+        || data["checks"]
+            .as_array()
+            .is_some_and(|checks| checks.iter().any(|row| row["blocking"] != false))
+    {
+        message.push_str(" Inspect coverage diagnostics and checks for the exact affected settings. Review Shield-owned changes with mcp_setup; use Hub's setup for Hub-published hooks. Third-party server settings belong to their publisher.");
+    } else if data["checks"]
+        .as_array()
+        .is_some_and(|checks| !checks.is_empty())
+    {
+        message.push_str(" Inspect the nonblocking warnings.");
+    }
+    message.push_str(
+        " Current host loading and live policy interception are unverified by this report.",
+    );
+    message
 }
 
 /// What a pack inspection found, first, since hosts may preview only a few lines.
@@ -377,6 +412,49 @@ mod tests {
 
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn setup_reports_distinguish_disabled_unpublished_and_configured_hooks() {
+        for tool in ["status", "doctor"] {
+            for (data, expected) in [
+                (
+                    json!({"enabled":false,"enforcement":"installed"}),
+                    "Shield enforcement is disabled.",
+                ),
+                (
+                    json!({"enabled":true,"enforcement":"defined-for-hub"}),
+                    "Shield is defined for Hub but native hooks are not published.",
+                ),
+                (
+                    json!({"enabled":true,"enforcement":"not-installed"}),
+                    "Shield has no native hooks configured.",
+                ),
+                (
+                    json!({"enabled":true,"enforcement":"installed"}),
+                    "Shield enforcement is enabled and native hooks are configured.",
+                ),
+                (
+                    json!({"enabled":true,"enforcement":"installed","policy_files":{"error":"invalid policy"}}),
+                    "Shield cannot load its policy files.",
+                ),
+            ] {
+                let message = summary(tool, Some("codex"), &json!({"data":data}));
+                assert!(message.starts_with(expected), "{message}");
+                assert!(
+                    message.contains("live policy interception are unverified"),
+                    "{message}"
+                );
+            }
+            let message = summary(
+                tool,
+                None,
+                &json!({"data":{"enabled":true,"enforcement":"degraded","repair_needed":true}}),
+            );
+            assert!(message.contains("mcp_setup"), "{message}");
+            assert!(message.contains("Hub's setup"), "{message}");
+            assert!(!message.contains("Ask the user to follow"), "{message}");
+        }
+    }
 
     #[test]
     fn pack_summary_explains_allowances_and_retained_approval_boundaries() {

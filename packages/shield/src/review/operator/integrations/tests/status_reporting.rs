@@ -31,6 +31,18 @@ fn status_reporting_keeps_activity_unchecked_until_history_is_explicitly_inspect
     let mut state = crate::review::project::load(&context).unwrap();
     let report = crate::review::project::status_from(&context, &state);
     assert_eq!(report["enforcement"], "installed");
+    state.settings.enforcement = crate::configuration::settings::Enforcement::Paused;
+    let disabled = crate::review::project::status_from(&context, &state);
+    assert_eq!(disabled["enabled"], false);
+    assert_eq!(disabled["enforcement"], "disabled");
+    assert_ne!(
+        disabled["coverage"]["installed_integrations"]
+            .as_array()
+            .unwrap()
+            .as_slice(),
+        &[] as &[Value]
+    );
+    state.settings.enforcement = crate::configuration::settings::Enforcement::Enabled;
     assert_eq!(report["coverage"]["live_host_verification"], "unchecked");
     assert!(report["history"]["available"].is_null());
     let event = |surface: &str, project: &str, at: &str| {

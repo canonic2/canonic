@@ -477,7 +477,7 @@ pub(crate) fn mcp_namespace(agent: &str, alias: &str) -> Result<String, crate::r
     };
     if alias.is_empty()
         || alias.len() > 64
-        || !alias.as_bytes()[0].is_ascii_lowercase()
+        || !(alias.as_bytes()[0].is_ascii_lowercase() || alias.as_bytes()[0].is_ascii_digit())
         || !alias
             .bytes()
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b"_-".contains(&b))
@@ -485,7 +485,7 @@ pub(crate) fn mcp_namespace(agent: &str, alias: &str) -> Result<String, crate::r
         || namespace.ends_with('_')
     {
         return Err(crate::review::Error::Invalid(
-            "unsupported MCP server alias; use lowercase letters, digits, underscores or hyphens with an unambiguous host tool namespace",
+            "unsupported MCP server alias; start with a lowercase letter or digit, use lowercase letters, digits, underscores or hyphens, and avoid double or trailing underscores in the host tool namespace",
         ));
     }
     if reserved_mcp_alias(&namespace) {

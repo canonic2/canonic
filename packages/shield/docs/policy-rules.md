@@ -275,6 +275,16 @@ options fail matching. `operands: false` rejects positional arguments;
 declares `match`, `min` and `max`. The `--` separator ends option parsing, so flags
 forwarded through it must be modeled as operands.
 
+An options grammar can set `unknown_options: skip` with `unknown-options-v1`
+to inspect declared options while leaving unrelated options unmodeled. Following
+tokens remain operands or declared options; skipping does not hide them.
+With `short_clusters: false`, only the first letter of a single-dash token is
+checked as a short option. This prevents Go-style names such as
+`-future-display` from being mistaken for a cluster containing a declared `-r`.
+With clustering enabled, any declared letter in a cluster still forces parsing
+so an unknown leading letter cannot hide a checked option. Skipping does not
+establish the effects of the options passed over.
+
 ### Example: permit a project test script and its watch option
 
 Suppose your project's `package.json` defines `test`, and you have reviewed both
@@ -420,6 +430,14 @@ the existing-entry footprint even with `--no-ignore`. A `-` operand, helper prog
 as `--version` and options ripgrep does not define remain unverified. `--no-config` is optional. Shield trusts ambient ripgrep configuration
 and evaluates the submitted arguments; flags injected by `RIPGREP_CONFIG_PATH`
 are outside these checks. Use `--no-config` when config-free execution is desired.
+
+### Approved file and folder paths
+
+Paths approved for writing are also readable; a separate read approval is not
+needed. Access paths can name files or folders. An existing file grants access
+to that file, while a folder covers its contents. A file entry does not prevent
+access through other approved paths. If Shield cannot verify a path, it reports
+the failed check rather than asking for another folder approval.
 
 ### Write Git diff output
 

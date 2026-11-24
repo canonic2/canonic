@@ -2,15 +2,7 @@
 use super::terminal::Terminal;
 use crate::{
     configuration, policy,
-    review::{
-        self, Context, Error,
-        model::State,
-        project::status,
-        publication::{
-            self,
-            projections::{digest, file_hashes, materialize, projections},
-        },
-    },
+    review::{self, Context, Error, model::State, project::status, publication},
 };
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, path::Path};
@@ -78,7 +70,7 @@ pub(super) fn initialize(
         &bytes,
         None,
     )?;
-    let (candidate, mut meta) = super::packs::settle_first(
+    let (candidate, meta) = super::packs::settle_first(
         &mut tty,
         &project,
         &existing,
@@ -86,57 +78,15 @@ pub(super) fn initialize(
         meta,
         &super::packs::setup::Edits::default(),
     )?;
-    crate::review::packs::refresh_shared_metadata(&candidate, &mut meta)?;
-    let files = projections(&candidate, &meta)?;
-    meta["projection"] = json!(digest(&files));
-    meta["projection_file_hashes"] = json!(file_hashes(&files));
-    let candidates = BTreeMap::from([("project".into(), candidate.clone())]);
-    let evaluator = configuration::Evaluator::new(review::snapshots(&candidates)?)?;
+    let verified_main = checkpoints.contains_key("main");
+    let prepared =
+        review::initialization::Prepared::new(&project, candidate.clone(), meta, checkpoints)?;
     let mut setup = setup.clone();
-    crate::review::integrations::preview_prefix_rules(
-        &project,
-        &mut setup,
-        desired,
-        evaluator.codex_prefixes(),
-        true, // First enrollment has no saved mode and starts enabled.
-    );
+    prepared.preview_prefixes(&mut setup, desired);
     tty.confirm(&json!({"operation":"initialize project","project":project,
-        "policy":candidate,"registry_verification":if checkpoints.contains_key("main") {"signed by the main registry and verified against Shield's pinned key"} else {"project files captured for review; the main registry stays available for discovery"},
+        "policy":candidate,"registry_verification":if verified_main {"signed by the main registry and verified against Shield's pinned key"} else {"project files captured for review; the main registry stays available for discovery"},
         "integration_setup":setup}))?;
-    let publication = initial_publication(&project)?;
-    publication::initialize(
-        &project,
-        &candidates,
-        evaluator.revision(),
-        &meta,
-        checkpoints,
-    )?;
-    let context = review::open(&project)?;
-    publication.check(&context)?;
-    let repair = initialize_projections(&context, &files);
-    let mut receipt = status(&context)?;
-    receipt["committed"] = json!(true);
-    receipt["repair_needed"] = json!(repair || receipt["repair_needed"] == true);
-    Ok(receipt)
-}
-
-/// Confirmation precedes directory creation and the lease validates its owner/type.
-fn initial_publication(project: &Path) -> Result<publication::ProjectionLease, Error> {
-    match std::fs::create_dir(project.join(".shield")) {
-        Ok(()) => {}
-        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
-        Err(error) => return Err(error.into()),
-    }
-    publication::ProjectionLease::acquire(project)
-}
-
-/// Write the first policy files, then have the state follow them as written,
-/// so the next change starts from the files' own revision.
-fn initialize_projections(context: &Context, files: &BTreeMap<String, String>) -> bool {
-    materialize(context, files).is_err()
-        || crate::review::storage::Store::open(Path::new(&context.project_root))
-            .and_then(|store| store.update_checkpoint(context, &|| Ok(()), |_| Ok(Value::Null)))
-            .is_err()
+    prepared.commit(&|| Ok(())).map(|(_, receipt)| receipt)
 }
 
 /// Show the change once and, when the person accepts, write it to the policy

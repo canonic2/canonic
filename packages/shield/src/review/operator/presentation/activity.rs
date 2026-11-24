@@ -66,11 +66,10 @@ fn configuration_line(configuration: &Value, output: &mut String) {
     }
 }
 
-pub(super) fn status(value: &Value, doctor: bool) -> String {
-    let agents = integrations(&value["coverage"]);
+fn status_header(value: &Value, agents: &[String]) -> String {
     let root = label(&value["project_root"]);
     let error = &value["policy_files"]["error"];
-    let mut output = if value["enabled"] == false {
+    if value["enabled"] == false {
         format!(
             "Shield policy is disabled in {root}; protected controls remain guarded. Other requests use the agent's permissions. Resume with shield enable.\n"
         )
@@ -80,9 +79,28 @@ pub(super) fn status(value: &Value, doctor: bool) -> String {
         format!(
             "Shield policy is active in {root}, but no agent is connected. Connect one with shield mcp setup.\n"
         )
+    } else if matches!(
+        value["enforcement"].as_str(),
+        Some("defined-for-hub" | "defined-for-box")
+    ) {
+        format!(
+            "Shield is defined for {} in {root}; publish its native hooks through that manager's setup.\n",
+            agents.join(" and ")
+        )
+    } else if value["repair_needed"] == true {
+        format!("Shield policy is enabled in {root}; agent configuration needs attention.\n")
     } else {
-        format!("Shield is active in {root} for {}.\n", agents.join(" and "))
-    };
+        format!(
+            "Shield policy is enabled in {root}; hooks are configured for {}.\n",
+            agents.join(" and ")
+        )
+    }
+}
+
+pub(super) fn status(value: &Value, doctor: bool) -> String {
+    let agents = integrations(&value["coverage"]);
+    let error = &value["policy_files"]["error"];
+    let mut output = status_header(value, &agents);
     let packs = value["installed_packs"]["packs_total"]
         .as_u64()
         .and_then(|total| usize::try_from(total).ok())

@@ -20,7 +20,8 @@ propose new rules, but nothing changes until you review and confirm it.
   review and need confirmation in your terminal or agent host. `--json` output
   cannot authorize a change.
 - **Agents can help.** Agents use Shield's MCP tools to inspect policy, read the
-  bundled guides and draft rules for commands they were asked about.
+  bundled guides and draft rules for commands they were asked about. A connected
+  agent can initialize a fresh project through an in-session setup review.
 - **History.** See every recorded request, its decision and the rules behind it.
 - **One binary.** A Rust CLI that keeps its policy in your project's `.shield/`
   folder.

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Initialize fresh projects through MCP with an in-session human review, then
+  use normal policy tools on the same connection. Guide combined Hub and Shield
+  setup through initialization, registration, publication and enforcement checks.
+- Accept digit-leading MCP aliases such as `1password-mcp` while retaining
+  namespace collision and scope checks.
+- Report paused enforcement as disabled even when hooks are installed, and
+  distinguish configured hooks from verified live interception in setup reports.
 - Recognize curl GET and HEAD probes with an `Accept` header or multiple
   stdout or `/dev/null` outputs. Every destination still receives a web check.
 - Let a reviewed local HTTP rule opt into hostname resolution for one local

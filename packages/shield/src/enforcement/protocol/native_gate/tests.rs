@@ -2,6 +2,36 @@
 use super::*;
 
 #[test]
+fn unavailable_path_evidence_does_not_offer_another_folder_grant() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let root = dir.path().canonicalize().unwrap();
+    let project = root.join("project");
+    let outside_file = root.join("registry/schema.mjs");
+    std::fs::create_dir(&project).unwrap();
+    std::fs::create_dir(outside_file.parent().unwrap()).unwrap();
+    std::fs::write(&outside_file, "Acme").unwrap();
+    let mut value = json!({
+        "_observation":{"evaluation":{"explanation":{
+            "guidance":[{"operation_ref":"shell:0:0-9"}],
+            "requirement_checks":[]
+        }}},
+        "_shell_analysis":{"operations":[{
+            "source_unit":0,"span":{"start":0,"end":9},
+            "request":{"executable":"cat","arguments":[outside_file]}
+        }]}
+    });
+    // Establish that the same modeled outside read normally offers access.
+    assert!(outside(&value, &project, &project).is_some());
+    value["_observation"]["evaluation"]["explanation"]["requirement_checks"] = json!([
+        {"code":"evidence_unavailable","operation_ref":"shell:0:0-9"}
+    ]);
+    assert!(outside(&value, &project, &project).is_none());
+    value["_observation"]["evaluation"]["explanation"]["requirement_checks"][0]["code"] =
+        json!("location_outside");
+    assert!(outside(&value, &project, &project).is_some());
+}
+
+#[test]
 #[cfg(unix)]
 fn base64_option_paths_preserve_native_protection() {
     let dir = assert_fs::TempDir::new().unwrap();

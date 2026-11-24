@@ -143,7 +143,11 @@ pub(super) fn status_from(context: &Context, state: &State) -> Value {
     value["coverage"] = integrations::status(context, state);
     value["coverage"]["verification"] = json!({"state":"unchecked","basis":"record-only-inspection","history_available":value["history"]["available"],"agents":[],"inspect":"shield history list"});
     value["coverage"]["live_host_verification"] = json!("unchecked");
-    value["enforcement"] = json!(integrations::enforcement(&value["coverage"]));
+    value["enforcement"] = json!(if state.settings.enabled() {
+        integrations::enforcement(&value["coverage"])
+    } else {
+        "disabled"
+    });
     value["path_access"] = json!(super::settings::path_access(&state.settings));
     // Exact projection hashing belongs to explicit review/mutation. Even a
     // recorded digest does not make scanning all pack source a metadata probe.

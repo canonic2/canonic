@@ -105,7 +105,10 @@ In JSON output, `enforcement` reports `installed`, `defined-for-hub` or
 found), `degraded`, or `not-installed`. `coverage.host_integration` describes
 that definition, with `agent` naming `hub` or `box`. Policy-only inspection
 reports `not-checked` because it does not inspect agent integration files.
-`enabled` separately reports whether Shield is paused. For a Hub installation,
+When paused, `enforcement` reports `disabled` even when hooks remain installed;
+`enabled` is false. Protected-file and operator guards remain in place while
+ordinary policy enforcement is paused. Use the MCP `enable` tool or
+`shield enable` to review resuming enforcement. For a Hub installation,
 use `hub setup --dry-run` to review what Hub would publish; for Box, use
 `box config sync --server shield --dry-run`.
 

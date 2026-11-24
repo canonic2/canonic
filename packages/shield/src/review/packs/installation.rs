@@ -51,6 +51,21 @@ pub(in crate::review) struct Installation {
 }
 
 impl Installation {
+    pub(in crate::review) fn source_bytes(&self) -> usize {
+        ["config", "local_config", "rules", "local_rules"]
+            .into_iter()
+            .filter_map(|key| self.candidate[key].as_str())
+            .chain(["packs", "disabled"].into_iter().flat_map(|key| {
+                self.candidate[key]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(Value::as_str)
+            }))
+            .map(str::len)
+            .sum()
+    }
+
     pub(in crate::review) fn prepare(
         context: &Context,
         selections: &[Selection],
@@ -227,27 +242,9 @@ fn collect_settings(
     requested: &BTreeMap<String, BTreeSet<String>>,
 ) -> Result<Vec<Setting>, Error> {
     let _trace = crate::diagnostics::trace::span("pack.install.settings");
-    // Pending interactions retain source bytes in memory, never an unbounded bundle.
-    let bytes = candidate
-        .as_object()
-        .into_iter()
-        .flatten()
-        .map(|(_, v)| {
-            v.as_str().map_or_else(
-                || {
-                    v.as_array().map_or(0, |items| {
-                        items.iter().filter_map(Value::as_str).map(str::len).sum()
-                    })
-                },
-                str::len,
-            )
-        })
-        .sum::<usize>();
-    if bytes > 4 * 1024 * 1024 {
-        return Err(Error::Invalid(
-            "guided installation retains at most 4 MiB of source; use shield pack add in the terminal",
-        ));
-    }
+    // Add/update preparation already enforces Bundle's aggregate source and
+    // artifact limits. The captured candidate stays internal; the MCP reply
+    // limit must not become a second limit on the project's installed policy.
     let mut settings = Vec::new();
     for (index, row) in metadata["installed"]
         .as_array()

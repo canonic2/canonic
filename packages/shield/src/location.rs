@@ -159,7 +159,7 @@ pub(crate) struct Observer {
     access_paths: crate::configuration::AccessPaths,
     working_files: Option<WorkingFiles>,
     cache: RefCell<BTreeMap<(PathBuf, bool), Option<PathBuf>>>,
-    directories: RefCell<BTreeMap<PathBuf, bool>>,
+    directories: RefCell<BTreeMap<PathBuf, Option<bool>>>,
     #[cfg(any(unix, windows))]
     entries: RefCell<BTreeMap<PathBuf, EntryIdentity>>,
     targets: OnceCell<Targets>,
@@ -245,7 +245,7 @@ impl Observer {
                         let path = self.observed(&root.join(suffix), follow)?;
                         let directory = scope.skills.contains(root)
                             && self.present(&base) == Ok(false)
-                            || self.directory(&base);
+                            || self.directory(&base)?;
                         if base != *root || !directory || !path.starts_with(root) {
                             self.unverified.set(true);
                             return None;
@@ -267,7 +267,15 @@ impl Observer {
                     match self.present(&base) {
                         Ok(false) if include_missing => roots.push(base.join(suffix)),
                         Ok(false) => {}
-                        Ok(true) if self.directory(&base) => roots.push(base.join(suffix)),
+                        Ok(true) => {
+                            if self.directory(&base)? {
+                                roots.push(base.join(suffix));
+                            } else if Path::new(suffix) == Path::new(".") {
+                                // An explicit file grant contributes the file itself,
+                                // never fictional children such as file/.git.
+                                roots.push(base);
+                            }
+                        }
                         _ => {
                             self.unverified.set(true);
                             return None;
@@ -288,14 +296,16 @@ impl Observer {
         paths.dedup();
         Some(paths)
     }
-    fn directory(&self, path: &Path) -> bool {
+    fn directory(&self, path: &Path) -> Option<bool> {
         if let Some(directory) = self.directories.borrow().get(path) {
             return *directory;
         }
         self.observations
             .set(self.observations.get().saturating_add(1));
-        let directory = self.observations.get() <= 8192 && path.is_dir();
-        if !directory {
+        let directory = (self.observations.get() <= 8192)
+            .then(|| fs::metadata(path).ok().map(|metadata| metadata.is_dir()))
+            .flatten();
+        if directory.is_none() {
             self.unverified.set(true);
         }
         self.directories.borrow_mut().insert(path.into(), directory);

@@ -2658,6 +2658,42 @@ fn skipped_options_refuse_short_clusters_that_hide_declared_options() {
 }
 
 #[test]
+fn skipped_options_respect_disabled_short_clusters() {
+    let grammar = json!({"kind":"options","prefix":[],"flags":["-v"],
+        "values":[{"name":"-r","match":"safe"}],"short_clusters":false,
+        "operands":true,"unknown_options":"skip","forbid":["-v"]});
+    let row = json!({"id":"no-clusters","decision":"allow",
+        "conditions":{"domain":"argv","executable":"acme"},
+        "requirements":{"arguments":grammar},"on_unmet":{"decision":"deny"}});
+    let image = prepared(vec![row.clone()]);
+    let restored =
+        configuration::Evaluator::from_authenticated_compiled(image.compiled_bytes().to_vec())
+            .unwrap();
+    for (args, expected) in [
+        (vec!["-future-display", "main.go"], Decision::Allow),
+        (vec!["-subtest-mode=exclude-parents"], Decision::Allow),
+        (vec!["-krunsafe"], Decision::Allow),
+        (vec!["-r", "safe"], Decision::Allow),
+        (vec!["-rsafe"], Decision::Allow),
+        (vec!["--", "-v"], Decision::Allow),
+        (vec!["-v"], Decision::Deny),
+        (vec!["-r"], Decision::Deny),
+        (vec!["-r", "unsafe"], Decision::Deny),
+        (vec!["-future-display", "-runsafe"], Decision::Deny),
+        (vec!["-future-display", "-v"], Decision::Deny),
+    ] {
+        assert_eq!(evaluate(row.clone(), &args)["decision"], json!(expected));
+        for evaluator in [&image, &restored] {
+            assert_eq!(
+                evaluator.evaluate(&request(&args)).unwrap().decision,
+                expected,
+                "{args:?}"
+            );
+        }
+    }
+}
+
+#[test]
 fn negated_selectors_match_present_values_outside_their_inner_selector() {
     let blocked = json!({"kind":"options","prefix":[],"flags":[],
         "values":[{"name":"--profile","match":{"not":{"one_of":["acme-prod","acme-admin"]}}}],

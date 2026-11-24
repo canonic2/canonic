@@ -1015,6 +1015,40 @@ fn fresh_initialization_refuses_linked_or_file_projection_directory() {
 }
 
 #[test]
+#[cfg(any(unix, windows))]
+fn fresh_initialization_refuses_existing_authoring_files_before_confirmation() {
+    for name in [
+        "config.local.yml",
+        "rules.local.yml",
+        "shield.local.lock",
+        "rules.yml",
+    ] {
+        let root = TempDir::new().unwrap();
+        let path = root.child(format!(".shield/{name}"));
+        path.write_str("# preserved authoring file\n").unwrap();
+        for _ in 0..2 {
+            let result = guided(
+                &root,
+                &["init", "--no-setup", "--no-baseline", "--no-debug-log"],
+                "yes\n",
+            );
+            assert_ne!(result["code"], 0, "{result}");
+            let output = result.to_string().to_lowercase();
+            assert!(
+                output.contains("existing shield authoring files need inspection"),
+                "{result}"
+            );
+            assert!(!output.contains("initialize project"), "{result}");
+            assert_eq!(
+                std::fs::read_to_string(path.path()).unwrap(),
+                "# preserved authoring file\n"
+            );
+            assert!(!root.path().join(".shield/state/state.json").exists());
+        }
+    }
+}
+
+#[test]
 #[cfg(unix)]
 #[ignore = "requires SHIELD_PREVIOUS_BINARY pointing to a pre-continuity Shield executable"]
 fn previous_binary_unreceipted_checkpoint_upgrades_in_place() {

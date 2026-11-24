@@ -10,6 +10,7 @@ mod clock;
 mod files;
 mod history;
 pub(crate) mod hook_approval;
+pub(crate) mod initialization;
 mod inspection;
 pub(crate) mod integrations;
 #[cfg(test)]

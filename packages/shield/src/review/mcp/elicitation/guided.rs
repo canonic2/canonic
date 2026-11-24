@@ -23,6 +23,17 @@ pub(crate) struct Guided {
 }
 
 impl Question {
+    /// Captured policy sources retained while a pack-settings form is open.
+    pub(crate) fn source_bytes(&self) -> usize {
+        match self {
+            Self::Pack(plan) => plan
+                .installation
+                .as_ref()
+                .map_or(0, packs::installation::Installation::source_bytes),
+            Self::Guided(_) => 0,
+        }
+    }
+
     pub(crate) fn prepare(context: &Context, tool: &str, args: &Value) -> Result<Self, Error> {
         if matches!(tool, "registry_add" | "pack_remove") {
             return Guided::prepare(context, tool, args).map(|plan| Self::Guided(Box::new(plan)));

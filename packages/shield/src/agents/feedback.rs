@@ -503,6 +503,13 @@ fn policy_denial(
             .is_some_and(|checks| checks.iter().any(|check| check["status"] != "met"));
         // A path outside the approved folders is named; when its folder is
         // narrow, adding that folder is offered as a complete proposal.
+        let unavailable = receipt["diagnostics"]["requirement_checks"]
+            .as_array()
+            .is_some_and(|checks| {
+                checks
+                    .iter()
+                    .any(|check| check["code"] == "evidence_unavailable")
+            });
         let outside = receipt["outside_path"]["path"].as_str();
         let folder = outside.and_then(|_| {
             draft(
@@ -526,6 +533,9 @@ fn policy_denial(
             (Some(path), None) => format!(
                 "Shield: blocked because `{path}` is outside the folders agents may use. {why}. Its folder would open far more than this request needs, so do not propose it; work inside the project or ask the user."
             ),
+            (None, _) if unavailable => {
+                "Shield could not complete a required verification. Diagnose the failed requirement and its resource evidence before requesting more permission. Do not infer missing folder access from evidence_unavailable; write access already includes reads. Use the exact one-time approval route if the request is needed during diagnosis.".into()
+            }
             (None, _) if unmet => {
                 format!("Shield: blocked in this form; a revised request can pass. {detail}")
             }
@@ -723,6 +733,35 @@ mod tests {
             completed_ask_note(&json!({"guidance":[{"message":"Command requires approval."}]}));
         assert!(!command.contains("\"domain\":\"web\""));
         assert!(command.contains("rule_add"));
+    }
+
+    #[test]
+    fn unavailable_evidence_does_not_request_more_folder_permission() {
+        let root = assert_fs::TempDir::new().unwrap();
+        let receipt = json!({
+            "decision":"deny", "code":"policy-deny",
+            "diagnostics":{
+                "message":"Use approved paths.",
+                "guidance":[{"message":"Use approved paths."}],
+                "requirement_checks":[{"code":"evidence_unavailable","status":"unknown"}]
+            }
+        });
+        let reply = respond(
+            root.path(),
+            crate::agents::find("codex").unwrap(),
+            Event::Before,
+            &receipt,
+            &json!({"kind":"shell"}),
+            "acme-session",
+        )
+        .unwrap();
+        let context = reply.agent_context.unwrap();
+        assert!(
+            context.contains("write access already includes reads"),
+            "{context}"
+        );
+        assert!(!context.contains("access_path_add"), "{context}");
+        assert!(!context.contains("a revised request can pass"), "{context}");
     }
 
     #[test]

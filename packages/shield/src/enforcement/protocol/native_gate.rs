@@ -484,6 +484,19 @@ fn outside(value: &Value, owner: &Path, cwd: &Path) -> Option<paths::Outside> {
             cwd,
         );
     }
+    // Missing evidence is not proof that a folder permission is absent.
+    // Do not send the agent into repeated folder approvals for a failed check.
+    if check.is_none()
+        && explanation["requirement_checks"]
+            .as_array()
+            .is_some_and(|checks| {
+                checks
+                    .iter()
+                    .any(|check| check["code"] == "evidence_unavailable")
+            })
+    {
+        return None;
+    }
     // Without a location check, a rule that denies a read, such as a catch-all
     // for `cat`, is explained by the outside path it was given.
     let (reference, reads_only) = match check {

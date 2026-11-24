@@ -241,6 +241,11 @@ fn recognized(
     Ok(arg
         .chars()
         .skip(1)
+        .take(if setting(settings, "short_clusters")? {
+            usize::MAX
+        } else {
+            1
+        })
         .any(|c| grammar.contains_key(&format!("-{c}"))))
 }
 

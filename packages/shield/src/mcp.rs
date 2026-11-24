@@ -6,6 +6,7 @@ mod confirmation;
 mod elicitation;
 mod frame_log;
 mod messages;
+pub(crate) mod onboarding;
 mod progress;
 mod prompts;
 mod resources;
@@ -926,6 +927,15 @@ pub(crate) fn serve(
     if let Some(schema) = catalog.result_schema("policy_propose") {
         let _ = server.task_schema.set(schema);
     }
+    let options = project_options(options, messages::instructions_for(&review))?;
+    stdio::serve(Arc::new(server), Arc::new(catalog), input, output, &options)
+        .map_err(ServeError::Transport)
+}
+
+fn project_options(
+    options: &stdio::Options,
+    instructions: String,
+) -> Result<stdio::Options, ServeError> {
     let mut options = bundled_options(options)?;
     options.session.tasks = Some(tasks::policy());
     options
@@ -935,11 +945,9 @@ pub(crate) fn serve(
         resources::catalog().map_err(ServeError::Resources)?,
     ));
     options.session.modern = Some(canonic_mcp_kit::ModernOptions::new(
-        ServerInfo::new("shield", env!("CARGO_PKG_VERSION"))
-            .with_instructions(messages::instructions_for(&review)),
+        ServerInfo::new("shield", env!("CARGO_PKG_VERSION")).with_instructions(instructions),
     ));
-    stdio::serve(Arc::new(server), Arc::new(catalog), input, output, &options)
-        .map_err(ServeError::Transport)
+    Ok(options)
 }
 
 fn bundled_options(options: &stdio::Options) -> Result<stdio::Options, ServeError> {

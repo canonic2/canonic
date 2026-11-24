@@ -10,11 +10,52 @@ use canonic_mcp_kit::{
 };
 use ring::rand::{SecureRandom, SystemRandom};
 use serde_json::{Value, json};
-use std::{collections::BTreeMap, sync::Arc};
+use std::{
+    collections::BTreeMap,
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
+};
 
-#[derive(Default)]
 pub(super) struct Questions {
     pending: BTreeMap<String, Pending>,
+    source_bytes: Arc<AtomicUsize>,
+    pub(super) source_limit: usize,
+}
+
+impl Default for Questions {
+    fn default() -> Self {
+        Self {
+            pending: BTreeMap::new(),
+            source_bytes: Arc::new(AtomicUsize::new(0)),
+            source_limit: crate::policy::MAX_DOCUMENT_BYTES,
+        }
+    }
+}
+
+struct Capture {
+    source_bytes: Arc<AtomicUsize>,
+    bytes: usize,
+}
+
+impl Questions {
+    fn capture(&self, bytes: usize) -> Result<Capture, RpcError> {
+        self.source_bytes.try_update(Ordering::Relaxed, Ordering::Relaxed, |used| {
+            used.checked_add(bytes).filter(|total| *total <= self.source_limit)
+        }).map_err(|_| RpcError::new(rpc::INVALID_PARAMS,
+            "Pending input forms reached the connection's captured policy source limit; answer or cancel an open form, then retry"))?;
+        Ok(Capture {
+            source_bytes: self.source_bytes.clone(),
+            bytes,
+        })
+    }
+}
+
+impl Drop for Capture {
+    fn drop(&mut self) {
+        self.source_bytes.fetch_sub(self.bytes, Ordering::Relaxed);
+    }
 }
 struct Pending {
     tool: String,
@@ -22,6 +63,7 @@ struct Pending {
     plan: Question,
     requests: Requests,
     rounds: u8,
+    _capture: Capture,
 }
 
 pub(super) fn owns(server: &Server, context: &Context) -> bool {
@@ -84,6 +126,15 @@ pub(super) fn call(
             context,
         );
     }
+    let capture = match server
+        .questions
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .capture(plan.source_bytes())
+    {
+        Ok(capture) => capture,
+        Err(error) => return Outcome::Method(Err(error)),
+    };
     if let Some(request) = context.request_context() {
         let requests = match Requests::new(vec![("settings".into(), plan.question().clone())]) {
             Ok(requests) => requests,
@@ -111,6 +162,7 @@ pub(super) fn call(
                 plan,
                 requests,
                 rounds: 1,
+                _capture: capture,
             },
         );
         return Outcome::InputRequired(result);
@@ -123,6 +175,7 @@ pub(super) fn call(
     Outcome::Elicit(Elicit::new(
         plan.question().clone(),
         move |answer, context| {
+            let _capture = capture;
             let review = super::progress::resume(review, context);
             drop(waiting);
             let _scope = trace
@@ -249,4 +302,28 @@ fn output(review: &Review, name: &str, value: Value, context: &Context) -> Outco
         failed,
         &|| context.check(),
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn capture_budget_releases_only_when_its_owner_drops() {
+        let questions = Questions {
+            source_limit: 10,
+            ..Questions::default()
+        };
+        let first = questions.capture(6).unwrap();
+        let second = questions.capture(4).unwrap();
+        assert!(questions.capture(1).is_err());
+        assert!(questions.capture(usize::MAX).is_err());
+        drop(first);
+        let replacement = questions.capture(6).unwrap();
+        assert!(questions.capture(1).is_err());
+        drop(second);
+        drop(replacement);
+        assert_eq!(questions.source_bytes.load(Ordering::Relaxed), 0);
+        assert!(questions.capture(10).is_ok());
+    }
 }

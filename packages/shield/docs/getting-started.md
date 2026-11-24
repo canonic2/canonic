@@ -5,7 +5,8 @@ request. For an overview of the concepts, read [What is Shield?](introduction.md
 
 ## Before you begin
 
-You need the `shield` command on your path and an interactive terminal. If you
+You need the `shield` command on your path. The terminal steps below require an
+interactive terminal; a connected agent uses the host's confirmation form. If you
 are building from the Canonic checkout, the local installer is:
 
 ```sh
@@ -26,6 +27,13 @@ Open a terminal in your project. Default setup downloads a signed baseline
 pack from Shield's main registry, so you need network access.
 
 ## 1. Initialize the project
+
+If Shield's MCP tools are already connected to your agent, ask it to set up
+Shield. In a fresh project it can use `init`, show you the setup review and
+continue configuration on the same connection after you accept. For a combined
+Hub and Shield setup, the agent initializes Hub, registers the existing project,
+configures Shield through Hub and publishes its hooks. Reload the affected agent
+to load new registrations. See [agent setup](project-mcp.md#initialize-from-an-agent-session).
 
 From the project directory, run:
 

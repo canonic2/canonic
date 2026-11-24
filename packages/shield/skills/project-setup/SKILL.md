@@ -1,14 +1,52 @@
 ---
 name: project-setup
-description: Configure an initialized Shield project for development by inventorying its packages and development commands, installing matching packs and allowing the verified commands as project rules.
+description: Initialize Shield, connect native agents or Hub publication, enable enforcement and verify setup. Configure development packs and project rules when requested.
 ---
 
 # Configure Shield for this project
 
 Use when the user asks to set up, configure or refresh Shield for this project.
-The result: agents can run the project's everyday development commands without
-asking, and everything else still asks. Every run only adds what is missing; it
-never removes, narrows or updates existing packs and rules.
+Complete the requested setup through the tools in this session, preserving
+existing policy, packs, settings and agent selections.
+
+## Initialize and connect
+
+1. A fresh project connection offers `init`. Call it with the selected agents
+   and baseline profile (Recommended by default), then let the user confirm
+   the concrete review in the host. Select `agents: ["hub"]` for a Hub project;
+   initialize Hub's agent configuration with its `setup` first if needed.
+   Otherwise name native agents such as `claude` and `codex`. The same connection
+   exposes normal tools after initialization; no MCP reconnect is needed for
+   the agent to finish configuration.
+2. In an initialized project, call `status` first. Use `mcp_setup` for a missing
+   requested integration. A Hub installation uses only `agents: ["hub"]`;
+   call Hub's `setup` afterwards to publish the Shield definition and hooks to
+   its saved agents. Preserve unrelated settings and existing selections.
+3. If enforcement is disabled and setup was requested, call `enable` for the
+   user's in-session confirmation. Protected-file guards working while disabled
+   do not establish active policy enforcement. Respect a declined review.
+4. Call `status` and `doctor`. Resolve the concrete reported setup gaps through
+   their owning tools. Distinguish enforcement mode, hook publication and current
+   host loading. Report any required agent reload; installed files or a responding
+   MCP connection do not prove live interception.
+
+For a combined Hub and Shield setup, use Hub's
+`skill://hub/project-setup/SKILL.md` workflow to initialize its project, register
+the existing directory and publish its agent configuration. Do not stop at a
+list of missing configuration when the user requested setup.
+
+A setup request alone does not request additional packs, custom command
+allowances, updates, application services or dependency installation. Finish
+after the integration checks unless the user requested permission configuration.
+If a required MCP connection is absent, use the product's documented connection
+workflow and report the required host reload precisely.
+
+## Configure development permissions
+
+When the user asks to allow the project's development commands, inventory their
+effects and use the reviewed steps below. Add only what is missing; preserve
+existing packs and rules. Requested pack installation uses the user's selected
+pack, profile and settings rather than a repository-wide inventory.
 
 ## 1. Read the current policy
 

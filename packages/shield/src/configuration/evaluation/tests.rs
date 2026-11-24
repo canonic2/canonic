@@ -87,6 +87,7 @@ fn root_evaluator(reference: &std::path::Path, scratch: &std::path::Path) -> Eva
     let rows = vec![
         json!({"id":"read","decision":"allow","conditions":{"domain":"argv","executable":{"one_of":["cat","head","tail","wc","ls"]},"arguments":{"kind":"any"}},"requirements":{"targets":{"action":"read","all":{"within":{"root":"read"}}}},"on_unmet":{"decision":"deny"}}),
         json!({"id":"remove","decision":"allow","conditions":{"domain":"argv","executable":"rm","arguments":{"kind":"any"}},"requirements":{"targets":{"action":"remove","all":{"within":{"root":"write"},"exclude":[{"root":"write","path":".git"}],"match":{"regex":".+"}}}},"on_unmet":{"decision":"deny"}}),
+        json!({"id":"write-file","decision":"allow","conditions":{"domain":"file","action":"write"},"requirements":{"destination":{"within":{"root":"write"},"exclude":[{"root":"write","path":".git"}]}},"on_unmet":{"decision":"deny"}}),
     ];
     let document = crate::policy::rules::document(&rows).unwrap().to_string();
     let config = json!({"schema_version":1,"packs":[],"rules":"rules.yml","access_paths":{"read":[reference],"write":[scratch]}}).to_string();
@@ -329,13 +330,6 @@ fn configured_roots_that_exist_but_cannot_be_observed_keep_location_unknown() {
     };
     let decide = |evaluator: &Evaluator| evaluator.evaluate(&request).map(|r| r.decision);
     assert_eq!(decide(&evaluator).unwrap(), Decision::Allow);
-    // A file where a directory is configured is not an empty root.
-    std::fs::remove_dir_all(&scratch).unwrap();
-    std::fs::write(&scratch, "Acme").unwrap();
-    assert_eq!(decide(&evaluator).unwrap(), Decision::Deny);
-    std::fs::remove_file(&scratch).unwrap();
-    std::fs::create_dir(&scratch).unwrap();
-    assert_eq!(decide(&evaluator).unwrap(), Decision::Allow);
     // A root whose parent cannot be searched may exist; its contents are unknown.
     let locked = dir.path().join("locked");
     std::fs::create_dir_all(locked.join("reference")).unwrap();
@@ -359,6 +353,81 @@ fn configured_roots_that_exist_but_cannot_be_observed_keep_location_unknown() {
         }
     }
     assert!(reference.join("item").exists());
+}
+
+#[test]
+fn approved_file_roots_preserve_directory_grants_and_exclusions() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let _ = approved_root_evaluator(&dir);
+    let project = dir.path().join("project").canonicalize().unwrap();
+    let reference = dir.path().join("reference").canonicalize().unwrap();
+    let file = dir.path().join("release.json");
+    std::fs::write(&file, "Acme").unwrap();
+    let file = file.canonicalize().unwrap();
+    let evaluator = root_evaluator(&reference, &file);
+    let cached =
+        Evaluator::from_authenticated_compiled(evaluator.compiled_bytes().to_vec()).unwrap();
+    for (exe, path, decision) in [
+        ("cat", project.join("item"), Decision::Allow),
+        ("cat", reference.join("item"), Decision::Allow),
+        ("cat", file.clone(), Decision::Allow),
+        ("cat", dir.path().join("outside/item"), Decision::Deny),
+        ("rm", project.join("item"), Decision::Allow),
+        ("rm", project.join(".git"), Decision::Deny),
+        ("rm", reference.join("item"), Decision::Deny),
+    ] {
+        let request = Request {
+            executable: exe.into(),
+            arguments: vec![path.to_str().unwrap().into()],
+            cwd: project.to_str().unwrap().into(),
+            project: project.to_str().unwrap().into(),
+        };
+        for engine in [&evaluator, &cached] {
+            let result = engine.evaluate(&request).unwrap();
+            assert_eq!(
+                result.decision,
+                decision,
+                "{exe} {path:?}: {}",
+                value(&result)
+            );
+        }
+    }
+    let request = Request {
+        executable: "file".into(),
+        arguments: vec![],
+        cwd: project.to_str().unwrap().into(),
+        project: project.to_str().unwrap().into(),
+    };
+    let context = policy::resolution::normalized::Context {
+        working_files: None,
+        cwd: request.cwd.clone(),
+        environment: None,
+    };
+    for (path, decision) in [
+        (file, Decision::Allow),
+        (project.join("item"), Decision::Allow),
+        (project.join(".git/hooks/x"), Decision::Deny),
+        (reference.join("item"), Decision::Deny),
+        (dir.path().join("unapproved.json"), Decision::Deny),
+    ] {
+        let input = policy::resolution::normalized::Input::File {
+            action: "write".into(),
+            sources: vec![],
+            destination: Some(path.to_str().unwrap().into()),
+            recursive: false,
+            original_input: json!({}),
+        };
+        for engine in [&evaluator, &cached] {
+            assert_eq!(
+                engine
+                    .evaluate_resource(&request, &input, &context, &|| Ok(()))
+                    .unwrap()
+                    .decision,
+                decision,
+                "{path:?}"
+            );
+        }
+    }
 }
 
 #[test]

@@ -500,8 +500,27 @@ fn live_session_retains_diagnostic_handles_without_execution() {
 fn startup_and_frame_failures_are_sanitized_and_never_emit_non_protocol_stdout() {
     let root = assert_fs::TempDir::new().unwrap();
     let output = cargo_bin_cmd!("shield")
+        .current_dir(root.path())
         .args(["mcp", "serve", "--project"])
         .arg(root.path())
+        .assert()
+        .success();
+    assert_eq!(output.get_output().stdout, [] as [u8; 0]);
+    assert!(!String::from_utf8_lossy(&output.get_output().stderr).contains("PRIVATE_SECRET"));
+    root.child(".shield").assert(predicates::path::missing());
+    let broken = assert_fs::TempDir::new().unwrap();
+    broken
+        .child(".shield/config.yml")
+        .write_str("schema_version: 1\npacks: []\n")
+        .unwrap();
+    broken
+        .child(".shield/state/state.json")
+        .write_str("{PRIVATE_SECRET:")
+        .unwrap();
+    let output = cargo_bin_cmd!("shield")
+        .current_dir(broken.path())
+        .args(["mcp", "serve", "--project"])
+        .arg(broken.path())
         .assert()
         .code(1);
     assert_eq!(output.get_output().stdout, [] as [u8; 0]);
