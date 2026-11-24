@@ -1,10 +1,10 @@
 [package]
 name = "canonic-agent-kit"
-version = "0.5.0"
+version = "0.6.0"
 edition = "2024"
 rust-version = "1.102"
 publish = false
-license-file = "../../LICENSE"
+license-file = "LICENSE"
 description = "Owned native agent registration and configuration editing"
 
 [dependencies]

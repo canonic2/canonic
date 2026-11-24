@@ -63,5 +63,5 @@ focused verification and temporary configuration fixtures.
 
 ## License
 
-Agent Kit is subject to the [Canonic Proprietary License](../../LICENSE).
+Agent Kit is subject to the [Canonic Proprietary License](LICENSE).
 Third-party components retain their own licenses and notices.

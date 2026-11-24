@@ -115,7 +115,7 @@ impl Prepared {
                 "Permission rules require JSON configuration",
             ));
         };
-        Ok(allow_nodes(root)?.2)
+        allow_rules(root)
     }
 
     fn edit_path(
@@ -189,26 +189,8 @@ impl Prepared {
         let Parsed::Json(root) = &self.parsed else {
             return Err(Error::invalid("Hooks require JSON configuration"));
         };
-        let (hooks, list) = hook_nodes(root, event)?;
         let after = serde_json::json!(groups);
-        match (hooks, list) {
-            (_, Some(list)) => {
-                let mut result = self.source.to_string();
-                result.replace_range(
-                    list.node.range.clone(),
-                    &serde_json::to_string_pretty(&after)
-                        .map_err(|e| Error::invalid(e.to_string()))?,
-                );
-                Ok(result)
-            }
-            (Some(hooks), None) => insert(&self.source, &hooks.node, event, &after),
-            (None, None) => insert(
-                &self.source,
-                root,
-                "hooks",
-                &serde_json::json!({event: after}),
-            ),
-        }
+        json_edit(&self.source, root, &["hooks"], event, Some(&after)).map(|(_, text)| text)
     }
 }
 
@@ -588,23 +570,16 @@ pub fn list_item(source: &str, key: &str, item: &str, present: bool) -> Result<(
     if was == present {
         return Ok((was, source.into()));
     }
-    let after: Vec<&String> = current.iter().filter(|value| *value != item).collect();
-    let mut after: Vec<String> = after.into_iter().cloned().collect();
+    let mut after: Vec<String> = current
+        .iter()
+        .filter(|value| *value != item)
+        .cloned()
+        .collect();
     if present {
         after.push(item.to_owned());
     }
     let list = serde_json::json!(after);
-    let edited = match member {
-        Some(member) => {
-            let mut result = source.to_owned();
-            result.replace_range(
-                member.node.range.clone(),
-                &serde_json::to_string_pretty(&list).map_err(|e| Error::invalid(e.to_string()))?,
-            );
-            result
-        }
-        None => insert(source, &root, key, &list)?,
-    };
+    let (_, edited) = json_edit(source, &root, &[], key, Some(&list))?;
     Ok((was, edited))
 }
 
@@ -915,19 +890,18 @@ pub fn allow_list(
     Prepared::parse(source, Format::Json)?.allow_list(remove, add)
 }
 
-/// The `permissions` and `permissions.allow` members and the current rules.
-fn allow_nodes(root: &Node) -> Result<(Option<&Member>, Option<&Member>, Vec<String>)> {
+/// The current rules, after validating `permissions` and `permissions.allow`.
+fn allow_rules(root: &Node) -> Result<Vec<String>> {
     let permissions = root.members.iter().find(|m| m.key == "permissions");
     let allow = permissions.and_then(|p| p.node.members.iter().find(|m| m.key == "allow"));
     if permissions.is_some_and(|p| !p.node.value.is_object()) {
         return Err(Error::invalid("Permissions must be an object"));
     }
-    let current: Vec<String> = match allow {
+    match allow {
         Some(allow) => serde_json::from_value(allow.node.to_value())
-            .map_err(|_| Error::invalid("Permission rules must be a list of strings"))?,
-        None => Vec::new(),
-    };
-    Ok((permissions, allow, current))
+            .map_err(|_| Error::invalid("Permission rules must be a list of strings")),
+        None => Ok(Vec::new()),
+    }
 }
 
 fn edit_allow_list(
@@ -936,7 +910,7 @@ fn edit_allow_list(
     remove: &[String],
     add: &[String],
 ) -> Result<(Vec<String>, String)> {
-    let (permissions, allow, current) = allow_nodes(root)?;
+    let current = allow_rules(root)?;
     let mut after: Vec<String> = current
         .iter()
         .filter(|rule| !remove.contains(rule))
@@ -951,29 +925,95 @@ fn edit_allow_list(
         return Ok((current, source.into()));
     }
     let list = serde_json::json!(after);
-    let edited = match (permissions, allow) {
-        (_, Some(allow)) => {
-            let mut result = source.to_owned();
-            result.replace_range(
-                allow.node.range.clone(),
-                &serde_json::to_string_pretty(&list).map_err(|e| Error::invalid(e.to_string()))?,
-            );
-            result
-        }
-        (Some(permissions), None) => insert(source, &permissions.node, "allow", &list)?,
-        (None, None) => insert(
-            source,
-            root,
-            "permissions",
-            &serde_json::json!({"allow":list}),
-        )?,
-    };
+    let (_, edited) = json_edit(source, root, &["permissions"], "allow", Some(&list))?;
     Ok((current, edited))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn json_list_helpers_preserve_unrelated_bytes_and_validate_selected_lists() {
+        let group = serde_json::json!({"hooks":[{"type":"command","command":"acme hook"}]});
+        for source in [
+            "{}",
+            r#"{"keep": [1, 2]}"#,
+            r#"{"hooks":{},"permissions":{}}"#,
+        ] {
+            let (was, listed) = list_item(source, "items", "acme", true).unwrap();
+            assert!(!was);
+            assert_eq!(
+                list_item(&listed, "items", "acme", true).unwrap(),
+                (true, listed.clone())
+            );
+            let (was, removed) = list_item(&listed, "items", "acme", false).unwrap();
+            assert!(was);
+            assert_eq!(
+                serde_json::from_str::<Value>(&removed).unwrap()["items"],
+                serde_json::json!([])
+            );
+            let (was, hooked) = hook_group(source, "UserPromptSubmit", &group, true).unwrap();
+            assert!(!was);
+            assert_eq!(
+                hook_group(&hooked, "UserPromptSubmit", &group, true).unwrap(),
+                (true, hooked.clone())
+            );
+            let (was, unhooked) = hook_group(&hooked, "UserPromptSubmit", &group, false).unwrap();
+            assert!(was);
+            assert_eq!(
+                serde_json::from_str::<Value>(&unhooked).unwrap()["hooks"]["UserPromptSubmit"],
+                serde_json::json!([])
+            );
+            let (before, allowed) = allow_list(source, &[], &["acme".into()]).unwrap();
+            assert_eq!(before, Vec::<String>::new());
+            assert_eq!(
+                allow_list(&allowed, &[], &["acme".into()]).unwrap(),
+                (vec!["acme".into()], allowed.clone())
+            );
+            let (_, disallowed) = allow_list(&allowed, &["acme".into()], &[]).unwrap();
+            assert_eq!(
+                serde_json::from_str::<Value>(&disallowed).unwrap()["permissions"]["allow"],
+                serde_json::json!([])
+            );
+            if source.contains("keep") {
+                for text in [&listed, &removed, &hooked, &unhooked, &allowed, &disallowed] {
+                    assert!(text.contains(r#""keep": [1, 2]"#), "{text}");
+                }
+            }
+        }
+        let source =
+            r#"{"items":["acme","keep","acme"],"permissions":{"allow":["acme","keep","acme"]}}"#;
+        let (_, edited) = list_item(source, "items", "acme", false).unwrap();
+        assert_eq!(
+            serde_json::from_str::<Value>(&edited).unwrap()["items"],
+            serde_json::json!(["keep"])
+        );
+        let (_, edited) =
+            allow_list(source, &["acme".into()], &["new".into(), "new".into()]).unwrap();
+        assert_eq!(
+            serde_json::from_str::<Value>(&edited).unwrap()["permissions"]["allow"],
+            serde_json::json!(["keep", "new"])
+        );
+        for source in [r#"{"items":1}"#, r#"{"items":[1]}"#] {
+            assert!(list_item(source, "items", "acme", false).is_err());
+        }
+        for source in [r#"{"hooks":1}"#, r#"{"hooks":{"UserPromptSubmit":1}}"#] {
+            assert!(hook_group(source, "UserPromptSubmit", &group, false).is_err());
+        }
+        for source in [r#"{"permissions":1}"#, r#"{"permissions":{"allow":[1]}}"#] {
+            assert!(allow_list(source, &[], &[]).is_err());
+        }
+        assert_eq!(
+            list_item("{}", "items", "acme", false).unwrap(),
+            (false, "{}".into())
+        );
+        assert_eq!(
+            hook_group("{}", "UserPromptSubmit", &group, false).unwrap(),
+            (false, "{}".into())
+        );
+        assert_eq!(allow_list("{}", &[], &[]).unwrap(), (vec![], "{}".into()));
+    }
 
     #[test]
     fn git_conflict_line_requires_a_complete_column_zero_block() {

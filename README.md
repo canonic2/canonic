@@ -53,11 +53,12 @@ profile. Agents can propose changes; you review and confirm them.
 
 ## Development
 
-Each package owns its dependencies and checks. Start with its README. For
-example, list Agent Kit's development commands from the repository root:
+Each package owns its dependencies and checks. Start with its README. Rust
+packages use Cargo from their own folder, for example:
 
 ```sh
-make -C packages/agent-kit
+cd packages/agent-kit
+cargo nextest run --locked --all-features
 ```
 
 ## License

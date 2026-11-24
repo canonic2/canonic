@@ -149,7 +149,7 @@ pub fn directory(path: &Path, private: bool) -> Result<()> {
         }
     }
     let _ = private;
-    match builder.create(path) {
+    match builder.recursive(false).create(path) {
         Ok(()) => Ok(()),
         Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => safe(path),
         Err(e) => Err(e.into()),

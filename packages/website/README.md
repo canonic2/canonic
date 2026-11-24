@@ -154,6 +154,19 @@ published release's notes, edit them on the GitHub release, then deploy
 the site again. In dev the changelog still asks GitHub, and shows a link to the
 releases if it can't reach them.
 
+## Languages
+
+Choose a language in the page footer. The US English URLs are `/workbench/`
+and `/shield/`. Other locales have a lowercase URL prefix, such as
+`/en-gb/workbench/` or `/fr-ca/shield/`. Product navigation and the language
+picker keep the equivalent page selected.
+
+The site translates its navigation, product introductions and key page controls.
+It uses English source text where a guide, release note or page section has no
+translation. Website UI messages live in `src/lib/messages.js`. Each row holds
+the translations in the order named at the top of the file, and placeholders
+such as `{product}` must be present in each translation.
+
 ## Product documentation
 
 The site root redirects to `/workbench/`, where the Workbench overview lives.

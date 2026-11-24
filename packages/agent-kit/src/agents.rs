@@ -133,16 +133,7 @@ pub(crate) fn destination(context: &Context, id: &str, scope: Scope) -> Result<D
     }
     // Project files are often committed, so they name the command for PATH
     // lookup instead of this user's install path; user files keep the path.
-    let program = if let Some(command) = &context.launch_command {
-        command.as_str()
-    } else if project {
-        context.product.as_str()
-    } else {
-        context
-            .program
-            .to_str()
-            .ok_or_else(|| Error::invalid("Executable path is not Unicode"))?
-    };
+    let program = launch_command(context, scope)?;
     if path.extension().is_some_and(|ext| ext == "jsonc") {
         format = Format::Jsonc;
     }
