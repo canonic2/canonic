@@ -156,6 +156,16 @@ pub(super) fn rs256(header: &Value, claims: &Value) -> String {
     jwt(&header, claims, |input| signer.sign(input).to_vec())
 }
 
+#[cfg(feature = "http-server")]
+pub(crate) fn test_identity_assertion(claims: &Value) -> String {
+    rs256(&json!({}), claims)
+}
+
+#[cfg(feature = "http-server")]
+pub(crate) fn test_identity_jwks() -> Vec<u8> {
+    key_set(&[rsa_jwk("idp-1")])
+}
+
 pub(super) fn es256(header: &Value, claims: &Value) -> String {
     let signer = ec_signer();
     let header = merged(

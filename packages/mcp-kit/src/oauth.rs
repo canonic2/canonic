@@ -54,7 +54,10 @@ use std::{
 #[cfg(test)]
 mod tests;
 #[cfg(all(test, feature = "http-server"))]
-pub(crate) use tests::client_assertions::{test_client_assertion, test_client_jwks};
+pub(crate) use tests::{
+    assertions::{test_identity_assertion, test_identity_jwks},
+    client_assertions::{test_client_assertion, test_client_jwks},
+};
 
 /// The well-known prefix of authorization server metadata (RFC 8414).
 pub const METADATA_PREFIX: &str = "/.well-known/oauth-authorization-server";

@@ -27,6 +27,8 @@ struct Acme {
     keyed: AtomicUsize,
     keyed_peak: AtomicUsize,
     pending_input: AtomicBool,
+    #[cfg(feature = "authorization-server")]
+    whoami_grant: Mutex<Option<Grant>>,
 }
 
 impl Handler for Acme {
@@ -102,12 +104,14 @@ impl Handler for Acme {
                 Outcome::Tool(ToolResult::success(vec![]))
             }
             "acme_echo" => text(call.arguments["text"].as_str().unwrap_or_default()),
-            "acme_whoami" => text(
-                context
-                    .authorization()
-                    .and_then(Grant::subject)
-                    .unwrap_or("anonymous"),
-            ),
+            "acme_whoami" => {
+                let grant = context.authorization();
+                #[cfg(feature = "authorization-server")]
+                {
+                    *self.whoami_grant.lock().unwrap() = grant.cloned();
+                }
+                text(grant.and_then(Grant::subject).unwrap_or("anonymous"))
+            }
             "acme_keyed" => {
                 let running = self.keyed.fetch_add(1, Ordering::SeqCst) + 1;
                 self.keyed_peak.fetch_max(running, Ordering::SeqCst);
@@ -229,6 +233,8 @@ impl Server {
             keyed: AtomicUsize::new(0),
             keyed_peak: AtomicUsize::new(0),
             pending_input: AtomicBool::new(false),
+            #[cfg(feature = "authorization-server")]
+            whoami_grant: Mutex::new(None),
         });
         let catalog = catalog_with_apps(options.session.apps.is_some());
         let shutdown = Shutdown::new();
@@ -961,6 +967,8 @@ fn serve_requires_modern_options_and_valid_limits() {
             keyed: AtomicUsize::new(0),
             keyed_peak: AtomicUsize::new(0),
             pending_input: AtomicBool::new(false),
+            #[cfg(feature = "authorization-server")]
+            whoami_grant: Mutex::new(None),
         });
         let options = Options {
             session,

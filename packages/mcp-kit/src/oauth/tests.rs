@@ -4,7 +4,7 @@
 use super::*;
 use crate::http::{RequestHead, ResourceOptions};
 
-mod assertions;
+pub(super) mod assertions;
 pub(super) mod client_assertions;
 use std::{
     collections::HashMap,
