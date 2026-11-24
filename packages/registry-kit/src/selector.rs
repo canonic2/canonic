@@ -145,7 +145,7 @@ pub fn find_installed<'a>(
     let scoped = name
         .split_once('/')
         .filter(|(alias, _)| installed.iter().any(|i| i.alias == Some(*alias)));
-    let found: Vec<_> = installed
+    let mut found = installed
         .iter()
         .enumerate()
         .filter(|(_, item)| {
@@ -160,12 +160,11 @@ pub fn find_installed<'a>(
                     format!("{alias}/{id}") == name || format!("{alias}/{}", item.id.name()) == name
                 })
         })
-        .map(|(index, _)| index)
-        .collect();
-    match found.as_slice() {
-        [index] => Ok(*index),
-        [] => Err(InstalledError::Missing),
-        _ => Err(InstalledError::Ambiguous),
+        .map(|(index, _)| index);
+    match (found.next(), found.next()) {
+        (Some(index), None) => Ok(index),
+        (None, _) => Err(InstalledError::Missing),
+        (Some(_), Some(_)) => Err(InstalledError::Ambiguous),
     }
 }
 
@@ -215,9 +214,9 @@ impl FromStr for InstalledSelector {
         let uuid = value
             .strip_prefix("pack:")
             .ok_or(SelectorError::Installed)?;
-        let groups: Vec<_> = uuid.split('-').collect();
-        let valid = groups.iter().map(|g| g.len()).eq([8, 4, 4, 4, 12])
-            && groups.iter().all(|g| {
+        let mut groups = uuid.split('-');
+        let valid = groups.clone().map(str::len).eq([8, 4, 4, 4, 12])
+            && groups.all(|g| {
                 g.bytes()
                     .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
             });
