@@ -110,7 +110,7 @@ fn stale_progress_consumes_the_turn_budget() {
 
 #[test]
 fn human_input_lifetime_has_no_wakeup_or_expiry_and_keeps_remaining_budget() {
-    use crate::elicitation::{Answer, Form, Request as Question};
+    use crate::elicitation::{Action, Answer, Form, Request as Question};
 
     for rich in [false, true] {
         let (mut scheduler, mut session) = scheduler_with_progress(vec![]);
@@ -120,15 +120,16 @@ fn human_input_lifetime_has_no_wakeup_or_expiry_and_keeps_remaining_budget() {
         run.control = Arc::new(Control::new(Duration::from_secs(3)));
         run.meta.key = Some("acme".into());
         scheduler.lanes[0].keys.insert("acme".into());
+        let question = Question::form(
+            "Choose?",
+            Form::new(json!({"type":"object","properties":{}})).unwrap(),
+        )
+        .unwrap();
+        let selected = question
+            .answer(&json!({"action":"accept","content":{}}))
+            .unwrap();
         let step = if rich {
-            Finish::Elicit(Elicit::new(
-                Question::form(
-                    "Choose?",
-                    Form::new(json!({"type":"object","properties":{}})).unwrap(),
-                )
-                .unwrap(),
-                |_, _| panic!("queue only"),
-            ))
+            Finish::Elicit(Elicit::new(question, |_, _| panic!("queue only")))
         } else {
             Finish::Confirm(Confirm::new("Continue?", |_, _| panic!("queue only")))
         };
@@ -150,12 +151,19 @@ fn human_input_lifetime_has_no_wakeup_or_expiry_and_keeps_remaining_budget() {
         assert!(out.is_empty());
         let id = scheduler.waiting.as_ref().unwrap().elicitation.clone();
         if rich {
-            scheduler.elicited(&id, Answer::Unavailable, &Trace::default());
+            scheduler.elicited(&id, Answer::Response(selected), &Trace::default());
         } else {
             scheduler.confirmed(&id, Decision::Accepted, &Trace::default());
         }
         assert!(scheduler.waiting.is_none());
         let job = &scheduler.lanes[0].queue[0];
+        if rich {
+            assert!(
+                matches!(&job.work, Work::ElicitResume(_, Answer::Response(reply)) if reply.action == Action::Accept)
+            );
+        } else {
+            assert!(matches!(job.work, Work::Resume(_, Decision::Accepted)));
+        }
         assert!(job.control.remaining() <= Duration::from_secs(3));
         assert!(!job.control.expired());
         assert!(job.holds_key);
@@ -206,5 +214,114 @@ fn human_input_lifetime_queued_answers_release_ownership_on_cancel_or_disconnect
         assert!(scheduler.lanes[0].keys.is_empty());
         scheduler.confirmed(&question, Decision::Accepted, &Trace::default());
         assert!(scheduler.idle());
+    }
+}
+
+#[test]
+fn a_parked_form_releases_the_key_and_its_answer_waits_to_reacquire_it() {
+    for cancel in [false, true] {
+        let (mut scheduler, mut session) = scheduler_with_progress(vec![]);
+        scheduler.release_key_while_waiting = true;
+        initialize_forms(&mut session, &json!({"elicitation":{}}));
+        let run = scheduler.running.get_mut(&0).unwrap();
+        run.meta.id = Some(json!(7));
+        run.meta.key = Some("acme".into());
+        scheduler.lanes[0].keys.insert("acme".into());
+        let mut out = Vec::new();
+        scheduler.complete(
+            &mut session,
+            0,
+            Finish::Confirm(Confirm::new("Continue?", |_, _| panic!("queue only"))),
+            &mut out,
+        );
+        assert_eq!(out.len(), 1);
+        assert_eq!(scheduler.lanes[0].idle.len(), 1);
+        assert!(scheduler.lanes[0].keys.is_empty());
+        // Another call now owns the same key.
+        scheduler.lanes[0].keys.insert("acme".into());
+        if cancel {
+            scheduler.cancel(&mut session, &json!(7), &Trace::default());
+            assert!(scheduler.lanes[0].keys.contains("acme"));
+        } else {
+            let question = scheduler.waiting.as_ref().unwrap().elicitation.clone();
+            scheduler.confirmed(&question, Decision::Accepted, &Trace::default());
+            assert!(scheduler.lanes[0].next_ready().is_none());
+            scheduler.lanes[0].keys.remove("acme");
+            assert!(matches!(
+                scheduler.lanes[0].next_ready().unwrap().work,
+                Work::Resume(_, Decision::Accepted)
+            ));
+        }
+        assert!(scheduler.waiting.is_none());
+    }
+}
+
+#[test]
+fn modern_input_keeps_its_cleanup_until_publication() {
+    use crate::modern::{CAPABILITIES_KEY, PROTOCOL_VERSION, VERSION_KEY};
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    for (cancel, disconnect, limit) in [
+        (false, false, 8192),
+        (true, false, 8192),
+        (false, true, 8192),
+        (false, false, 1),
+    ] {
+        let (mut scheduler, _) = scheduler_with_progress(vec![]);
+        let mut session = Session::new(
+            Arc::new(
+                Catalog::new(vec![crate::Tool::new(
+                    "acme",
+                    "Review",
+                    json!({"type":"object"}),
+                )])
+                .unwrap(),
+            ),
+            SessionOptions {
+                modern: Some(crate::ModernOptions::new(ServerInfo::new("acme", "1"))),
+                ..SessionOptions::default()
+            },
+        );
+        let id = json!(7);
+        assert!(matches!(
+            session.receive_value(json!({"jsonrpc":"2.0","method":"tools/call","id":id,"params":{
+                "name":"acme","_meta":{VERSION_KEY:PROTOCOL_VERSION,CAPABILITIES_KEY:{"elicitation":{}}}
+            }})),
+            Inbound::Tool { .. }
+        ));
+        let context = session.request_context(&id).unwrap();
+        scheduler.running.get_mut(&0).unwrap().meta.id = Some(id.clone());
+        let released = Arc::new(AtomicBool::new(false));
+        let observe = Arc::clone(&released);
+        let interim = super::super::PendingInput::new(
+            context.confirmation("Continue?", "state").unwrap(),
+            move || observe.store(true, Ordering::Release),
+        );
+        let finish = settle(
+            Some(&id),
+            Ok(Outcome::PendingInput(interim)),
+            false,
+            limit,
+            Some(&context),
+            false,
+            &Trace::default(),
+        );
+        if cancel {
+            scheduler.cancel(&mut session, &id, &Trace::default());
+        }
+        if disconnect {
+            scheduler.disconnect(&mut session);
+        }
+        let mut out = Vec::new();
+        scheduler.complete(&mut session, 0, finish, &mut out);
+        assert_eq!(
+            released.load(Ordering::Acquire),
+            cancel || disconnect || limit == 1
+        );
+        if !cancel && !disconnect && limit != 1 {
+            assert!(matches!(out.as_slice(), [Outgoing::Interim(..)]));
+            drop(out);
+            assert!(released.load(Ordering::Acquire));
+        }
     }
 }

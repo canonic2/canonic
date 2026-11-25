@@ -134,6 +134,9 @@ effect as stdio cancellation: queued work never runs, and running work sees
 sending side after the request counts as closing, so keep the connection fully
 open until the reply arrives.
 
+`Handler::disconnected` is a stdio hook. Manage the lifetime and revocation of
+modern workflow state across POSTs in your application.
+
 ## Listen for changes
 
 With subscriptions enabled, a `subscriptions/listen` POST stays open as an SSE

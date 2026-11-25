@@ -255,6 +255,15 @@ fn subscriptions_prompt_fanout_keeps_numeric_and_string_ids_distinct() {
 #[test]
 fn subscriptions_resource_replacement_preserves_skills_and_refuses_collisions() {
     let mut options = options();
+    options.resources = Some(Arc::new(
+        ResourceCatalog::new(
+            (0..=crate::resource::PAGE_SIZE)
+                .map(|index| Resource::new(format!("acme://report/{index}"), "report"))
+                .collect(),
+            vec![],
+        )
+        .unwrap(),
+    ));
     options.skills = Some(Arc::new(
         crate::SkillCatalog::new(vec![crate::SkillDefinition::new(
             "skill://acme/status",
@@ -267,6 +276,17 @@ fn subscriptions_resource_replacement_preserves_skills_and_refuses_collisions() 
     ));
     let mut session = Session::try_new(Arc::new(Catalog::new(vec![]).unwrap()), options).unwrap();
     listen(&mut session, json!(1), json!({"resourcesListChanged":true}));
+    let list = |session: &mut Session, params| {
+        let Inbound::Reply(reply) =
+            session.receive_value(request(json!(2), "resources/list", params))
+        else {
+            panic!("resource listing")
+        };
+        reply
+    };
+    let original = Arc::downgrade(session.options.resources.as_ref().unwrap());
+    let first_page = list(&mut session, json!({}));
+    let cursor = first_page["result"]["nextCursor"].as_str().unwrap();
     let replacement =
         Arc::new(ResourceCatalog::new(vec![Resource::new("acme://new", "new")], vec![]).unwrap());
     assert_eq!(
@@ -276,7 +296,12 @@ fn subscriptions_resource_replacement_preserves_skills_and_refuses_collisions() 
             .len(),
         1
     );
-    let before = session.options.resources.clone();
+    assert!(original.upgrade().is_none());
+    assert_eq!(
+        list(&mut session, json!({"cursor":cursor}))["error"]["code"],
+        rpc::INVALID_PARAMS,
+    );
+    let installed = Arc::clone(session.options.resources.as_ref().unwrap());
     let conflicting = Arc::new(
         ResourceCatalog::new(
             vec![Resource::new("skill://acme/status/SKILL.md", "collision")],
@@ -285,19 +310,21 @@ fn subscriptions_resource_replacement_preserves_skills_and_refuses_collisions() 
         .unwrap(),
     );
     assert!(session.publish(Change::Resources(conflicting)).is_err());
-    assert_eq!(session.options.resources, before);
-    let Inbound::Reply(listed) =
-        session.receive_value(request(json!(2), "resources/list", json!({})))
-    else {
-        panic!("resource listing")
-    };
-    let entries = listed["result"]["resources"].as_array().unwrap();
-    assert!(entries.iter().any(|entry| entry["uri"] == "acme://new"));
-    assert!(
-        entries
-            .iter()
-            .any(|entry| entry["uri"] == "skill://acme/status/SKILL.md")
-    );
+    assert!(Arc::ptr_eq(
+        session.options.resources.as_ref().unwrap(),
+        &installed,
+    ));
+    let listed = list(&mut session, json!({}));
+    assert!(listed["result"].get("nextCursor").is_none());
+    let uris = listed["result"]["resources"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|entry| entry["uri"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(uris, ["acme://new", "skill://acme/status/SKILL.md"]);
+    assert_eq!(session.end_subscriptions().len(), 1);
+    assert_eq!(session.outstanding(), 0);
 }
 
 #[test]

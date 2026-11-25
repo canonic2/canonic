@@ -259,10 +259,10 @@ impl ResourceCatalog {
         if !rpc::only(params, &["cursor", "_meta"]) {
             return Err(invalid());
         }
-        let (kind, count, key) = if templates {
-            ("templates", self.templates.len(), "resourceTemplates")
+        let (kind, count) = if templates {
+            ("templates", self.templates.len())
         } else {
-            ("resources", self.resources.len(), "resources")
+            ("resources", self.resources.len())
         };
         let start = match params.get("cursor") {
             None => 0,
@@ -283,12 +283,11 @@ impl ResourceCatalog {
             }
         };
         let end = start.saturating_add(PAGE_SIZE).min(count);
-        let entries = if templates {
-            json!(&self.templates[start..end])
+        let mut result = if templates {
+            json!({"resourceTemplates": &self.templates[start..end]})
         } else {
-            json!(&self.resources[start..end])
+            json!({"resources": &self.resources[start..end]})
         };
-        let mut result = json!({key: entries});
         if end < count {
             result["nextCursor"] = json!(format!("{kind}:{end}"));
         }

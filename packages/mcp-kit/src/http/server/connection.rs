@@ -15,6 +15,7 @@ use crate::{
     rpc,
 };
 use std::{
+    collections::VecDeque,
     io::{self, BufRead, BufReader, ErrorKind, Read, Write},
     net::TcpStream,
     sync::{Arc, atomic::Ordering},
@@ -434,6 +435,7 @@ fn exchange(
         last_write: Instant::now(),
     };
     let mut discarded = 0;
+    let mut events = VecDeque::new();
     loop {
         let wait = if writer.streaming {
             CLOSURE_POLL.min(
@@ -444,8 +446,8 @@ fn exchange(
         } else {
             CLOSURE_POLL
         };
-        let (events, last, ended) = mailbox.wait(wait);
-        match writer.write(form, events, last, ended, shared.keep_alive) {
+        let (last, ended) = mailbox.wait(&mut events, wait);
+        match writer.write(form, &mut events, last, ended, shared.keep_alive) {
             Ok(true) => return,
             Ok(false) if !peer_closed(stream, &mut discarded) => {}
             Ok(false) | Err(_) => {
@@ -468,19 +470,26 @@ impl Writer<'_> {
     fn write(
         &mut self,
         form: Form,
-        events: Vec<Vec<u8>>,
+        events: &mut VecDeque<Vec<u8>>,
         last: Option<Last>,
         ended: bool,
         keep_alive: Duration,
     ) -> io::Result<bool> {
         if form == Form::Json {
-            return match last {
-                Some(last) => {
-                    self.respond(&complete(last))?;
-                    Ok(true)
-                }
-                None => Ok(false),
+            events.clear();
+            let Some(last) = last else {
+                return Ok(false);
             };
+            let (response, interim) = match last {
+                Last::Reply(bytes, code) => (Response::reply(bytes, code), None),
+                Last::Interim(bytes, interim) => (Response::reply(bytes, None), Some(interim)),
+                Last::Response(response) => (response, None),
+            };
+            self.respond(&response)?;
+            if let Some(interim) = interim {
+                interim.mark_delivered();
+            }
+            return Ok(true);
         }
         if !self.streaming && events.is_empty() {
             // A refusal or error before any event keeps its own status.
@@ -500,11 +509,18 @@ impl Writer<'_> {
             write_response(self.stream, &Response::stream(), true, self.timeout)?;
             self.streaming = true;
         }
-        for event in events {
+        for event in events.drain(..) {
             self.send(&sse_event(&event))?;
         }
         if let Some(last) = last {
-            self.send(&sse_event(&complete(last).body))?;
+            let body = match &last {
+                Last::Reply(bytes, _) | Last::Interim(bytes, _) => bytes,
+                Last::Response(response) => &response.body,
+            };
+            self.send(&sse_event(body))?;
+            if let Last::Interim(_, interim) = last {
+                interim.mark_delivered();
+            }
             return Ok(true);
         }
         if ended {
@@ -527,13 +543,6 @@ impl Writer<'_> {
         stream.flush()?;
         self.last_write = Instant::now();
         Ok(())
-    }
-}
-
-fn complete(last: Last) -> Response {
-    match last {
-        Last::Reply(bytes, code) => Response::reply(bytes, code),
-        Last::Response(response) => response,
     }
 }
 

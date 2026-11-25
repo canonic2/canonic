@@ -318,6 +318,36 @@ fn an_assertion_cannot_be_reused_in_another_client_pool() {
 }
 
 #[test]
+fn replay_capacity_visits_only_due_records() {
+    let now = SystemTime::UNIX_EPOCH + Duration::from_secs(T);
+    let due = now + Duration::from_mins(1);
+    let later = now + Duration::from_mins(2);
+    let document = ClientAssertionPool::Document;
+    let configured = ClientAssertionPool::Configured;
+    for live in [16, 4096] {
+        let capacity = live + 5;
+        let store = MemoryStore::with_capacity(capacity).unwrap();
+        let remember = |pool, index, expires_at, now| {
+            let record = AssertionRecord {
+                digest: wire::digest(&format!("acme-replay-{index}")),
+                expires_at,
+            };
+            store.use_client_assertion(record, pool, now)
+        };
+        for index in 0..capacity {
+            let expires_at = if index < live { later } else { due };
+            assert_eq!(remember(document, index, expires_at, now), Ok(true));
+        }
+        assert_eq!(remember(configured, capacity, later, now), Ok(true));
+        assert_eq!(store.purge_work(), (0, capacity + 1));
+
+        assert_eq!(remember(document, live, later, due), Ok(true));
+        assert_eq!(store.purge_work(), (5, live + 2));
+        assert_eq!(remember(configured, 0, later, due), Ok(false));
+    }
+}
+
+#[test]
 fn inline_document_keys_authenticate_for_machine_and_enterprise_grants() {
     let keys =
         json!({"jwks": {"keys": [ec_jwk("partner-1")]}, "grant_types": ["client_credentials"]});

@@ -121,7 +121,7 @@ checksum = "175812e0be2bccb6abe50bb8d566126198344f707e304f45c648fd8f2cc0365e"
 
 [[package]]
 name = "canonic-mcp-kit"
-version = "0.28.0"
+version = "0.29.0"
 dependencies = [
  "canonic-process-kit",
  "getrandom 0.4.3",

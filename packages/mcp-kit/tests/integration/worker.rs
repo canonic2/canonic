@@ -238,6 +238,13 @@ fn worker_replacement_preserves_cancelled_execution_until_it_actually_returns() 
 fn worker_replacement_defers_for_legacy_continuation_and_resource_hold() {
     let options = Options::default();
     let declared = contract(&options, "v1");
+    let incompatible = contract(
+        &Options {
+            release_key_while_waiting: true,
+            ..options.clone()
+        },
+        "v1",
+    );
     let events = Events::new();
     let held = Arc::new(Mutex::new(None));
     let save = held.clone();
@@ -266,13 +273,35 @@ fn worker_replacement_defers_for_legacy_continuation_and_resource_hold() {
     host.call(1, "acme_echo", json!({}));
     let question = host.recv();
     assert_eq!(question["method"], "elicitation/create");
+    let source = frontend.status().unwrap().active.unwrap();
+    let mut request = update();
+    let candidate = fake("bad", "2.0.0", incompatible, events.clone(), |_, _| {
+        text("bad")
+    });
+    let result = frontend.replace(
+        &request,
+        |_| Ok(candidate),
+        |_| panic!("incompatible commit"),
+    );
+    assert!(
+        matches!(
+            result,
+            Err(worker::Error::Process(process::Error::Incompatible))
+        ),
+        "{result:?}"
+    );
+    let status = frontend.status().unwrap();
+    assert_eq!(status.phase, worker::Phase::Deferred);
+    assert_eq!(status.active.unwrap().manager_id, source.manager_id);
+
+    request.sequence = 2;
     let candidate = fake("new", "2.0.0", declared.clone(), events.clone(), |_, _| {
         text("new")
     });
     assert!(
         frontend
             .replace(
-                &update(),
+                &request,
                 |_| Ok(candidate),
                 |_| panic!("pending continuation")
             )
@@ -282,9 +311,10 @@ fn worker_replacement_defers_for_legacy_continuation_and_resource_hold() {
         &json!({"jsonrpc":"2.0","id":question["id"],"result":{"action":"accept","content":{}}}),
     );
     assert_eq!(result_text(&host.recv()), "accepted");
-    assert_eq!(frontend.status().unwrap().held, 1);
-    let mut request = update();
-    request.sequence = 2;
+    let status = frontend.status().unwrap();
+    assert_eq!(status.held, 1);
+    assert_eq!(status.active.unwrap().manager_id, source.manager_id);
+    request.sequence = 3;
     let candidate = fake("new2", "2.0.0", declared.clone(), events.clone(), |_, _| {
         text("new")
     });
@@ -298,11 +328,13 @@ fn worker_replacement_defers_for_legacy_continuation_and_resource_hold() {
             .is_err()
     );
     held.lock().unwrap().take();
-    request.sequence = 3;
+    request.sequence = 4;
     let candidate = fake("new3", "2.0.0", declared, events, |_, _| text("new"));
     frontend
         .replace(&request, |_| Ok(candidate), |_| Ok(()))
         .unwrap();
+    host.call(1, "acme_echo", json!({}));
+    assert_eq!(result_text(&host.recv()), "new");
     assert!(host.finish().0.is_ok());
 }
 

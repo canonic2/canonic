@@ -42,6 +42,8 @@
 | Serve HTTP from your own server | `http::Endpoint`, `http::EndpointOptions`, `http::RequestHead`, `http::Exchange`, `http::Admitted::check_parameters`, `http::Response`, `http::sse_event`, `http::status_for` |
 | Mirror tool arguments into HTTP headers | `x-mcp-header` on an input schema property; `tool::MAX_PARAMETER_HEADERS` |
 | Choose where a request runs | `Handler::admit` returning `stdio::Admission`; `stdio::Lane` |
+| Release a key during a legacy question | `stdio::Options::release_key_while_waiting`; see [stdio keys and deadlines](../guides/stdio.md#keys) |
+| Revoke state when stdio ends | `Handler::disconnected`; see [stdio disconnection](../guides/stdio.md#when-the-host-disconnects) |
 | Return a result | `stdio::Outcome::Tool` with `ToolResult` and `Content` |
 | Return audio | `Content::audio`, `AudioContent`, `ContentError`; see [audio results](../guides/audio.md) |
 | Attach presentation hints | `ContentAnnotations`, `Role`, `Content::with_annotations`, `Resource::annotations`, `ResourceTemplate::annotations` |
@@ -50,6 +52,7 @@
 | Report progress | `stdio::Context::progress`, `Context::progress_reporter`, `stdio::ProgressReporter` |
 | Ask the host's user | `stdio::Outcome::Confirm` with `stdio::Confirm`; `Decision` |
 | Ask on a modern request | `RequestContext::confirmation`, `Outcome::InputRequired`, consumer-owned state validation and `confirmation_decision` |
+| Release workflow state for a discarded modern interim reply | `stdio::PendingInput::new`, `stdio::Outcome::PendingInput` for in-process handlers; see [modern confirmation retries](../guides/skills.md#modern-confirmation-retries) |
 | Change invalid-argument results | `Handler::invalid_arguments` |
 | Record frames for diagnostics | `stdio::Options::observer` |
 | Account for request lifetimes | `stdio::observation_channel`, `Options::observations`, `Observation`, `ObservationKind`, `FrameKind`, `Stage`, `Settlement`; see [stdio diagnostics](../guides/stdio.md#diagnostics) |

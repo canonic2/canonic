@@ -5,6 +5,55 @@ use canonic_mcp_kit::stdio::{Confirm, Lane, Options, Outcome};
 use serde_json::json;
 use std::time::Duration;
 
+#[test]
+fn stdio_notifies_the_handler_once_at_eof_or_on_a_fatal_frame() {
+    use crate::fixture::catalog;
+    use canonic_mcp_kit::{
+        Client, RpcError, ServerInfo,
+        stdio::{self, Context, Handler, Request, ServeError},
+    };
+    use std::{
+        io::{Cursor, sink},
+        sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        },
+    };
+
+    #[derive(Default)]
+    struct CloseCounter(AtomicUsize);
+
+    impl Handler for CloseCounter {
+        fn initialize(&self, _: &Client) -> Result<ServerInfo, RpcError> {
+            Ok(ServerInfo::new("acme", "1"))
+        }
+
+        fn call(&self, _: Request, _: &Context) -> Outcome {
+            panic!("disconnection fixture sends no calls")
+        }
+
+        fn disconnected(&self) {
+            self.0.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    let serve = |input: &'static [u8]| {
+        let handler = Arc::new(CloseCounter::default());
+        let result = stdio::serve(
+            Arc::clone(&handler),
+            catalog(),
+            Cursor::new(input),
+            sink(),
+            &Options::default(),
+        );
+        assert_eq!(handler.0.load(Ordering::Relaxed), 1);
+        result
+    };
+
+    serve(b"").unwrap();
+    assert!(matches!(serve(b"{"), Err(ServeError::Protocol(_))));
+}
+
 fn blocking(events: &Events, latch: &Latch) -> Script {
     let events = events.clone();
     let latch = latch.clone();

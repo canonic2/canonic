@@ -62,6 +62,12 @@ pub trait Handler: Send + Sync + 'static {
     fn connected(&self, changes: ChangeSender) {
         let _ = changes;
     }
+
+    /// Lets a handler revoke session-bound workflow state when stdio serving ends.
+    /// Stdio calls this once when input ends or serving stops early with an error.
+    /// HTTP consumers own cleanup for workflows that span multiple POSTs.
+    /// Called on the dispatching thread; do not wait for running handlers.
+    fn disconnected(&self) {}
     /// Accepts or refuses the client and returns the server identity.
     ///
     /// # Errors
@@ -154,6 +160,8 @@ pub enum Outcome {
     ResourceWithCache(crate::ReadResourceResult, crate::CachePolicy),
     /// Modern consumer-owned confirmation; no in-memory closure is serialized.
     InputRequired(crate::InputRequiredResult),
+    /// Modern input with connection-owned state to release if the reply is discarded.
+    PendingInput(PendingInput),
     /// Validated resource read contents.
     Resource(crate::resource::ReadResourceResult),
     /// One page of a dynamic skill directory's direct children.
@@ -168,11 +176,54 @@ pub enum Outcome {
     Confirm(Confirm),
 }
 
+/// A modern interim reply with a local cleanup callback.
+///
+/// The driver commits delivery after writing and flushing the interim reply.
+/// Dropping an uncommitted reply runs the callback. This reply
+/// cannot cross a worker wire; keep the pending workflow in the frontend.
+pub struct PendingInput {
+    result: crate::InputRequiredResult,
+    abandon: Option<Box<dyn FnOnce() + Send>>,
+}
+
+impl PendingInput {
+    /// Create an interim reply that revokes its state if delivery is abandoned.
+    pub fn new(
+        result: crate::InputRequiredResult,
+        abandon: impl FnOnce() + Send + 'static,
+    ) -> Self {
+        Self {
+            result,
+            abandon: Some(Box::new(abandon)),
+        }
+    }
+
+    /// The validated interim result.
+    #[must_use]
+    pub fn result(&self) -> &crate::InputRequiredResult {
+        &self.result
+    }
+
+    /// Transfer the question to its live workflow when the reply is delivered.
+    pub fn mark_delivered(mut self) {
+        drop(self.abandon.take());
+    }
+}
+
+impl Drop for PendingInput {
+    fn drop(&mut self) {
+        if let Some(abandon) = self.abandon.take() {
+            abandon();
+        }
+    }
+}
+
 /// A confirmation step: a message for the host's user and the work to run
 /// with their answer.
 ///
 /// The worker is released while the user decides. The continuation runs on
-/// the same lane and key with a fresh deadline. It runs with
+/// the same lane and key with its remaining execution budget. Consumers
+/// that revalidate on resume can release the key while parked. It runs with
 /// [`Decision::Unavailable`] when the client cannot show a form or another
 /// confirmation is pending, and does not run when the request is cancelled,
 /// times out or the connection closes. A continuation that asks again is
@@ -315,6 +366,12 @@ pub struct Options {
     pub timeout: Duration,
     /// When each request's active budget starts.
     pub budget_start: BudgetStart,
+    /// Release a legacy request's serialization key while a question is open.
+    /// The continuation reacquires it before dispatch and must revalidate its
+    /// inputs after other calls have had a chance to change them.
+    /// With [`BudgetStart::Admission`], the wait to reacquire the key counts
+    /// toward the remaining budget after the answer arrives.
+    pub release_key_while_waiting: bool,
     /// How long running mutations continue after the input closes before
     /// they are cancelled.
     pub disconnect_grace: Duration,
@@ -338,6 +395,7 @@ impl Default for Options {
             lanes: vec![Lane::new("tools", 1, 8)],
             timeout: DEFAULT_TIMEOUT,
             budget_start: BudgetStart::Admission,
+            release_key_while_waiting: false,
             disconnect_grace: DEFAULT_DISCONNECT_GRACE,
             max_output_bytes: DEFAULT_MAX_OUTPUT_BYTES,
             observer: None,
@@ -665,6 +723,9 @@ pub fn serve<H: Handler>(
         connection.handler.connected(sender);
     }
     let result = connection.run(&incoming);
+    if !connection.eof {
+        connection.handler.disconnected();
+    }
     drop(incoming);
     connection.changes.take();
     {
@@ -910,6 +971,7 @@ impl<H: Handler, W: Write> Connection<H, W> {
 
     fn disconnect(&mut self) -> Result<(), ServeError> {
         self.eof = true;
+        self.handler.disconnected();
         self.changes.take();
         let closed = self.session.end_subscriptions();
         self.subscription_frames(closed)?;
@@ -1134,6 +1196,7 @@ impl<H: Handler, W: Write> Connection<H, W> {
 pub(crate) enum Outgoing {
     Value(Value),
     Bytes(Vec<u8>),
+    Interim(Vec<u8>, PendingInput),
     Observed(Box<Self>, Span, FrameKind),
     /// A frame without its own ID, such as progress, for this request ID.
     Routed(
@@ -1170,6 +1233,10 @@ impl<W: Write> Output<W> {
             match frame {
                 Outgoing::Value(value) => self.value(&value)?,
                 Outgoing::Bytes(bytes) => self.bytes(&bytes)?,
+                Outgoing::Interim(bytes, interim) => {
+                    self.bytes(&bytes)?;
+                    interim.mark_delivered();
+                }
                 Outgoing::Observed(frame, queued, kind) => {
                     let trace = queued.trace.clone();
                     drop(queued);

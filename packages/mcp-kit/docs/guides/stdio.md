@@ -72,6 +72,11 @@ Admission {
 }
 ```
 
+By default the request holds its key while a legacy confirmation or rich form
+is pending. Set `Options::release_key_while_waiting` to `true` to let other
+calls with that key run during the wait. The continuation reacquires the key
+before it runs. Recheck current state and permissions before applying the answer.
+
 ## Deadlines
 
 Every request has an active budget from admission: `Admission::timeout`, or
@@ -83,6 +88,11 @@ still bounds the queue. Human confirmation and rich-input waits
 pause it without scheduling a response timer. An answered continuation gets the
 remaining budget; a new round does not reset it. Cancellation or connection
 loss withdraws the question and prevents a late answer from resuming work.
+
+Once an answer is queued, time spent waiting for a worker or for a released
+key counts under `BudgetStart::Admission`. If the remaining budget runs out,
+the host gets `-32001` before the continuation starts. With
+`BudgetStart::Dispatch`, the remaining budget starts when the worker resumes.
 
 When the active budget runs out, the host gets `-32001` and the request's
 context is cancelled. Check the context at safe points and stop when it fails:
@@ -201,6 +211,11 @@ When stdin closes:
 read-only hint decides what may still run.
 Resource reads follow the same read-only lifetime; product extension requests
 follow mutation rules.
+
+Implement `Handler::disconnected` to revoke consumer-owned state tied to a
+stdio connection. Stdio invokes it once on the dispatcher at EOF or an early
+serving error. It can run while admitted handlers are still active, so return
+quickly. HTTP consumers own state that spans multiple POSTs.
 
 ## Diagnostics
 

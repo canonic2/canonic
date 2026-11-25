@@ -297,7 +297,12 @@ impl Reply {
                 crate::task::TaskResult::Updated => ("task_updated", value(&(), limit)?),
                 crate::task::TaskResult::Cancelled => ("task_cancelled", value(&(), limit)?),
             },
-            Outcome::Confirm(_) | Outcome::Elicit(_) | Outcome::Bundled(_) => return Err(invalid()),
+            Outcome::Confirm(_)
+            | Outcome::Elicit(_)
+            | Outcome::Bundled(_)
+            | Outcome::PendingInput(_) => {
+                return Err(invalid());
+            }
         };
         Ok(Self {
             version: VERSION,

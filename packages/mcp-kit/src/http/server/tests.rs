@@ -19,6 +19,46 @@ mod oauth;
 
 const WAIT: Duration = Duration::from_secs(10);
 
+#[test]
+fn mailbox_reuses_buffers_and_keeps_events_before_completion() {
+    let mailbox = Mailbox::default();
+    let mut events = VecDeque::new();
+    assert!(mailbox.event(vec![1], 2));
+    assert!(mailbox.event(vec![2], 2));
+    assert!(!mailbox.event(vec![3], 2));
+    let (first_buffer, first_capacity) = {
+        let state = mailbox.lock();
+        (state.events.as_slices().0.as_ptr(), state.events.capacity())
+    };
+    let (last, ended) = mailbox.wait(&mut events, Duration::ZERO);
+    assert!(last.is_none() && !ended);
+    assert_eq!(events.as_slices().0.as_ptr(), first_buffer);
+
+    // The dispatcher can refill the mailbox during a connection's write.
+    assert!(mailbox.event(vec![4], 2));
+    let second_buffer = mailbox.lock().events.as_slices().0.as_ptr();
+    assert_eq!(events.drain(..).collect::<Vec<_>>(), [vec![1], vec![2]]);
+    let (last, ended) = mailbox.wait(&mut events, Duration::ZERO);
+    assert_eq!(events.as_slices().0.as_ptr(), second_buffer);
+    assert!(last.is_none() && !ended);
+
+    // A later producer write reuses the first handoff's emptied buffer.
+    assert!(mailbox.event(vec![5], 2));
+    let reused_slot = mailbox.lock().events.as_slices().0.as_ptr();
+    let first_allocation = first_buffer.addr()..first_buffer.wrapping_add(first_capacity).addr();
+    assert!(first_allocation.contains(&reused_slot.addr()));
+    mailbox.finish(Last::Reply(vec![6], None));
+    assert_eq!(events.drain(..).collect::<Vec<_>>(), [vec![4]]);
+    let (last, ended) = mailbox.wait(&mut events, Duration::ZERO);
+    assert_eq!(events.drain(..).collect::<Vec<_>>(), [vec![5]]);
+    assert!(matches!(last, Some(Last::Reply(bytes, None)) if bytes == [6]));
+    assert!(!ended);
+
+    mailbox.end();
+    let (last, ended) = mailbox.wait(&mut events, Duration::ZERO);
+    assert!(events.is_empty() && last.is_none() && ended);
+}
+
 /// Echoes, pauses, reports progress or waits for cancellation.
 struct Acme {
     changes: Mutex<Option<ChangeSender>>,
@@ -68,6 +108,9 @@ impl Handler for Acme {
         let text =
             |text: &str| Outcome::Tool(ToolResult::success(vec![crate::Content::text(text)]));
         match call.name.as_str() {
+            "acme_echo" if call.arguments["pendingState"].is_string() => {
+                self.confirm_with_cleanup(call.arguments["pendingState"].as_str().unwrap(), context)
+            }
             "acme_echo" if call.arguments["confirm"] == true => {
                 let request = context.request_context().unwrap();
                 if let Some(state) = request.request_state.as_deref() {
@@ -149,6 +192,18 @@ impl Handler for Acme {
 }
 
 impl Acme {
+    fn confirm_with_cleanup(&self, state: &str, context: &Context) -> Outcome {
+        let reply = context
+            .request_context()
+            .unwrap()
+            .confirmation("Continue Acme?", state)
+            .unwrap();
+        let events = self.events.lock().unwrap().clone();
+        Outcome::PendingInput(stdio::PendingInput::new(reply, move || {
+            let _ = events.send("abandoned");
+        }))
+    }
+
     fn send(&self, event: &'static str) {
         let _ = self.events.lock().unwrap().send(event);
     }
@@ -511,6 +566,55 @@ fn human_input_lifetime_http_interim_releases_the_post_and_keeps_retry_independe
     assert_eq!(resumed.json()["result"]["content"][0]["text"], "Accepted");
     let replay = server.exchange(&post("tools/call", &json!(4), params, ""));
     assert_eq!(replay.json()["error"]["code"], -32602);
+}
+
+#[test]
+fn pending_input_is_abandoned_when_restoring_the_client_id_exceeds_the_limit() {
+    let limit = 1024;
+    let options = Options {
+        max_output_bytes: limit,
+        session: SessionOptions {
+            modern: Some(ModernOptions::new(ServerInfo::new("acme", "1"))),
+            ..SessionOptions::default()
+        },
+        ..Options::default()
+    };
+    let mut server = Server::configured(http(), options);
+    let ask = |id: &Value, state: &str| {
+        server.exchange(&post(
+            "tools/call",
+            id,
+            json!({"name":"acme_echo","arguments":{"pendingState":state},
+                "_meta":{"io.modelcontextprotocol/clientCapabilities":{"elicitation":{"form":{}}}}}),
+            "",
+        ))
+    };
+    let sample = ask(&json!(1), "x");
+    assert_eq!(
+        sample.json()["result"]["resultType"],
+        "input_required",
+        "{sample:?}"
+    );
+    // Keep the same reply under the limit with a server-assigned numeric ID.
+    let state = "x".repeat(1 + limit - sample.body.len() - 32);
+    let short = ask(&json!(1), &state);
+    assert_eq!(
+        short.json()["result"]["resultType"],
+        "input_required",
+        "{short:?}"
+    );
+    assert!(short.body.len() + rpc::MAX_ID_BYTES > limit);
+
+    let id = json!("c".repeat(rpc::MAX_ID_BYTES));
+    let refused = ask(&id, &state);
+    assert_eq!(refused.status, 200);
+    let reply = refused.json();
+    assert_eq!(reply["id"], id);
+    assert_eq!(reply["error"]["code"], rpc::INTERNAL_ERROR);
+    assert_eq!(reply["error"]["message"], "Response exceeds output limit");
+    assert_eq!(server.next_event(), Ok("abandoned"));
+    server.stop().unwrap();
+    assert!(server.events.lock().unwrap().try_recv().is_err());
 }
 
 #[test]

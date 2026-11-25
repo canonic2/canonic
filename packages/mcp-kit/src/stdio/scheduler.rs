@@ -129,6 +129,7 @@ struct Assignment {
 enum Finish {
     Elicit(Elicit),
     Bytes(Vec<u8>),
+    Interim(Vec<u8>, super::PendingInput),
     Reply(Value),
     Confirm(Confirm),
     Done,
@@ -149,6 +150,7 @@ struct Waiting {
     meta: Meta,
     resume: Continuation,
     elicitation: Value,
+    holds_key: bool,
 }
 
 enum Continuation {
@@ -218,6 +220,7 @@ pub(crate) struct Scheduler {
     sequence: u64,
     timeout: Duration,
     budget_start: BudgetStart,
+    release_key_while_waiting: bool,
     disconnect_grace: Duration,
     max_output_bytes: usize,
     disconnected: bool,
@@ -277,6 +280,7 @@ impl Scheduler {
             sequence: 0,
             timeout: options.timeout,
             budget_start: options.budget_start,
+            release_key_while_waiting: options.release_key_while_waiting,
             disconnect_grace: options.disconnect_grace,
             max_output_bytes: options.max_output_bytes,
             disconnected: false,
@@ -474,8 +478,10 @@ impl Scheduler {
 
     /// Continues the request whose confirmation `elicitation` was answered.
     pub(crate) fn confirmed(&mut self, elicitation: &Value, decision: Decision, source: &Trace) {
-        if let Some((meta, Continuation::Confirm(resume))) = self.answered(elicitation, source) {
-            self.queue_resume(meta, Work::Resume(resume, decision));
+        if let Some((meta, Continuation::Confirm(resume), holds_key)) =
+            self.answered(elicitation, source)
+        {
+            self.queue_resume(meta, Work::Resume(resume, decision), holds_key);
         }
     }
 
@@ -485,12 +491,18 @@ impl Scheduler {
         answer: crate::elicitation::Answer,
         source: &Trace,
     ) {
-        if let Some((meta, Continuation::Elicit(resume))) = self.answered(elicitation, source) {
-            self.queue_resume(meta, Work::ElicitResume(resume, answer));
+        if let Some((meta, Continuation::Elicit(resume), holds_key)) =
+            self.answered(elicitation, source)
+        {
+            self.queue_resume(meta, Work::ElicitResume(resume, answer), holds_key);
         }
     }
 
-    fn answered(&mut self, elicitation: &Value, source: &Trace) -> Option<(Meta, Continuation)> {
+    fn answered(
+        &mut self,
+        elicitation: &Value,
+        source: &Trace,
+    ) -> Option<(Meta, Continuation, bool)> {
         if &self.waiting.as_ref()?.elicitation != elicitation {
             return None;
         }
@@ -498,7 +510,7 @@ impl Scheduler {
         source.relate(&wait.meta.trace);
         drop(wait.interaction);
         self.lanes[wait.meta.lane].waiting -= 1;
-        Some((wait.meta, wait.resume))
+        Some((wait.meta, wait.resume, wait.holds_key))
     }
 
     /// Applies the end-of-input rules.
@@ -679,6 +691,24 @@ impl Scheduler {
                 .is_some_and(|id| session.finish(id))
         };
         match finish {
+            Finish::Interim(bytes, interim) => {
+                if !self.disconnected && deliver(session) {
+                    running.meta.trace.settle(Settlement::Reply);
+                    out.push(
+                        Outgoing::Interim(bytes, interim)
+                            .observed(&running.meta.trace, FrameKind::Reply),
+                    );
+                } else {
+                    refuse(
+                        session,
+                        running.meta.id.as_ref(),
+                        rpc::REQUEST_CANCELLED,
+                        "Connection closed before input could be requested",
+                        out,
+                        &running.meta.trace,
+                    );
+                }
+            }
             Finish::Bytes(bytes) => {
                 running.meta.trace.settle(Settlement::Reply);
                 if deliver(session) {
@@ -739,26 +769,42 @@ impl Scheduler {
                     meta.trace.event(ObservationKind::EncodeFailed);
                     // The host never saw this form, so withdraw it locally only.
                     session.cancel_confirmation(&elicitation);
-                    self.queue_resume(meta, Work::Resume(confirm.resume, Decision::Unavailable));
+                    self.queue_resume(
+                        meta,
+                        Work::Resume(confirm.resume, Decision::Unavailable),
+                        true,
+                    );
                     return;
                 };
                 let interaction = meta.trace.span(Stage::Interaction);
                 out.push(Outgoing::Bytes(bytes).observed(&meta.trace, FrameKind::Interaction));
-                self.lanes[meta.lane].waiting += 1;
+                let holds_key = self.park(&meta);
                 self.waiting = Some(Waiting {
                     interaction,
                     meta,
                     resume: Continuation::Confirm(confirm.resume),
                     elicitation,
+                    holds_key,
                 });
             }
-            Err(decision) => self.queue_resume(meta, Work::Resume(confirm.resume, decision)),
+            Err(decision) => self.queue_resume(meta, Work::Resume(confirm.resume, decision), true),
         }
     }
 
-    fn queue_resume(&mut self, meta: Meta, work: Work) {
+    fn park(&mut self, meta: &Meta) -> bool {
+        let lane = &mut self.lanes[meta.lane];
+        lane.waiting += 1;
+        if self.release_key_while_waiting {
+            lane.release(meta.key.as_ref());
+            false
+        } else {
+            meta.key.is_some()
+        }
+    }
+
+    fn queue_resume(&mut self, meta: Meta, work: Work, holds_key: bool) {
         let control = Arc::new(Control::new(meta.timeout));
-        let holds_key = meta.key.is_some();
+        let holds_key = holds_key && meta.key.is_some();
         self.lanes[meta.lane].queue.push_front(Job {
             queued: meta.trace.span(Stage::Queue),
             meta,
@@ -804,20 +850,22 @@ impl Scheduler {
                     self.queue_resume(
                         meta,
                         Work::ElicitResume(step.resume, crate::elicitation::Answer::Unavailable),
+                        true,
                     );
                     return;
                 };
                 let interaction = meta.trace.span(Stage::Interaction);
                 out.push(Outgoing::Bytes(bytes).observed(&meta.trace, FrameKind::Interaction));
-                self.lanes[meta.lane].waiting += 1;
+                let holds_key = self.park(&meta);
                 self.waiting = Some(Waiting {
                     interaction,
                     meta,
                     resume: Continuation::Elicit(step.resume),
                     elicitation,
+                    holds_key,
                 });
             }
-            Err(answer) => self.queue_resume(meta, Work::ElicitResume(step.resume, answer)),
+            Err(answer) => self.queue_resume(meta, Work::ElicitResume(step.resume, answer), true),
         }
     }
 
@@ -842,7 +890,9 @@ impl Scheduler {
         let waiting = self.waiting.take()?;
         let lane = &mut self.lanes[waiting.meta.lane];
         lane.waiting -= 1;
-        lane.release(waiting.meta.key.as_ref());
+        if waiting.holds_key {
+            lane.release(waiting.meta.key.as_ref());
+        }
         Some(waiting)
     }
 
@@ -1144,7 +1194,8 @@ fn checked_outcome(kind: &ReplyKind, outcome: Outcome) -> Outcome {
                 Outcome::Prompt(_)
                     | Outcome::Confirm(_)
                     | Outcome::Elicit(_)
-                    | Outcome::InputRequired(_),
+                    | Outcome::InputRequired(_)
+                    | Outcome::PendingInput(_),
             )
             | (ReplyKind::Completion, Outcome::Completion(_))
             | (
@@ -1154,7 +1205,8 @@ fn checked_outcome(kind: &ReplyKind, outcome: Outcome) -> Outcome {
                     | Outcome::ResourceNotFound(_)
                     | Outcome::Confirm(_)
                     | Outcome::Elicit(_)
-                    | Outcome::InputRequired(_),
+                    | Outcome::InputRequired(_)
+                    | Outcome::PendingInput(_),
             )
             | (
                 ReplyKind::SkillDirectory(..),
@@ -1272,13 +1324,13 @@ fn settle(
                     .with_data(serde_json::json!({"uri":uri})),
             ))
         }
-        Ok(Outcome::InputRequired(result)) => match context {
-            Some(context) => match context.interim(&result) {
-                Ok(value) => encoded(id, &value, limit, None, trace),
-                Err(error) => Finish::Reply(rpc::failure(id.clone(), &error)),
-            },
-            None => internal("Input-required results require modern protocol metadata"),
-        },
+        Ok(Outcome::InputRequired(result)) => encoded_interim(id, &result, limit, context, trace),
+        Ok(Outcome::PendingInput(input)) => {
+            match encoded_interim(id, input.result(), limit, context, trace) {
+                Finish::Bytes(bytes) => Finish::Interim(bytes, input),
+                finish => finish,
+            }
+        }
         Ok(Outcome::Method(Ok(value))) => {
             if context.is_some()
                 && ["resultType", "ttlMs", "cacheScope"]
@@ -1310,6 +1362,27 @@ fn settle(
         }
         Ok(Outcome::Confirm(_)) if resumed => internal("Request asked for confirmation twice"),
         Ok(Outcome::Confirm(confirm)) => Finish::Confirm(confirm),
+    }
+}
+
+fn encoded_interim(
+    id: &Value,
+    result: &crate::InputRequiredResult,
+    limit: usize,
+    context: Option<&crate::RequestContext>,
+    trace: &Trace,
+) -> Finish {
+    let result = context
+        .ok_or_else(|| {
+            RpcError::new(
+                rpc::INTERNAL_ERROR,
+                "Input-required results require modern protocol metadata",
+            )
+        })
+        .and_then(|context| context.interim(result));
+    match result {
+        Ok(value) => encoded(id, &value, limit, None, trace),
+        Err(error) => Finish::Reply(rpc::failure(id.clone(), &error)),
     }
 }
 

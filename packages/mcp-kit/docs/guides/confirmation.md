@@ -48,9 +48,9 @@ fn call(&self, request: Request, context: &Context) -> Outcome {
 - The worker is free while the user decides. The question has no response
   deadline while the request and connection remain live. Human waiting pauses
   the active request budget; the continuation receives only the time left.
-- The continuation keeps the request's key, so no other request with that key
-  runs between the question and the answer. State can still change through
-  other means: recheck what you are about to change before acting.
+- By default the request holds its key during the question. Callers can opt
+  into releasing it while the question is pending. Recheck the proposal and
+  permissions when the continuation runs. See [stdio keys](stdio.md#keys).
 - The continuation never runs when the request is cancelled or the host
   disconnects. Late or duplicate answers are ignored.
 - A continuation cannot ask a second time.

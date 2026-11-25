@@ -460,6 +460,8 @@ enum Event {
 enum Last {
     /// The final JSON-RPC reply and its error code.
     Reply(Vec<u8>, Option<i32>),
+    /// An interim reply with cleanup armed until its socket write succeeds.
+    Interim(Vec<u8>, stdio::PendingInput),
     /// A complete refusal written instead of a reply.
     Response(Response),
 }
@@ -506,8 +508,9 @@ impl Mailbox {
         self.ready.notify_one();
     }
 
-    /// Waits up to `timeout` for output, then takes what is pending.
-    fn wait(&self, timeout: Duration) -> (Vec<Vec<u8>>, Option<Last>, bool) {
+    /// Waits for output and swaps pending events into the empty writer queue.
+    fn wait(&self, events: &mut VecDeque<Vec<u8>>, timeout: Duration) -> (Option<Last>, bool) {
+        debug_assert!(events.is_empty());
         let mut state = self.lock();
         if state.events.is_empty() && state.last.is_none() && !state.ended {
             state = self
@@ -516,11 +519,10 @@ impl Mailbox {
                 .unwrap_or_else(PoisonError::into_inner)
                 .0;
         }
-        (
-            state.events.drain(..).collect(),
-            state.last.take(),
-            state.ended,
-        )
+        if !state.events.is_empty() {
+            std::mem::swap(events, &mut state.events);
+        }
+        (state.last.take(), state.ended)
     }
 }
 
@@ -753,7 +755,7 @@ impl<H: Handler> Dispatcher<H> {
             .map(|context| context.encode_success(key, &result, self.limit, &|| Ok(())));
         self.session.finish(key);
         if let Some(Ok(bytes)) = encoded {
-            self.answer_bytes(&bytes);
+            self.answer_bytes(&bytes, None);
         } else {
             let error = RpcError::new(rpc::INTERNAL_ERROR, "Cannot encode tool result");
             self.answer(id, rpc::failure(key.clone(), &error));
@@ -871,7 +873,8 @@ impl<H: Handler> Dispatcher<H> {
                     }
                 }
             },
-            Outgoing::Bytes(bytes) => self.answer_bytes(&bytes),
+            Outgoing::Bytes(bytes) => self.answer_bytes(&bytes, None),
+            Outgoing::Interim(bytes, interim) => self.answer_bytes(&bytes, Some(interim)),
         }
     }
 
@@ -909,7 +912,7 @@ impl<H: Handler> Dispatcher<H> {
 
     /// Delivers an encoded reply, replacing the server ID after its envelope
     /// prefix with the client's ID without reparsing the result.
-    fn answer_bytes(&mut self, bytes: &[u8]) {
+    fn answer_bytes(&mut self, bytes: &[u8], interim: Option<stdio::PendingInput>) {
         let Some(rest) = bytes.strip_prefix(REPLY_PREFIX) else {
             return;
         };
@@ -924,7 +927,14 @@ impl<H: Handler> Dispatcher<H> {
             return;
         };
         let (reply, code) = with_client_id(&pending.client, &rest[digits..], self.limit);
-        pending.mailbox.finish(Last::Reply(reply, code));
+        let last = match (code, interim) {
+            (None, Some(interim)) => Last::Interim(reply, interim),
+            (code, abandoned) => {
+                drop(abandoned);
+                Last::Reply(reply, code)
+            }
+        };
+        pending.mailbox.finish(last);
     }
 }
 

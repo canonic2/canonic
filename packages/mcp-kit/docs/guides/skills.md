@@ -296,6 +296,14 @@ operation and authorization scope, recheck domain validity and any single-use ru
 then inspect `confirmation_decision()`. The library checks the envelope and
 the retry's current form capability; it never grants authority from echoed data.
 
+An in-process handler that has already reserved workflow state can return
+`Outcome::PendingInput(PendingInput::new(result, cleanup))`. The cleanup
+callback runs if the driver discards the result or its write fails. The driver
+commits delivery after writing and flushing the interim reply. The worker
+wire refuses `Outcome::PendingInput`. Use the serializable
+`Outcome::InputRequired` for a worker reply and manage the workflow in your
+application.
+
 The interim result releases its RPC ID and worker/key. Cancelling that finished
 ID cannot revoke a future retry: the consumer owns workflow revocation,
 including connection-bound cleanup. Legacy `Outcome::Confirm` closures remain

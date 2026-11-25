@@ -69,6 +69,7 @@ pub struct Contract {
     disconnect_grace: Duration,
     output: usize,
     elicitation: u8,
+    release_key_while_waiting: bool,
     resident: Value,
 }
 
@@ -96,6 +97,7 @@ impl Contract {
             disconnect_grace: options.disconnect_grace,
             output: options.max_output_bytes,
             elicitation: options.elicitation.max_rounds,
+            release_key_while_waiting: options.release_key_while_waiting,
             resident,
         })
     }
@@ -107,6 +109,7 @@ impl Contract {
             && self.disconnect_grace == options.disconnect_grace
             && self.output == options.max_output_bytes
             && self.elicitation == options.elicitation.max_rounds
+            && self.release_key_while_waiting == options.release_key_while_waiting
     }
     fn changed(&mut self, change: &Change) {
         match change {
