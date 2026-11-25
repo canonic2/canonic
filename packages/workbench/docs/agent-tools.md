@@ -168,8 +168,11 @@ MCP also receives a smaller inline image fitting 1,568 pixels. Composition
 refuses pictures beyond 32 megapixels, 16,384 pixels per edge, 12 MiB of input
 PNGs, or a 16 MiB output PNG; request fewer or smaller sizes when refused.
 
-For one page, `page_screenshot` supports `--full-page`, `--clip '#selector'`,
-and `--device-scale-factor 2`. `--save` also writes that screenshot into
+For one page, `page_screenshot` supports `--full-page` and `--clip '#selector'`.
+Use `--device-scale-factor 2` or `--device-scale-factor 3` for denser CLI
+captures, or set `deviceScaleFactor` in MCP. The range is 1 to 3 and the
+default is 1. Each capture can be up to 32 megapixels and 16,384 pixels per
+edge. `--save` also writes that screenshot into
 `.canonic/.handoffs/`. The MCP catalog marks `page_screenshot` as write-capable
 because it supports saving. Other captures stay outside the project: MCP captures
 last for their connection, while CLI captures keep the project's newest 50.
@@ -216,9 +219,9 @@ the first failure. If evidence collection fails after the steps ran, the
 result keeps the step outcomes and names the missing evidence in `evidenceErrors`.
 Inspect the page's current state before repeating an input step whose outcome
 is uncertain. Calls using the same handle run one at a time, including a
-comparison that uses the handle. A handle closes after 10 minutes without a call. CLI
-handles also close when the manager stops, including its idle shutdown.
-MCP handles belong to their connection, while CLI handles belong to the project.
+comparison that uses the handle. MCP handles stay open for their connection.
+CLI handles belong to the project and close after 10 minutes of inactivity
+or when the manager stops.
 Pass handles to `page_compare` to compare states already reached through input.
 
 ## Inspect and edit images
@@ -333,8 +336,11 @@ fails with `canvas_closed`; open or reload it and retry. If selection changes
 or the call times out, read `view_show` before retrying. The command uses the
 canvas's media color scheme; choose a page scenario for dark or light content.
 
-Calls default to a 60-second deadline; `--timeout` accepts milliseconds up
-to 120,000. Refusals name the next step. The offline `docs list`,
+Page tools accept an optional MCP `timeout` in milliseconds up to 120,000.
+It includes time in the queue, opening the page and running its operations.
+Cancelling an interaction stops later steps. Input already sent to the browser
+can still take effect. CLI page operations default to
+60 seconds and accept `--timeout`. Refusals name the next step. The offline `docs list`,
 `docs search <query>` and `docs read <path>` commands also work outside a project.
 
 Each docs command accepts `--cursor <CURSOR>` and `--limit <N>`. List and search
