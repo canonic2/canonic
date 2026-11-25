@@ -6,7 +6,7 @@
 use crate::{
     configuration::Evaluator,
     review::{
-        Context, Error,
+        Checkpoint, Context, Error,
         changes::{diff, project_files},
         integrations::{self, project_sources},
         model::{State, Texts},
@@ -202,6 +202,16 @@ pub(in crate::review) fn write(
     proposal: Option<&str>,
     mechanism: &str,
 ) -> Result<Value, Error> {
+    write_controlled(context, edit, proposal, mechanism, &|| Ok(()))
+}
+
+pub(in crate::review) fn write_controlled(
+    context: &Context,
+    edit: Edit<'_>,
+    proposal: Option<&str>,
+    mechanism: &str,
+    checkpoint: Checkpoint<'_>,
+) -> Result<Value, Error> {
     let root = Path::new(&context.project_root);
     let lease = ProjectionLease::acquire(root)?;
     lease.check(context)?;
@@ -237,7 +247,7 @@ pub(in crate::review) fn write(
     {
         return Err(Error::ApprovalRequired);
     }
-    let guard = registry_trust::guard_effective(&meta, evaluator.effective())?;
+    let guard = registry_trust::guard_effective(&meta, evaluator.effective(), checkpoint)?;
     guard.bind_modes(&mut meta)?;
     let files = projections::projections(&candidate, &meta)?;
     if let Some(reviewed) = reviewed {

@@ -1468,6 +1468,7 @@ fn inventory_has_only_canonical_tools_and_no_operator_or_completion_authority() 
             "suggestion_list",
             "review_defer",
             "policy_withdraw",
+            "policy_review",
             "policy_apply",
             "request_list",
             "request_approve",

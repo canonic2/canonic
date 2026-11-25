@@ -158,30 +158,53 @@ fn final_read_authority_refuses_revoked_source_without_spending_exact_grant() {
 }
 
 #[test]
-fn final_read_authority_refuses_busy_trust_before_creating_request() {
+fn final_read_authority_waits_for_trust_before_creating_request() {
+    use std::{sync::mpsc, thread};
+
     if !crate::test_support::isolated_home(concat!(
         module_path!(),
-        "::final_read_authority_refuses_busy_trust_before_creating_request"
+        "::final_read_authority_waits_for_trust_before_creating_request"
     )) {
         return;
     }
     let fixture = trusted();
     let (evidence, digest) = read_evidence(&fixture);
     let before = raw(&fixture);
-    let namespace = Namespace::user().unwrap();
-    let _exclusive = namespace.exclusive_fixture().unwrap();
-    assert!(matches!(
-        crate::review::read_approval::gate(
-            &fixture.context,
-            "acme-reader",
-            &evidence,
-            &digest,
-            None,
-            || panic!("busy source cannot reach resource verification")
-        ),
-        Err(Error::Locked)
-    ));
-    assert_eq!(raw(&fixture)["read_requests"], before["read_requests"]);
+    let pending = thread::scope(|scope| {
+        let exclusive = Namespace::user().unwrap().exclusive_fixture().unwrap();
+        let (started, ready) = mpsc::channel();
+        let (reply, result) = mpsc::channel();
+        let context = &fixture.context;
+        scope.spawn(move || {
+            started.send(()).unwrap();
+            reply
+                .send(crate::review::read_approval::gate(
+                    context,
+                    "acme-reader",
+                    &evidence,
+                    &digest,
+                    None,
+                    || true,
+                ))
+                .unwrap();
+        });
+        ready.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert!(matches!(
+            result.recv_timeout(Duration::from_millis(650)),
+            Err(mpsc::RecvTimeoutError::Timeout)
+        ));
+        assert_eq!(raw(&fixture)["read_requests"], before["read_requests"]);
+        drop(exclusive);
+        result
+            .recv_timeout(Duration::from_secs(5))
+            .unwrap()
+            .unwrap()
+    });
+    assert_eq!(
+        raw(&fixture)["read_requests"][0]["request_id"],
+        pending["approval"]["request_id"]
+    );
+    assert!(pending["approval"]["request_id"].is_string());
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux", windows))]
@@ -282,10 +305,12 @@ fn native_revocation_between_core_and_override_never_consumes_approved_grant() {
 }
 
 #[test]
-fn native_busy_final_guard_blocks_allowing_fallback_without_consuming_grant() {
+fn native_final_guard_waits_for_publication_without_consuming_a_grant() {
+    use std::{sync::mpsc, thread};
+
     if !crate::test_support::isolated_home(concat!(
         module_path!(),
-        "::native_busy_final_guard_blocks_allowing_fallback_without_consuming_grant"
+        "::native_final_guard_waits_for_publication_without_consuming_a_grant"
     )) {
         return;
     }
@@ -300,16 +325,34 @@ fn native_busy_final_guard_blocks_allowing_fallback_without_consuming_grant() {
     install_registration(&fixture, "block");
     let row = approved(&fixture);
     install_registration(&fixture, "allow");
-    let held = Rc::new(std::cell::RefCell::new(None));
-    let target = held.clone();
-    let _boundary = protocol::before_native_authority(move || {
-        let namespace = Namespace::user().unwrap();
-        *target.borrow_mut() = Some(namespace.exclusive_fixture().unwrap());
+    let allowed = thread::scope(|scope| {
+        let (arrived, boundary) = mpsc::channel();
+        let (resume, proceed) = mpsc::channel();
+        let (reply, result) = mpsc::channel();
+        let fixture = fixture.as_ref();
+        scope.spawn(move || {
+            let _boundary = protocol::before_native_authority(move || {
+                arrived.send(()).unwrap();
+                proceed.recv_timeout(Duration::from_secs(5)).unwrap();
+            });
+            reply.send(hook(fixture)).unwrap();
+        });
+        boundary.recv_timeout(Duration::from_secs(5)).unwrap();
+        let publisher = Namespace::user().unwrap().exclusive_fixture().unwrap();
+        resume.send(()).unwrap();
+        assert!(matches!(
+            result.recv_timeout(Duration::from_millis(650)),
+            Err(mpsc::RecvTimeoutError::Timeout)
+        ));
+        drop(publisher);
+        result.recv_timeout(Duration::from_secs(5)).unwrap()
     });
-    let denied = hook(&fixture);
-    assert_eq!(denied["hookSpecificOutput"]["permissionDecision"], "deny");
+    assert_ne!(
+        allowed["hookSpecificOutput"]["permissionDecision"], "deny",
+        "{allowed}"
+    );
+    assert!(allowed["hookSpecificOutput"]["additionalContext"].is_null());
     assert_eq!(raw(&fixture)["hook_requests"][0], row);
-    drop(held.borrow_mut().take());
 }
 
 #[test]

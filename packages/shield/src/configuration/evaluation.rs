@@ -157,7 +157,13 @@ impl Evaluator {
             .plan
             .evaluate_input_mcp(request, &facts, resolved, checkpoint)?;
         self.constrain_mcp(&mut evaluation, input, request, resolved, checkpoint)?;
-        Ok(self.candidate(evaluation))
+        let mut candidate = self.candidate(evaluation);
+        if let policy::resolution::normalized::Input::Mcp { tool, .. } = input
+            && crate::evidence::private_mcp_arguments(tool)
+        {
+            candidate.mark_private_input();
+        }
+        Ok(candidate)
     }
 
     fn mcp_input<'a>(

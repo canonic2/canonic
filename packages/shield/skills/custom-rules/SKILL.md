@@ -149,8 +149,8 @@ Fetching pages from one documentation host. List each subdomain:
    miss, such as an extra flag or another folder, passing the proposal's
    `after_candidate_id` as `candidate_id`. If the scope is wrong, close it
    with `policy_withdraw` and propose a corrected rule.
-3. Copy `apply_arguments` unchanged to `policy_apply`. Its form is the
-   approval; do not also ask in chat.
+3. Call `policy_review` with the `proposal_id`. For hosts with native tool
+   approval, use the unchanged `apply_arguments` with `policy_apply`.
 4. Retry the original request once it is allowed.
 
 ## 5. Outcomes

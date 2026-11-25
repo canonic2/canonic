@@ -100,9 +100,10 @@ fn static_discovery_list_and_read_need_no_project_or_handshake() {
 
 /// Result fields, result codes and rule fields the skills name besides tools
 /// and their arguments.
-const NAMED_FIELDS: [&str; 6] = [
+const NAMED_FIELDS: [&str; 7] = [
     "apply_arguments",
     "after_candidate_id",
+    "review_action",
     "stale_revision",
     "expires_at",
     "pack_updates",

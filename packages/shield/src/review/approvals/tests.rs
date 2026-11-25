@@ -7,6 +7,14 @@ use crate::{
 };
 use std::path::Path;
 
+fn confirmation(context: &Context, args: &Value) -> Result<String, Error> {
+    super::confirmation(context, args, &|| Ok(()))
+}
+
+fn approve(context: &Context, args: &Value, confirmed: bool) -> Result<Value, Error> {
+    super::approve(context, args, confirmed, &|| Ok(()))
+}
+
 pub(crate) struct Fixture {
     pub(crate) root: assert_fs::TempDir,
     pub(crate) context: Context,

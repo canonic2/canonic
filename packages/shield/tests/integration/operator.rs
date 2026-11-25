@@ -618,28 +618,8 @@ fn guided_add_asks_setup_questions_in_declaration_order_and_reasks_refused_value
     let source_path = source.path().to_str().expect("fixture path");
     let registered = interactive(&root, &["registry", "add", "acme", source_path], "yes\n");
     assert_eq!(registered["code"], 0, "{registered}");
-    // Select the typed row, observe validation refusal, then replace its retained
-    // text in the same form. Endpoint: unset. Each later item awaits a new prompt.
-    // Then keep the reviewed answers, save as the pack suggests and confirm.
-    let answers = format!(
-        "@{}",
-        json!([
-            {"keys":"2acme-read-only-profile-too-long\r"},
-            {"wait":"variable text is empty or too long", "keys":"\r\u{7}acme-read-only\r"},
-            {"keys":"1"}, {"keys":"\r"}, {"keys":"\r"}, {"keys":"2\r"}
-        ])
-    );
-    let added = interactive(
-        &root,
-        &[
-            "pack",
-            "add",
-            "acme/cloud@0.1.0",
-            "--profile",
-            "recommended",
-        ],
-        &answers,
-    );
+    // Installation skips optional setup. Configure walks those questions.
+    let added = interactive(&root, &["pack", "add", "acme/cloud@0.1.0"], "yes\n");
     assert_eq!(added["code"], 0, "{added}");
     let config = std::fs::read_to_string(root.path().join(".shield/config.yml")).expect("config");
     let config: Value = serde_saphyr::from_str(&config).expect("config YAML");
@@ -649,14 +629,16 @@ fn guided_add_asks_setup_questions_in_declaration_order_and_reasks_refused_value
         .iter()
         .find(|p| p["id"] == "acme/cloud")
         .expect("selection");
-    assert_eq!(selection["variables"], json!({"profile": "acme-read-only"}));
-    // Keep both answers, use them, save as suggested, then mark the rule. Escape
-    // in its step returns to the list with the mark kept, so Enter there opens
-    // the rule again, where Off is preselected.
+    assert!(selection.get("variables").is_none());
+    // Replace the refused profile in the same form, then leave the endpoint
+    // unset. Save as suggested and mark the rule. Escape in its step returns
+    // to the list with the mark kept, so Enter opens it again.
     let answers = format!(
         "@{}",
         json!([
-            {"keys":"\r"}, {"keys":"\r"}, {"keys":"\r"}, {"keys":"\r"},
+            {"keys":"2acme-read-only-profile-too-long\r"},
+            {"wait":"variable text is empty or too long", "keys":"\r\u{7}acme-read-only\r"},
+            {"keys":"1"}, {"keys":"\r"}, {"keys":"\r"},
             {"keys":" \r"}, {"keys":"\u{1b}"}, {"keys":"\r"}, {"keys":"\r"}, "yes"
         ])
     );
@@ -830,6 +812,39 @@ fn going_back_through_rule_overrides_keeps_an_existing_override() {
 
 #[test]
 #[cfg(any(unix, windows))]
+fn pack_add_saves_required_local_answer_in_local_policy() {
+    let root = TempDir::new().expect("project");
+    let source = TempDir::new().expect("registry");
+    let pack = json!({"schema_version":1,"kind":"pack","id":"acme/tools","version":"0.1.0",
+        "description":"Acme tools","license":"UNLICENSED","maintainers":["Acme"],"engines":{"shield":"*"},
+        "capabilities":["structured-rules-v1","argument-rules-v1","variables-v1"],
+        "variables":{"tool":{"type":"string","description":"Machine-specific executable","required":true,"layer":"local"}},
+        "rules":[{"id":"tool","decision":"allow","conditions":{"domain":"argv","executable":{"var":"tool"},"arguments":{"kind":"any"}}}]})
+    .to_string();
+    source.child("pack.json").write_str(&pack).unwrap();
+    source.child("catalog.json").write_str(&json!({"schema_version":1,"packs":[{
+        "id":"acme/tools","version":"0.1.0","path":"pack.json","sha256":fixture_digest(pack.as_bytes())}]}).to_string()).unwrap();
+    assert_eq!(interactive(&root, &["init"], "yes\n")["code"], 0);
+    let registered = interactive(
+        &root,
+        &["registry", "add", "acme", source.path().to_str().unwrap()],
+        "yes\n",
+    );
+    assert_eq!(registered["code"], 0, "{registered}");
+    let installed = interactive(&root, &["pack", "add", "acme/tools"], "acme-machine\nyes\n");
+    assert_eq!(installed["code"], 0, "{installed}");
+    let shared = std::fs::read_to_string(root.path().join(".shield/config.yml")).unwrap();
+    let local = std::fs::read_to_string(root.path().join(".shield/config.local.yml")).unwrap();
+    assert!(!shared.contains("acme-machine"), "{shared}");
+    assert!(local.contains("acme-machine"), "{local}");
+    assert_eq!(
+        query(&root, &["pack", "list"])["packs"][0]["profile"],
+        "recommended"
+    );
+}
+
+#[test]
+#[cfg(any(unix, windows))]
 fn local_registration_install_profile_change_and_offline_removal_are_atomic() {
     let root = TempDir::new().expect("project");
     let source = TempDir::new().expect("registry");
@@ -841,7 +856,11 @@ fn local_registration_install_profile_change_and_offline_removal_are_atomic() {
     let source_path = source.path().to_str().expect("fixture path");
     let registered = interactive(&root, &["registry", "add", "acme", source_path], "yes\n");
     assert_eq!(registered["code"], 0, "{registered}");
-    let installed = interactive(&root, &["pack", "add", "acme/test@0.1.0"], "loose\nyes\n");
+    let installed = interactive(
+        &root,
+        &["pack", "add", "acme/test@0.1.0", "--profile", "loose"],
+        "yes\n",
+    );
     assert_eq!(installed["code"], 0, "{installed}");
     let packs = query(&root, &["pack", "list"]);
     assert_eq!(packs["packs"][0]["pinned"], true);
@@ -1424,7 +1443,7 @@ fn cross_source_cli_reviews_foreign_updates_and_prunes_offline() {
     }
     let before = query(&root, &["status"])["active"].clone();
     assert_eq!(
-        interactive(&root, &["pack", "add", "a/acme/parent"], "\nyes\n")["code"],
+        interactive(&root, &["pack", "add", "a/acme/parent"], "yes\n")["code"],
         1
     );
     assert_eq!(query(&root, &["status"])["active"], before);
@@ -1437,7 +1456,7 @@ fn cross_source_cli_reviews_foreign_updates_and_prunes_offline() {
         0
     );
     assert_eq!(
-        interactive(&root, &["pack", "add", "a/acme/parent"], "\nyes\n")["code"],
+        interactive(&root, &["pack", "add", "a/acme/parent"], "yes\n")["code"],
         0
     );
     let rows = query(&root, &["pack", "list"])["packs"].clone();
@@ -1589,10 +1608,10 @@ fn local_dependency_installation_reviews_complete_closure_preserves_profiles_and
         assert_eq!(result["code"], 0, "{result}");
     }
     let before = query(&root, &["status"])["active"].clone();
-    let cancelled = interactive(&root, &["pack", "add", "acme/acme/parent"], "\nno\n");
+    let cancelled = interactive(&root, &["pack", "add", "acme/acme/parent"], "no\n");
     assert_eq!(cancelled["code"], 130, "{cancelled}");
     assert_eq!(query(&root, &["status"])["active"], before);
-    let installed = interactive(&root, &["pack", "add", "acme/acme/parent"], "\nyes\n");
+    let installed = interactive(&root, &["pack", "add", "acme/acme/parent"], "yes\n");
     assert_eq!(installed["code"], 0, "{installed}");
     assert_lock_names_source_by_identity(&root, &source);
     let packs = query(&root, &["pack", "list"]);

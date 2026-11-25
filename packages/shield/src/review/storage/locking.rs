@@ -1,16 +1,44 @@
 //! Crash-safe writer ownership with exclusion of older marker-only writers.
 use super::{Checkpoint, Error, private, writer_running};
 use std::{
+    cell::RefCell,
     fs::{self, File, OpenOptions},
     io::{self, Read},
+    marker::PhantomData,
     path::{Path, PathBuf},
+    rc::Rc,
     thread,
     time::Duration,
 };
+mod queue;
+
+thread_local! {
+    static HELD: RefCell<Vec<PathBuf>> = const { RefCell::new(Vec::new()) };
+}
+
+pub(super) struct Backoff(Duration);
+
+impl Backoff {
+    pub(super) fn new() -> Self {
+        Self(Duration::from_millis(5))
+    }
+
+    fn next_delay(&mut self) -> Duration {
+        let delay = self.0;
+        self.0 = (delay * 2).min(Duration::from_millis(80));
+        delay
+    }
+
+    pub(super) fn wait(&mut self) {
+        thread::sleep(self.next_delay());
+    }
+}
 
 pub(super) struct Lock {
     file: File,
     marker: Option<PathBuf>,
+    owner: PathBuf,
+    _thread: PhantomData<Rc<()>>,
 }
 
 impl Drop for Lock {
@@ -20,6 +48,7 @@ impl Drop for Lock {
         if let Some(path) = self.marker.take() {
             let _ = fs::remove_dir(path);
         }
+        HELD.with_borrow_mut(|paths| paths.retain(|path| path != &self.owner));
     }
 }
 
@@ -46,43 +75,107 @@ impl Lock {
 }
 
 pub(super) fn acquire(directory: &Path, checkpoint: Checkpoint<'_>) -> Result<Lock, Error> {
+    acquire_inner(directory, checkpoint, true)
+}
+
+/// Optional maintenance only enters an idle writer lane.
+pub(super) fn try_acquire(directory: &Path) -> Result<Lock, Error> {
+    acquire_inner(directory, &|| Ok(()), false)
+}
+
+fn acquire_inner(directory: &Path, checkpoint: Checkpoint<'_>, wait: bool) -> Result<Lock, Error> {
     checkpoint()?;
+    if HELD.with_borrow(|paths| paths.iter().any(|path| path == directory)) {
+        return Err(Error::Locked);
+    }
     let path = directory.join("writer.lock");
+    let file = open_file(&path, false)?;
+    let queue = queue::Queue::open(directory)?;
+    let marker = directory.join("state.lock");
+    let mut ticket = None;
+    let mut legacy_attempts = 0;
+    let mut backoff = Backoff::new();
+    loop {
+        checkpoint()?;
+        let Some(admission) = queue.try_admit(ticket.as_ref())? else {
+            if !wait {
+                return Err(Error::Locked);
+            }
+            backoff.wait();
+            continue;
+        };
+        let mut legacy_wait = false;
+        if admission.first() == ticket.as_ref().map(queue::Ticket::number) {
+            match file.try_lock() {
+                Ok(()) => {
+                    checkpoint()?;
+                    checked_file(&path, &file)?;
+                    if enter_marker(&marker)? {
+                        let owner = directory.to_path_buf();
+                        HELD.with_borrow_mut(|paths| paths.push(owner.clone()));
+                        return Ok(Lock {
+                            file,
+                            marker: Some(marker),
+                            owner,
+                            _thread: PhantomData,
+                        });
+                    }
+                    // Legacy writers have no kernel lease to join the queue.
+                    // Preserve the compatibility refusal for their PID files.
+                    file.unlock()?;
+                    legacy_attempts += 1;
+                    legacy_wait = true;
+                    if legacy_attempts == 20 {
+                        return Err(Error::Locked);
+                    }
+                }
+                Err(fs::TryLockError::WouldBlock) => {}
+                Err(fs::TryLockError::Error(error)) => return Err(error.into()),
+            }
+        }
+        if !wait {
+            return Err(Error::Locked);
+        }
+        if ticket.is_none() {
+            ticket = Some(admission.join()?);
+        }
+        drop(admission);
+        if legacy_wait {
+            thread::sleep(Duration::from_millis(25));
+        } else {
+            backoff.wait();
+        }
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn lease_retry_backoff_caps_at_eighty_milliseconds() {
+    let mut backoff = Backoff::new();
+    for delay in [5, 10, 20, 40, 80, 80] {
+        assert_eq!(backoff.next_delay(), Duration::from_millis(delay));
+    }
+}
+
+fn open_file(path: &Path, new: bool) -> Result<File, Error> {
     let mut options = OpenOptions::new();
-    options.read(true).write(true).create(true).truncate(false);
+    options.read(true).write(true).create(!new).create_new(new);
     private(&mut options);
     #[cfg(unix)]
     {
         use std::os::unix::fs::OpenOptionsExt;
-        options.custom_flags(nix::fcntl::OFlag::O_NOFOLLOW.bits());
+        options.custom_flags(
+            nix::fcntl::OFlag::O_NOFOLLOW.bits() | nix::fcntl::OFlag::O_NONBLOCK.bits(),
+        );
     }
     #[cfg(windows)]
     {
         use std::os::windows::fs::OpenOptionsExt;
         options.custom_flags(0x0020_0000); // FILE_FLAG_OPEN_REPARSE_POINT
     }
-    let file = options.open(&path)?;
-    checked_file(&path, &file)?;
-    let marker = directory.join("state.lock");
-    for _ in 0..20 {
-        checkpoint()?;
-        match file.try_lock() {
-            Ok(()) => {
-                checked_file(&path, &file)?;
-                if enter_marker(&marker)? {
-                    return Ok(Lock {
-                        file,
-                        marker: Some(marker),
-                    });
-                }
-                file.unlock()?;
-            }
-            Err(fs::TryLockError::WouldBlock) => {}
-            Err(fs::TryLockError::Error(error)) => return Err(error.into()),
-        }
-        thread::sleep(Duration::from_millis(25));
-    }
-    Err(Error::Locked)
+    let file = options.open(path)?;
+    checked_file(path, &file)?;
+    Ok(file)
 }
 
 /// A directory atomically distinguishes new writers from old PID files, even

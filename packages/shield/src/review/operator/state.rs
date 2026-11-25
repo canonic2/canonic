@@ -40,7 +40,6 @@ pub(super) fn initialize(
     if !disabled.is_empty() {
         meta["disabled"] = json!(disabled);
     }
-    let existing = json!({"installed":meta["installed"].clone()});
     if let Some(cache_dir) = cache_dir {
         meta["compiled_cache_root"] = json!(cache_dir);
     }
@@ -70,14 +69,7 @@ pub(super) fn initialize(
         &bytes,
         None,
     )?;
-    let (candidate, meta) = super::packs::settle_first(
-        &mut tty,
-        &project,
-        &existing,
-        candidate,
-        meta,
-        &super::packs::setup::Edits::default(),
-    )?;
+    let (candidate, meta) = super::packs::settle_first(&mut tty, &project, candidate, meta)?;
     let verified_main = checkpoints.contains_key("main");
     let prepared =
         review::initialization::Prepared::new(&project, candidate.clone(), meta, checkpoints)?;

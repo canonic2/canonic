@@ -113,7 +113,6 @@ impl Installation {
                 &selection.reference,
                 selection.profile,
                 false,
-                |_, _| Ok(policy::Profile::Recommended),
             )?;
             let rows = metadata["installed"]
                 .as_array()
@@ -152,9 +151,14 @@ impl Installation {
             if values.is_empty() {
                 continue;
             }
+            let layer_local = before.operator["installed"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .any(|row| row["selector"] == selector && row["layer"] == "local");
             let (candidate, metadata) =
                 super::prepare_configure(&before, &selector, |artifact, settings| {
-                    settings.edit(local, |binding| {
+                    settings.edit(local || layer_local, |binding| {
                         super::settings::assign(artifact, binding, values, &[])
                     })
                 })?;
@@ -242,7 +246,7 @@ impl Installation {
                 .as_str()
                 .ok_or(Error::Invalid("pack bytes missing"))?;
             let mut settings = inspection::selection_settings(&self.candidate, index)?;
-            settings.edit(self.local, |binding| {
+            settings.edit(self.local || row["layer"] == "local", |binding| {
                 super::settings::assign(artifact, binding, &selected, &[])
             })?;
             super::bind(row, &settings);

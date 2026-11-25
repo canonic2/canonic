@@ -73,7 +73,7 @@ fn guard(metadata: &Value) -> Result<Guard, Error> {
             ))
         })
         .collect::<Result<Vec<_>, Error>>()?;
-    guard_rows(metadata, &rows)
+    guard_rows(metadata, &rows, &|| Ok(()))
 }
 
 /// Runtime authority uses the exact compiled artifact lock even when an older
@@ -82,8 +82,9 @@ fn guard(metadata: &Value) -> Result<Guard, Error> {
 pub(in crate::review) fn guard_effective(
     metadata: &Value,
     effective: &crate::configuration::Effective,
+    checkpoint: Checkpoint<'_>,
 ) -> Result<Guard, Error> {
-    guard_rows(metadata, &effective_rows(metadata, effective))
+    guard_rows(metadata, &effective_rows(metadata, effective), checkpoint)
 }
 
 /// Actual runtime use can finish an exact previously confirmed adoption before
@@ -130,7 +131,11 @@ fn effective_rows<'a>(
     rows
 }
 
-fn guard_rows(metadata: &Value, rows: &[(&str, &str, &str, &str)]) -> Result<Guard, Error> {
+fn guard_rows(
+    metadata: &Value,
+    rows: &[(&str, &str, &str, &str)],
+    checkpoint: Checkpoint<'_>,
+) -> Result<Guard, Error> {
     let sources: BTreeSet<_> = rows.iter().map(|row| row.0).collect();
     if sources.is_empty() {
         return Ok(Guard {
@@ -144,7 +149,7 @@ fn guard_rows(metadata: &Value, rows: &[(&str, &str, &str, &str)]) -> Result<Gua
     if !metadata["registry_trust"].is_null() && !metadata["registry_trust"].is_object() {
         return Err(Error::Invalid("invalid retained registry trust modes"));
     }
-    let lease = namespace.guard()?;
+    let lease = namespace.guard(checkpoint)?;
     let mut revisions = BTreeMap::new();
     let mut bindings = BTreeMap::new();
     let mut retained = Vec::new();
@@ -339,7 +344,14 @@ impl Prepared {
                 "versioned trust requires an enrolled HTTPS registry",
             ));
         }
-        let previous = Namespace::user()?.read(source.identity())?;
+        let previous = {
+            let namespace = Namespace::user()?;
+            let _guard = namespace.guard(checkpoint).map_err(|error| match error {
+                Error::Policy(crate::policy::Error::Interrupted) => Error::Cancelled,
+                error => error,
+            })?;
+            namespace.read_guarded(source.identity())?
+        };
         if let Some(previous) = &previous {
             check_reference(&metadata, source.identity(), previous)?;
         }
@@ -592,7 +604,7 @@ pub(in crate::review) fn check_entry(
     if acquiring {
         namespace.recover(source.identity())?;
     }
-    let _guard = namespace.guard()?;
+    let _guard = namespace.try_guard()?;
     if let Some(head) = namespace.read_guarded(source.identity())? {
         if head.root.source() != source {
             return Err(Error::Invalid("registry trust anchor changed"));

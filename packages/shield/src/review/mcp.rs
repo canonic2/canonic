@@ -39,6 +39,26 @@ pub(crate) fn question_error(context: &Context, error: &Error) -> Value {
     failure(context, error)
 }
 
+pub(crate) fn registry_input_discarded(context: &Context) -> Value {
+    result_envelope(
+        context,
+        "registry_add",
+        Ok(json!({"status":"discarded","committed":false})),
+    )
+}
+
+pub(crate) fn registry_input_error(context: &Context, error: &Error) -> Value {
+    if matches!(error, Error::Overloaded) {
+        return refused(
+            context,
+            "overloaded",
+            "Registry details are at capacity. Finish an open form or call registry_add with a retained review_ref and discard: true, then retry.",
+            Some("registry_add"),
+        );
+    }
+    question_error(context, error)
+}
+
 /// Validate exact retained review bytes before showing a host confirmation.
 pub(crate) struct PolicyConfirmation {
     pub(crate) proposal_id: String,
@@ -55,16 +75,20 @@ impl PolicyConfirmation {
     }
 }
 
-pub(crate) fn prepare_apply_confirmation(
+/// With `force_form`, Shield's form confirms even where the host would
+/// otherwise approve through its native tool permission.
+pub(crate) fn prepare_policy_confirmation(
     context: &Context,
     connection: &Connection,
     args: &Value,
+    force_form: bool,
 ) -> Result<Option<PolicyConfirmation>, Error> {
     let normalized = runtime_context(context)?;
     let context = &normalized;
     let confirmation = crate::agents::review::for_context(context).confirmation();
     let tool_permission = confirmation == crate::agents::review::Confirmation::ToolPermission;
-    if tool_permission
+    if !force_form
+        && tool_permission
         && connection
             .views
             .lock()
@@ -83,7 +107,7 @@ pub(crate) fn prepare_apply_confirmation(
         return Ok(None);
     };
     let changed = super::publication::mcp_changed(&proposal.base_candidate, &proposal.candidate)?;
-    if !changed && confirmation != crate::agents::review::Confirmation::Form {
+    if !force_form && !changed && confirmation != crate::agents::review::Confirmation::Form {
         return Ok(None);
     }
     let mut message = confirmation::message(proposal, &proposal.apply_arguments());
@@ -111,8 +135,37 @@ pub(crate) fn prepare_apply_confirmation(
     Ok(Some(PolicyConfirmation {
         proposal_id: id,
         message,
-        web_claim: (!tool_permission).then_some(normalized),
+        web_claim: (force_form || !tool_permission).then_some(normalized),
     }))
+}
+
+pub(crate) fn review_arguments(context: &Context, reference: &str) -> Result<Value, Error> {
+    let store = super::storage::Store::open(std::path::Path::new(&context.project_root))?;
+    let mut state = store.read_checkpoint()?;
+    state.check(context)?;
+    state.check_operations()?;
+    let proposal = state
+        .proposals
+        .iter_mut()
+        .find(|proposal| proposal.id == reference)
+        .ok_or(Error::Missing)?;
+    if !super::proposal_lifecycle::owns(proposal, context) {
+        return Err(Error::Invalid(
+            "this review belongs to another interaction; prepare a fresh change",
+        ));
+    }
+    store.hydrate_proposal(proposal)?;
+    Ok(apply::arguments(
+        crate::agents::review::for_context(context),
+        proposal,
+    ))
+}
+
+pub(crate) fn validate_registry_inputs(context: &Context, binding: &str) -> Result<(), Error> {
+    if changes::prepared_binding(&project::checkpoint(context)?) != binding {
+        return Err(Error::StaleSnapshot);
+    }
+    Ok(())
 }
 
 /// Tool-permission hosts show their review before dispatching MCP. Check the
@@ -1393,12 +1446,11 @@ fn dispatch(
             })?;
             Ok(json!({"status":"deferred","policy_changed":false,"review_ids":args["review_ids"]}))
         }
-        "request_approve" => {
-            super::approvals::approve(context, args, confirmed).map_err(|error| match error {
+        "request_approve" => super::approvals::approve(context, args, confirmed, checkpoint)
+            .map_err(|error| match error {
                 Error::ApprovalRequired => Failure::Refused(&REQUEST_CONFIRMATION),
                 error => error.into(),
-            })
-        }
+            }),
         "request_deny" => {
             fields(args, &["request_id"])?;
             Ok(approvals::deny(
@@ -1432,6 +1484,10 @@ pub(crate) fn prepares_review(name: &str) -> bool {
             | "pack_remove"
             | "pack_configure"
     )
+}
+
+pub(crate) fn supports_guided_review(name: &str) -> bool {
+    name == "registry_add" || (name != "policy_propose" && prepares_review(name))
 }
 
 fn review_tool(
@@ -1468,6 +1524,8 @@ fn review_tool(
                         "idempotency_key",
                         "agent_reason",
                     ]
+                } else if name == "pack_remove" {
+                    &["reference", "layer", "idempotency_key", "agent_reason"]
                 } else {
                     &["reference", "idempotency_key", "agent_reason"]
                 },

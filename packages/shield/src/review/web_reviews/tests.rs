@@ -77,11 +77,11 @@ fn web_reviews_decline_is_durable_per_domain_session_without_history() {
         "Changed wording does not create another offer.",
     );
     assert!(duplicate["error"].is_object(), "{duplicate}");
-    let confirmation = review::mcp::prepare_apply_confirmation(&context, &connection, args)
+    let confirmation = review::mcp::prepare_policy_confirmation(&context, &connection, args, false)
         .unwrap()
         .unwrap();
     confirmation.claim_web_offer().unwrap();
-    let duplicate = review::mcp::prepare_apply_confirmation(&context, &connection, args)
+    let duplicate = review::mcp::prepare_policy_confirmation(&context, &connection, args, false)
         .unwrap()
         .unwrap()
         .claim_web_offer()

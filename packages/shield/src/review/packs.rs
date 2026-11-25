@@ -345,7 +345,7 @@ fn selection(
 }
 /// Locate an added pack within the source its acquisition reference resolves to.
 /// Installed selectors retain their source-independent lookup behavior.
-fn addition_selection(
+pub(super) fn addition_selection(
     meta: &Value,
     settings: &crate::configuration::settings::Values,
     reference: &str,
@@ -862,19 +862,16 @@ pub(super) fn unbind(rows: &mut [Value]) {
 }
 
 /// Add a selection; with `local`, the selection and dependencies it newly
-/// brings in belong to the local layer. Without `profile`, `choose` supplies
-/// a new selection's profile from its pack id and version; an installed
-/// selection keeps its own.
+/// brings in belong to the local layer. Without `profile`, a new selection
+/// uses Recommended; an installed selection keeps its own.
 pub(super) fn prepare_add(
     context: &Context,
     before: &crate::review::model::State,
     reference: &str,
     profile: Option<Profile>,
     local: bool,
-    choose: impl FnOnce(&str, &str) -> Result<Profile, Error>,
 ) -> Result<(Value, Value), Error> {
-    let (candidate, meta) =
-        prepare_add_unconfigured(context, before, reference, profile, local, choose)?;
+    let (candidate, meta) = prepare_add_unconfigured(context, before, reference, profile, local)?;
     let selected = addition_selection(&meta, &before.settings, reference)?;
     let (candidate, mut meta) =
         discovery::candidate(&state::root(context), candidate, meta, Some(selected))?;
@@ -889,9 +886,8 @@ pub(super) fn prepare_add_unconfigured(
     reference: &str,
     profile: Option<Profile>,
     local: bool,
-    choose: impl FnOnce(&str, &str) -> Result<Profile, Error>,
 ) -> Result<(Value, Value), Error> {
-    let (candidate, meta) = prepare_shared_add(context, before, reference, profile, choose)?;
+    let (candidate, meta) = prepare_shared_add(context, before, reference, profile)?;
     add_layer(before, candidate, meta, local)
 }
 
@@ -932,8 +928,9 @@ pub(super) fn add_layer(
         }
     }
     if !added {
-        return Err(Error::Invalid(
-            "the pack is already installed; use shield pack configure --local for personal settings",
+        return Ok((
+            before.candidates["project"].clone(),
+            before.operator.clone(),
         ));
     }
     let artifacts: Vec<String> = serde_json::from_value(candidate["packs"].clone())
@@ -1161,7 +1158,6 @@ fn prepare_shared_add(
     before: &crate::review::model::State,
     reference: &str,
     profile: Option<Profile>,
-    choose: impl FnOnce(&str, &str) -> Result<Profile, Error>,
 ) -> Result<(Value, Value), Error> {
     let mut meta = state::metadata(before);
     let pinned = reference.contains('@');
@@ -1226,10 +1222,7 @@ fn prepare_shared_add(
     } else {
         (
             new_selector(before, source.identity(), &entry.id),
-            json!(match profile {
-                Some(profile) => profile,
-                None => choose(&entry.id.to_string(), &entry.version.to_string())?,
-            }),
+            json!(profile.unwrap_or(Profile::Recommended)),
         )
     };
     let row = json!({"selector":selector,"id":entry.id,"version":entry.version,"profile":chosen,"source_alias":alias,"source_identity":source.identity(),"source":source,"digest":entry.sha256,"pinned":pinned,"direct":true});
@@ -1357,12 +1350,17 @@ pub(super) fn prepare_change(
             reference,
             *profile,
             *layer == Some(super::changes::Layer::Local),
-            |_, _| Ok(crate::policy::Profile::Recommended),
         ),
         super::changes::Change::PackUpdate { reference } => {
             prepare_update(context, before, reference.as_deref())
         }
-        super::changes::Change::PackRemove { reference } => prepare_remove(before, reference),
+        super::changes::Change::PackRemove { reference, layer } => {
+            if *layer == Some(super::changes::Layer::Local) {
+                prepare_remove_local(before, reference)
+            } else {
+                prepare_remove(before, reference)
+            }
+        }
         super::changes::Change::PackConfigure {
             reference,
             set,

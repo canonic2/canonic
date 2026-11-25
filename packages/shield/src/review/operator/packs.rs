@@ -33,42 +33,20 @@ pub(super) fn add(
         local,
         ..setup::Edits::default()
     };
-    // Going back from the first setup question asks for the profile again.
-    loop {
-        let mut asked = false;
-        let (candidate, meta) = prepare_add(
-            context,
-            &before,
-            reference,
-            profile,
-            local,
-            |id, version| {
-                asked = true;
-                tty.choose_profile(
-                    "Choose a profile",
-                    &format!(
-                        "{id} {version} · change it later with shield pack add {id} --profile <profile>"
-                    ),
-                )
-            },
-        )?;
-        let settled = settle(
-            &mut tty,
-            &crate::review::project::root(context),
-            &crate::review::project::metadata(&before),
-            candidate,
-            meta,
-            &edits,
-            asked,
-        )?;
-        match settled {
-            Step::Done((candidate, meta)) => {
-                return finish(context, &before, candidate, meta, &mut tty, &base);
-            }
-            Step::Back if asked => {}
-            Step::Back => return Err(Error::Cancelled),
-        }
-    }
+    let (candidate, meta) = prepare_add(context, &before, reference, profile, local)?;
+    let target = (!set.is_empty())
+        .then(|| crate::review::packs::addition_selection(&meta, &before.settings, reference))
+        .transpose()?;
+    let (candidate, meta) = settle(
+        &mut tty,
+        &crate::review::project::root(context),
+        candidate,
+        meta,
+        &edits,
+        target,
+    )?
+    .or_cancel()?;
+    finish(context, &before, candidate, meta, &mut tty, &base)
 }
 
 /// Change one installed selection's variable values and rule overrides: the
@@ -130,41 +108,36 @@ pub(super) fn configure(
 pub(super) fn settle_first(
     tty: &mut Terminal,
     project: &std::path::Path,
-    previous: &Value,
     candidate: Value,
     meta: Value,
-    edits: &setup::Edits<'_>,
 ) -> Result<(Value, Value), Error> {
-    settle(tty, project, previous, candidate, meta, edits, false)?.or_cancel()
+    settle(
+        tty,
+        project,
+        candidate,
+        meta,
+        &setup::Edits::default(),
+        None,
+    )?
+    .or_cancel()
 }
 
-/// Ask for the variables of selections new to `previous` (or apply `edits` to
-/// new direct ones), and for required values still missing elsewhere, then
-/// rebuild the candidate when any value changed. Going back from one pack's
-/// first question returns to the previous pack's last step; from the first
-/// pack it returns [`Step::Back`], labeled "back" when an `earlier` step exists.
+/// Apply explicit settings to the named selection and ask for required values
+/// still missing in the captured closure.
 pub(super) fn settle(
     tty: &mut Terminal,
     project: &std::path::Path,
-    previous: &Value,
     candidate: Value,
     mut meta: Value,
     edits: &setup::Edits<'_>,
-    earlier: bool,
+    target: Option<usize>,
 ) -> Result<Step<(Value, Value)>, Error> {
-    let known: Vec<&Value> = previous["installed"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .map(|row| &row["selector"])
-        .collect();
     let artifacts: Vec<String> = serde_json::from_value(candidate["packs"].clone())
         .map_err(|_| Error::Invalid("pack artifacts missing"))?;
     let scope = crate::review::packs::discovery::Scope::for_candidate(project, &candidate)?;
     let rows = meta["installed"]
         .as_array_mut()
         .ok_or(Error::Invalid("installed packs missing"))?;
-    let mut edited = edits.is_empty();
     // Each selection's settings once visited, kept when going back across packs.
     let mut visited: Vec<Option<Settings>> = vec![None; rows.len()];
     // Selections walked interactively, in order; going back pops one.
@@ -172,7 +145,7 @@ pub(super) fn settle(
     let mut resume = false;
     let mut index = 0;
     while index < rows.len() {
-        if policy::declarations(&artifacts[index])?.is_empty() {
+        if Some(index) != target && policy::declarations(&artifacts[index])?.is_empty() {
             index += 1;
             continue;
         }
@@ -183,26 +156,17 @@ pub(super) fn settle(
             )?),
         };
         let row = &rows[index];
-        let fresh = !known.contains(&&row["selector"]);
-        let direct = row["direct"] == true;
-        if fresh && direct && !edits.is_empty() {
-            settings.edit(edits.local, |binding| {
+        let local = row["layer"] == "local";
+        if Some(index) == target && !resume {
+            settings.edit(edits.local || local, |binding| {
                 setup::apply(&artifacts[index], binding, edits)
             })?;
-            crate::review::packs::discovery::settings(&artifacts[index], settings, &scope)?;
-            edited = true;
-            index += 1;
-            continue;
         }
         crate::review::packs::discovery::settings(&artifacts[index], settings, &scope)?;
         let options = setup::Options {
-            scope: if fresh && direct && edits.is_empty() {
-                setup::Walk::New
-            } else {
-                setup::Walk::Missing
-            },
-            local: edits.local,
-            earlier: earlier || !walked.is_empty(),
+            scope: setup::Walk::Missing,
+            local: local || (Some(index) == target && edits.local),
+            earlier: !walked.is_empty(),
             resume,
         };
         let id = row["id"].as_str().unwrap_or_default().to_owned();
@@ -220,11 +184,6 @@ pub(super) fn settle(
                 None => return Ok(Step::Back),
             },
         }
-    }
-    if !edited {
-        return Err(Error::Invalid(
-            "--set applies to a newly added pack that declares variables; use shield pack configure",
-        ));
     }
     let mut changed = false;
     for (index, settings) in visited.into_iter().enumerate() {
@@ -271,10 +230,8 @@ pub(super) fn update(
     let (candidate, meta) = settle_first(
         &mut tty,
         &crate::review::project::root(context),
-        &crate::review::project::metadata(&before),
         candidate,
         meta,
-        &setup::Edits::default(),
     )?;
     finish(context, &before, candidate, meta, &mut tty, &base)
 }

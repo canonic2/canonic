@@ -1,6 +1,6 @@
 [package]
 name = "canonic-shield"
-version = "0.54.0"
+version = "0.55.0"
 edition = "2024"
 rust-version = "1.102"
 publish = false
@@ -58,7 +58,7 @@ semver = "1.0"
 globset = "0.4.20"
 graphql-parser = "0.4.1"
 regex-automata = "0.4.18"
-url = "2.5.8"
+url = "2.5.9"
 # Offline site boundaries for reusable web permission drafts.
 psl = "=2.1.250"
 ring = "0.17.14"

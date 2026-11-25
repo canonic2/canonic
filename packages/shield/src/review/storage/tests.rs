@@ -25,7 +25,7 @@ fn authority_lock_recovers_dead_legacy_writers_but_preserves_live_and_unknown_ow
         file.write_all(contents.as_bytes()).unwrap();
         drop(file);
         assert!(matches!(
-            store.with_interaction_lock(|| Ok(())),
+            locking::try_acquire(&store.directory),
             Err(Error::Locked)
         ));
         assert_eq!(fs::read_to_string(&marker).unwrap(), contents);
@@ -91,6 +91,63 @@ fn authority_lock_serializes_contenders_and_excludes_legacy_writers() {
 }
 
 #[test]
+fn authority_lock_queues_in_arrival_order_and_skips_cancelled_waiters() {
+    use std::sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc,
+    };
+    let (root, _) = enrolled();
+    let store = Store::open(root.path()).unwrap();
+    let cancelled = AtomicBool::new(false);
+    let (finished, order) = mpsc::channel();
+    thread::scope(|scope| {
+        let holder = store.lock(&|| Ok(())).unwrap();
+        for position in 0..4 {
+            let finished = finished.clone();
+            let cancelled = &cancelled;
+            let directory = &store.directory;
+            scope.spawn(move || {
+                let lock = locking::acquire(directory, &|| {
+                    if position == 1 && cancelled.load(Ordering::Acquire) {
+                        return Err(crate::policy::Error::Interrupted);
+                    }
+                    Ok(())
+                });
+                if position == 1 {
+                    assert!(matches!(
+                        lock,
+                        Err(Error::Policy(crate::policy::Error::Interrupted))
+                    ));
+                } else {
+                    let lock = lock.unwrap();
+                    finished.send(position).unwrap();
+                    lock.release().unwrap();
+                }
+            });
+            let ticket = store
+                .directory
+                .join("writer-queue")
+                .join(position.to_string());
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while !ticket.is_file() {
+                assert!(Instant::now() < deadline, "writer {position} never queued");
+                thread::sleep(Duration::from_millis(5));
+            }
+        }
+        cancelled.store(true, Ordering::Release);
+        holder.release().unwrap();
+        for position in [0, 2, 3] {
+            assert_eq!(
+                order.recv_timeout(Duration::from_secs(5)).unwrap(),
+                position
+            );
+        }
+    });
+    store.with_interaction_lock(|| Ok(())).unwrap();
+    assert!(!store.directory.join("state.lock").exists());
+}
+
+#[test]
 fn authority_lock_cancellation_and_unwind_release_ownership() {
     let (root, _) = enrolled();
     let store = Store::open(root.path()).unwrap();
@@ -115,6 +172,57 @@ fn authority_lock_cancellation_and_unwind_release_ownership() {
     );
     store.with_interaction_lock(|| Ok(())).unwrap();
     assert!(!store.directory.join("state.lock").exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn authority_admission_contention_defers_migration_and_checks_cancellation() {
+    let (root, _) = enrolled();
+    let earlier = root.path().join(".shield/review");
+    fs::rename(root.path().join(".shield/state"), &earlier).unwrap();
+    locking::try_acquire(&earlier).unwrap().release().unwrap();
+    let admission = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(earlier.join("writer-queue/admission.lock"))
+        .unwrap();
+    admission.lock().unwrap();
+    let (send, receive) = std::sync::mpsc::sync_channel(1);
+    thread::scope(|scope| {
+        let project = root.path();
+        let earlier = &earlier;
+        scope.spawn(move || {
+            let store = Store::open(project).unwrap();
+            let deferred = store.directory == earlier.canonicalize().unwrap();
+            let checks = Cell::new(0);
+            let waiting = locking::acquire(earlier, &|| {
+                checks.set(checks.get() + 1);
+                if checks.get() >= 3 {
+                    Err(crate::policy::Error::Interrupted)
+                } else {
+                    Ok(())
+                }
+            });
+            let cancelled = matches!(
+                waiting,
+                Err(Error::Policy(crate::policy::Error::Interrupted))
+            );
+            let _ = send.send((store, deferred, cancelled));
+        });
+        let outcome = receive.recv_timeout(Duration::from_secs(5));
+        drop(admission);
+        let (store, deferred, cancelled) = outcome.unwrap();
+        assert!(deferred && cancelled);
+        assert_eq!(Store::open(root.path()).unwrap().directory, store.directory);
+        assert!(store.read_checkpoint().is_ok());
+        drop(store);
+    });
+    assert!(
+        Store::open(root.path())
+            .unwrap()
+            .directory
+            .ends_with(".shield/state")
+    );
 }
 
 #[cfg(unix)]
@@ -192,7 +300,7 @@ fn authority_lock_recovers_early_crashes_and_dead_legacy_processes() {
             thread::sleep(Duration::from_millis(10));
         }
         assert!(matches!(
-            store.with_interaction_lock(|| Ok(())),
+            locking::try_acquire(&store.directory),
             Err(Error::Locked)
         ));
         if mode == "legacy" {
@@ -601,9 +709,7 @@ fn publication_crashes_never_launch_before_durable_consumption() {
         crate::review::run_approval::authorize(&operator, id, 300, None, false).unwrap();
         let mut child = consumption_writer_at(root.path(), stage);
         assert!(matches!(
-            Store::open(root.path())
-                .unwrap()
-                .with_interaction_lock(|| Ok(())),
+            locking::try_acquire(&Store::open(root.path()).unwrap().directory),
             Err(Error::Locked)
         ));
         child.0.kill().unwrap();
@@ -729,7 +835,10 @@ fn publication_crashes_keep_complete_checkpoints() {
         }
         let committed = matches!(stage, Stage::Renamed | Stage::Complete);
         assert_eq!(marked(root.path()), committed, "visibility at {stage:?}");
-        assert!(matches!(mark(&context), Err(Error::Locked)));
+        assert!(matches!(
+            locking::try_acquire(&Store::open(root.path()).unwrap().directory),
+            Err(Error::Locked)
+        ));
         child.0.kill().unwrap();
         assert!(!child.0.wait().unwrap().success());
         assert_eq!(marked(root.path()), committed);
@@ -763,7 +872,8 @@ fn reconnect(context: &Context, stage: Stage) {
 
 /// The earlier state folder is renamed only by the holder of its writer lock:
 /// while another writer holds it the folder keeps serving under its earlier
-/// name, and the next open after the writer finishes converts it.
+/// name. Once the writer and stores using the earlier path finish, the next
+/// open converts it.
 #[cfg(unix)]
 #[test]
 fn earlier_state_is_converted_only_under_its_writer_lock() {
@@ -775,6 +885,8 @@ fn earlier_state_is_converted_only_under_its_writer_lock() {
     assert_eq!(busy.directory, earlier.canonicalize().unwrap());
     assert!(!root.path().join(".shield/state").exists());
     held.release().unwrap();
+    busy.read_checkpoint().unwrap().check(&context).unwrap();
+    drop(busy);
 
     let converted = Store::open(root.path()).unwrap();
     assert!(converted.directory.ends_with(".shield/state"));

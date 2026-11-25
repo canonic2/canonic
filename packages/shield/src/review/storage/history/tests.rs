@@ -57,6 +57,36 @@ fn event(store: &Store, receipt: &Value) -> Option<Value> {
         .find(|e| e["event_id"] == receipt["event_id"])
 }
 
+#[test]
+fn mcp_sql_payloads_are_absent_from_retained_decisions_and_completions() {
+    let (root, context) = enrolled();
+    let operation = json!({"kind":"mcp","alias":"project-data","tool":"execute_sql",
+        "arguments":{"query":"select 'fixture-private-value'"}});
+    let decision = observations::decision(
+        &context,
+        json!({"operation":operation,"original_input":{"tool_input":operation["arguments"]},
+            "evaluation":{"decision":"allow"},"host_decision":"allow","disposition":"allowed"}),
+    )
+    .unwrap();
+    let completion = observations::completion(
+        &context,
+        &review::EventInput {
+            delivery_id: "acme-sql-delivery".into(),
+            request_id: decision["request_id"].as_str().map(str::to_owned),
+            status: "completed".into(),
+        },
+        &operation,
+    )
+    .unwrap();
+    let store = Store::open(root.path()).unwrap();
+    for receipt in [&decision, &completion] {
+        let stored = event(&store, receipt).unwrap();
+        assert_eq!(stored["details"]["operation"]["tool"], "execute_sql");
+        assert_eq!(stored["details"]["operation"]["arguments"], "[REDACTED]");
+        assert!(!stored.to_string().contains("fixture-private-value"));
+    }
+}
+
 fn history_log(directory: &Path) -> std::sync::Arc<crate::diagnostics::Log> {
     use clap::Parser as _;
     let cli = crate::cli::Cli::parse_from([

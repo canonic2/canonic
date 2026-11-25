@@ -38,11 +38,10 @@ pub(super) fn apply(
     let connections_changed =
         crate::review::publication::mcp_changed(&proposal.base_candidate, &proposal.candidate)?;
     let mechanism = match confirmation {
-        Confirmation::ToolPermission if connections_changed && confirmed => {
+        Confirmation::ToolPermission | Confirmation::Form if confirmed => {
             HostConfirmation::Elicitation
         }
         Confirmation::ToolPermission if connections_changed => return Err(Error::ApprovalRequired),
-        Confirmation::Form if confirmed => HostConfirmation::Elicitation,
         Confirmation::ToolPermission => HostConfirmation::ToolPermission,
         Confirmation::Form | Confirmation::Terminal => return Err(Error::ApprovalRequired),
     };
@@ -53,7 +52,7 @@ pub(super) fn apply(
         .clone()
         .ok_or(Error::StaleSnapshot)?;
     let prepared = views.prepared(&source, &proposal.candidate_metadata);
-    let receipt = crate::review::files::write::write(
+    let receipt = crate::review::files::write::write_controlled(
         context,
         crate::review::files::write::Edit {
             before: &before,
@@ -68,6 +67,7 @@ pub(super) fn apply(
         },
         Some(&id),
         mechanism.mechanism(),
+        checkpoint,
     )?;
     let mut result = json!({"proposal_id":id,"status":"applied","policy_revision":receipt["policy_revision"],"receipt":receipt,
         "operator":{"operator_id":null,"display_name":null,"mechanism":mechanism.mechanism()}});
@@ -231,7 +231,7 @@ pub(super) fn argument_binding(context: &Context, proposal: &Proposal) -> String
     )
 }
 
-fn arguments(adapter: &dyn ReviewAdapter, proposal: &Proposal) -> Value {
+pub(super) fn arguments(adapter: &dyn ReviewAdapter, proposal: &Proposal) -> Value {
     let _trace = crate::diagnostics::trace::span("approval.arguments");
     let canonical = proposal.apply_arguments();
     present_arguments(adapter, proposal, &canonical)

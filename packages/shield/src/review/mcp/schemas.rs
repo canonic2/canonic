@@ -80,7 +80,7 @@ fn change() -> Value {
         ("pack_update", json!({"reference":string()}), vec![]),
         (
             "pack_remove",
-            json!({"reference":string()}),
+            json!({"reference":string(),"layer":layer()}),
             vec!["reference"],
         ),
         (
@@ -149,6 +149,7 @@ pub(super) fn mutates(name: &str) -> bool {
             "policy_draft_remove",
             "policy_withdraw",
             "policy_apply",
+            "policy_review",
             "review_defer",
             "request_approve",
             "request_deny",
@@ -175,6 +176,14 @@ pub(super) fn tools(agent: Option<&str>) -> Value {
     );
     let tools=inventory().into_iter().map(|(name,description,schema)|{
         let mut schema = schema();
+        if super::supports_guided_review(name) {
+            let description = if name == "registry_add" {
+                "After collecting missing details, continue to the separate registry trust review."
+            } else {
+                "Ask for human confirmation of the exact prepared change. Omit for preparation only."
+            };
+            schema["properties"]["review"] = json!({"type":"boolean","description":description});
+        }
         if name == "policy_apply" {
             if let Some(agent) = agent {
                 schema = crate::agents::review::resolve(Some(agent)).apply_schema().unwrap_or(schema);
@@ -378,12 +387,16 @@ fn admin_inventory() -> Vec<Definition> {
         ),
         (
             "registry_add",
-            "Discover a local or HTTPS registry and ask the person to trust its exact source identity, signing fingerprint and project/user scope. Omit name or location to collect missing details in a form, then call registry_add with its retry_arguments for separate trust confirmation. Input alone never enrolls it.",
+            "Discover and review trust in a local or HTTPS registry. Omit name or location to collect that detail and set review: true to continue to a separate trust form. Follow review_action when a separate call is needed, or pass discard: true with review_ref to release it. Scope defaults to project.",
             || {
-                object(
-                    json!({"name":string(),"location":string(),"scope":{"enum":["project","user"],"default":"project"}}),
+                let mut schema = object(
+                    json!({"name":string(),"location":string(),"scope":{"enum":["project","user"],"default":"project"},"review_ref":id(),"discard":{"const":true}}),
                     &[],
-                )
+                );
+                schema["if"] = json!({"required":["review_ref"]});
+                schema["then"] = json!({"propertyNames":{"enum":["review_ref","discard"]}});
+                schema["dependentRequired"] = json!({"discard":["review_ref"]});
+                schema
             },
         ),
         (
@@ -495,7 +508,7 @@ fn policy_inventory() -> Vec<Definition> {
         pack_configure(),
         (
             "pack_update",
-            "Prepare an inactive update of one installed pack, or all direct packs when reference is omitted, including pinned packs. Pins and profiles are preserved at the updated versions. Append @version to request an exact release. Nothing updates automatically. Copy returned apply_arguments unchanged to policy_apply for user approval.",
+            "Prepare an update of one installed pack or all direct packs, including pins. Preserve pin mode and profiles. Append @version for an exact release. Set review: true to request human confirmation.",
             || {
                 object(
                     json!({"reference":string(),"idempotency_key":id(),"agent_reason":string()}),
@@ -503,16 +516,7 @@ fn policy_inventory() -> Vec<Definition> {
                 )
             },
         ),
-        (
-            "pack_remove",
-            "Prepare inactive removal with dependency checks. Supply reference for one pack, or omit it so the person selects 1-16 installed packs in a form. Copy returned apply_arguments unchanged to policy_apply for separate user approval.",
-            || {
-                object(
-                    json!({"reference":string(),"idempotency_key":id(),"agent_reason":string()}),
-                    &[],
-                )
-            },
-        ),
+        pack_remove(),
         (
             "policy_show",
             "List live proposal summaries, or select a proposal by proposal_id for its status, collection previews and apply_arguments; section pages authorization_events",
@@ -542,6 +546,11 @@ fn policy_inventory() -> Vec<Definition> {
             || object(json!({"proposal_id":id()}), &["proposal_id"]),
         ),
         (
+            "policy_review",
+            "Ask the person to approve one owned proposal in Shield's form. Use its opaque proposal_id. The server retains the reviewed data. The tool returns the applied outcome or refusal.",
+            || object(json!({"proposal_id":id()}), &["proposal_id"]),
+        ),
+        (
             "policy_apply",
             "Write a proposal to the policy files with per-call user approval. Copy its returned apply_arguments unchanged.",
             || {
@@ -553,6 +562,22 @@ fn policy_inventory() -> Vec<Definition> {
         ),
     ]);
     tools
+}
+
+fn pack_remove() -> Definition {
+    (
+        "pack_remove",
+        "Prepare pack removal with dependency checks. Supply a reference for local removal, or omit the reference to let the person select project removals. Set review: true to continue to human confirmation.",
+        || {
+            let mut schema = object(
+                json!({"reference":string(),"layer":layer(),"idempotency_key":id(),"agent_reason":string()}),
+                &[],
+            );
+            schema["if"] = json!({"required":["layer"],"properties":{"layer":{"const":"local"}}});
+            schema["then"] = json!({"required":["reference"]});
+            schema
+        },
+    )
 }
 
 fn pack_search_schema() -> Value {
@@ -653,7 +678,7 @@ fn rule_inventory() -> Vec<Definition> {
     vec![
         (
             "rule_add",
-            "Prepare an inactive custom rule addition; apply with policy_apply after review",
+            "Prepare a custom rule addition. Set review: true to request human confirmation.",
             || {
                 object(
                     json!({"rule":rule(),"layer":layer(),"idempotency_key":id(),"agent_reason":string()}),
@@ -663,7 +688,7 @@ fn rule_inventory() -> Vec<Definition> {
         ),
         (
             "rule_edit",
-            "Prepare an inactive custom rule edit; apply with policy_apply after review",
+            "Prepare a custom rule edit. Set review: true to request human confirmation.",
             || {
                 object(
                     json!({"rule_id":id(),"rule":rule(),"layer":layer(),"idempotency_key":id(),"agent_reason":string()}),
@@ -673,7 +698,7 @@ fn rule_inventory() -> Vec<Definition> {
         ),
         (
             "rule_remove",
-            "Prepare an inactive custom rule removal; apply with policy_apply after review",
+            "Prepare a custom rule removal. Set review: true to request human confirmation.",
             || {
                 object(
                     json!({"rule_id":id(),"layer":layer(),"idempotency_key":id(),"agent_reason":string()}),
@@ -723,7 +748,7 @@ fn rule_inventory() -> Vec<Definition> {
 fn pack_add() -> Definition {
     (
         "pack_add",
-        "Prepare 1-16 packs and dependencies as one inactive proposal. Inspect pack_info; supply known typed settings through set or collect declared required/requested values through a form. Preserve the user's restrictions and defaults; never invent answers or retry cancellation. Copy apply_arguments unchanged to policy_apply for approval. Forms have bounded supported fields; supplied values share CLI validation.",
+        "Prepare 1-16 packs and their dependencies. Supply known typed settings through set or collect required and requested values. Keep saved choices and default new packs to Recommended. Set review: true to request human confirmation.",
         || {
             let variables =
                 json!({"type":"array","minItems":1,"maxItems":16,"uniqueItems":true,"items":id()});
@@ -786,7 +811,7 @@ fn session_grant_propose() -> Definition {
 fn pack_configure() -> Definition {
     (
         "pack_configure",
-        "Configure an installed pack with set, unset, override and clear_override, or collect 1-16 variables through a form. Omit edits and variables to repair declared executable discovery; packs without discovery use guided settings and rule overrides. Discovered exact paths are local and remain inactive until policy_apply approval. Form and direct modes cannot be mixed. Copy apply_arguments unchanged to policy_apply. Never invent form answers or retry cancellation.",
+        "Prepare pack settings with set, unset, override and clear_override, or gather selected settings in a form. Omit edits to use declared executable discovery or guided settings. Discovered exact paths are local. Set review: true to request human confirmation.",
         || {
             let mut schema = object(
                 json!({"reference":string(),"variables":{"type":"array","minItems":1,"maxItems":16,"items":id()},"set":{"type":"object","maxProperties":64},"unset":{"type":"array","maxItems":64,"items":string()},"override":{"type":"object","maxProperties":1024},"clear_override":{"type":"array","maxItems":1024,"items":string()},"layer":layer(),"idempotency_key":id(),"agent_reason":string()}),

@@ -109,15 +109,9 @@ fn local_profile_replacement_and_removal_preserve_the_shared_configuration_and_l
     let source = super::super::rebuild(&before.candidates["project"], rows, &bytes, None).unwrap();
     before.candidates.insert("project".into(), source.clone());
     let shared: Value = policy::parse(source["config"].as_str().unwrap()).unwrap();
-    let (candidate, metadata) = super::super::prepare_add(
-        &context,
-        &before,
-        "acme/keep",
-        Some(Profile::Strict),
-        true,
-        |_, _| panic!("an installed selection already has a profile"),
-    )
-    .unwrap();
+    let (candidate, metadata) =
+        super::super::prepare_add(&context, &before, "acme/keep", Some(Profile::Strict), true)
+            .unwrap();
     assert_eq!(
         policy::parse::<Value>(candidate["config"].as_str().unwrap()).unwrap(),
         shared
@@ -210,15 +204,9 @@ fn legacy_disabled_metadata_is_recovered_without_changing_the_shared_lock() {
         &before.operator,
     )
     .unwrap();
-    let (candidate, metadata) = super::super::prepare_add(
-        &context,
-        &before,
-        "acme/keep",
-        Some(Profile::Strict),
-        true,
-        |_, _| panic!("existing profile"),
-    )
-    .unwrap();
+    let (candidate, metadata) =
+        super::super::prepare_add(&context, &before, "acme/keep", Some(Profile::Strict), true)
+            .unwrap();
     let recovered = metadata["disabled"]
         .as_array()
         .unwrap()
@@ -352,15 +340,9 @@ fn local_dependency_graph_changes_preserve_the_complete_shared_lock() {
     );
     before.candidates.insert("project".into(), candidate);
     before.operator = metadata;
-    let (candidate, metadata) = super::super::prepare_add(
-        &context,
-        &before,
-        "acme/root",
-        Some(Profile::Strict),
-        true,
-        |_, _| panic!("retained profile"),
-    )
-    .unwrap();
+    let (candidate, metadata) =
+        super::super::prepare_add(&context, &before, "acme/root", Some(Profile::Strict), true)
+            .unwrap();
     assert_eq!(metadata["disabled"].as_array().unwrap().len(), 2);
     assert_eq!(
         crate::review::publication::projections::projections(&candidate, &metadata).unwrap()["shield.lock"],

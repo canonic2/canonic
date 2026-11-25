@@ -70,12 +70,25 @@ impl Evaluation {
             });
         }
     }
-    pub(super) fn new(input: &Input, explanation: policy::Evaluation, complete: bool) -> Self {
+    pub(super) fn new(input: &Input, mut explanation: policy::Evaluation, complete: bool) -> Self {
+        let mut normalized_request = input.clone();
+        if let Input::Mcp {
+            tool,
+            arguments,
+            original_input,
+            ..
+        } = &mut normalized_request
+            && crate::evidence::private_mcp_arguments(tool)
+        {
+            explanation.mark_private_input();
+            *arguments = serde_json::json!("[REDACTED]");
+            *original_input = serde_json::json!("[REDACTED]");
+        }
         Self {
             mode: "diagnostic",
             decision: explanation.decision,
             disposition: "preview",
-            normalized_request: input.clone(),
+            normalized_request,
             directory_request: None,
             explanation,
             analysis_coverage: CoverageReport::Literal { complete },
@@ -278,7 +291,7 @@ fn reason(
         |message: &str, alternative: &str| (1, message.to_owned(), vec![alternative.to_owned()]);
     let launcher = launcher(operation);
     Some(match operation.coverage {
-        C::Partial if operation.interpreter_needs_review() => (3, "requires shell analysis review because Shield cannot inspect the code the interpreter runs. The arguments match an Allow rule".into(), vec![]),
+        C::Partial if operation.interpreter_needs_review() => (3, "requires shell analysis review because Shield cannot inspect the code the interpreter runs. The arguments match an Allow rule".into(), vec!["Use the complete shell request for one-time approval or an exact-request rule.".into()]),
         _ if authored && !denied && operation.coverage != C::LiteralArgv => return None,
         C::IndirectExecution => (0,"runs further commands that Shield cannot inspect".into(),vec![run_directly(launcher)]),
         C::Partial if launcher.is_some() && unwrapped(operation,operations) => (2,format!("runs its command through `{}`, so the user decides",launcher.unwrap_or_default()),vec![]),

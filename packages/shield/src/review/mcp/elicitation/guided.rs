@@ -23,6 +23,12 @@ pub(crate) struct Guided {
 }
 
 impl Question {
+    pub(crate) fn registry_binding(&self) -> Option<&str> {
+        match self {
+            Self::Guided(plan) if plan.tool == "registry_add" => Some(&plan.binding),
+            _ => None,
+        }
+    }
     /// Captured policy sources retained while a pack-settings form is open.
     pub(crate) fn source_bytes(&self) -> usize {
         match self {
@@ -115,10 +121,9 @@ impl Guided {
                     names.push(json!(key));
                 }
             }
-            if args.get("scope").is_none() {
-                properties["scope"] = json!({"type":"string","title":"Registry scope","enum":["project","user"],"description":"Project affects this enrollment; user affects source discovery in other projects too."});
-                names.push(json!("scope"));
-            } else if ![json!("project"), json!("user")].contains(&args["scope"]) {
+            if args.get("scope").is_some()
+                && ![json!("project"), json!("user")].contains(&args["scope"])
+            {
                 return Err(Error::Invalid("invalid registry scope"));
             }
             (
@@ -129,8 +134,18 @@ impl Guided {
                 Vec::new(),
             )
         } else {
-            fields(args, &["idempotency_key", "agent_reason"])?;
-            let metadata: changes::Input = serde_json::from_value(args.clone())
+            fields(args, &["idempotency_key", "agent_reason", "layer"])?;
+            if args.get("layer").is_some() && args["layer"] != "project" {
+                return Err(Error::Invalid(
+                    "local pack removal requires an explicit reference",
+                ));
+            }
+            let mut proposal = args.clone();
+            proposal
+                .as_object_mut()
+                .expect("guided object")
+                .remove("layer");
+            let metadata: changes::Input = serde_json::from_value(proposal)
                 .map_err(|_| Error::Invalid("invalid removal metadata"))?;
             changes::validate_input(&metadata)?;
             let selectors = before.operator["installed"]
@@ -187,7 +202,16 @@ impl Guided {
                 .as_object()
                 .ok_or(Error::Invalid("registry answers missing"))?
             {
+                if !matches!(key.as_str(), "name" | "location") || self.arguments.get(key).is_some()
+                {
+                    return Err(Error::Invalid(
+                        "registry form cannot replace captured arguments or scope",
+                    ));
+                }
                 arguments[key] = value.clone();
+            }
+            if arguments.get("scope").is_none() {
+                arguments["scope"] = json!("project");
             }
             return Ok(
                 json!({"status":"input_collected","retry_arguments":arguments,"next_action":"Call registry_add with these exact retry_arguments to discover the source and request separate human trust confirmation. Input submission grants no trust.","committed":false}),
@@ -212,6 +236,10 @@ impl Guided {
         let references = references.into_iter().collect::<Vec<_>>();
         let (candidate, metadata) = packs::prepare_remove_many(&before, &references)?;
         let mut arguments = self.arguments.clone();
+        arguments
+            .as_object_mut()
+            .expect("guided object")
+            .remove("layer");
         arguments["changes"] = json!(
             references
                 .iter()

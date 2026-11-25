@@ -42,7 +42,7 @@ fn dispatch(
     checkpoint: review::Checkpoint<'_>,
 ) -> Result<Outcome, review::Error> {
     checkpoint()?;
-    let consumer = RegisteredReadConsumer::admit(root)?;
+    let consumer = RegisteredReadConsumer::admit(root, checkpoint)?;
     checkpoint()?;
     match envelope.operation {
         wire::Operation::Evaluate(call) => read_consumer::evaluate(

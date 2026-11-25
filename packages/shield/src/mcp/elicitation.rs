@@ -1,6 +1,6 @@
 //! Bounded, connection-owned input continuations; input never approves effects.
 //! A form stays answerable until answered, refused or its connection ends.
-use super::{Server, response};
+use super::{Server, operation_call, requests_review, response};
 use crate::review::{Context as Review, mcp::Question};
 use canonic_mcp_kit::{
     RequestContext, RpcError, ToolCall,
@@ -13,13 +13,14 @@ use serde_json::{Value, json};
 use std::{
     collections::BTreeMap,
     sync::{
-        Arc,
+        Arc, Mutex,
         atomic::{AtomicUsize, Ordering},
     },
 };
 
 pub(super) struct Questions {
     pending: BTreeMap<String, Pending>,
+    registry: BTreeMap<String, RegistryInput>,
     source_bytes: Arc<AtomicUsize>,
     pub(super) source_limit: usize,
 }
@@ -28,9 +29,138 @@ impl Default for Questions {
     fn default() -> Self {
         Self {
             pending: BTreeMap::new(),
+            registry: BTreeMap::new(),
             source_bytes: Arc::new(AtomicUsize::new(0)),
             source_limit: crate::policy::MAX_DOCUMENT_BYTES,
         }
+    }
+}
+
+struct RegistryInput {
+    owner: String,
+    project: String,
+    binding: String,
+    arguments: Option<Value>,
+}
+
+/// Reserve capacity before showing a legacy form. An unanswered or declined
+/// form drops its slot. A submitted answer keeps it until consumed or stale.
+struct RegistryReservation {
+    questions: Arc<Mutex<Questions>>,
+    token: String,
+}
+
+impl RegistryReservation {
+    fn new(
+        questions: &Arc<Mutex<Questions>>,
+        review: &Review,
+        token: &str,
+        binding: &str,
+    ) -> Result<Self, crate::review::Error> {
+        let mut state = questions
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let outdated =
+            |input: &RegistryInput| input.project == review.project_id && input.binding != binding;
+        if state.registry.values().any(outdated) {
+            // An older form may have prepared before a newer one reserved a slot.
+            // Check the live binding under the mutex before evicting either one.
+            crate::review::mcp::validate_registry_inputs(review, binding)?;
+            state.registry.retain(|_, input| !outdated(input));
+        }
+        if state.registry.len() >= 8 {
+            return Err(crate::review::Error::Overloaded);
+        }
+        state.registry.insert(
+            token.into(),
+            RegistryInput {
+                owner: review.retry_owner(),
+                project: review.project_id.clone(),
+                binding: binding.into(),
+                arguments: None,
+            },
+        );
+        Ok(Self {
+            questions: questions.clone(),
+            token: token.into(),
+        })
+    }
+
+    fn publish(&self, arguments: Value) -> Result<(), crate::review::Error> {
+        let mut state = self
+            .questions
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let entry = state
+            .registry
+            .get_mut(&self.token)
+            .ok_or(crate::review::Error::StaleSnapshot)?;
+        entry.arguments = Some(arguments);
+        Ok(())
+    }
+}
+
+impl Drop for RegistryReservation {
+    fn drop(&mut self) {
+        let mut state = self
+            .questions
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if state
+            .registry
+            .get(&self.token)
+            .is_some_and(|input| input.arguments.is_none())
+        {
+            state.registry.remove(&self.token);
+        }
+    }
+}
+
+pub(super) fn use_registry_inputs(
+    server: &Server,
+    review: Arc<Review>,
+    call: ToolCall,
+    context: &Context,
+) -> Outcome {
+    let reference = call.arguments["review_ref"].as_str().unwrap_or_default();
+    let input = {
+        let mut questions = server
+            .questions
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let owned = questions.registry.get(reference).is_some_and(|input| {
+            input.owner == review.retry_owner()
+                && input.project == review.project_id
+                && input.arguments.is_some()
+        });
+        owned
+            .then(|| questions.registry.remove(reference))
+            .flatten()
+    };
+    let result = input
+        .ok_or(crate::review::Error::Missing)
+        .and_then(|input| {
+            if call.arguments["discard"] == true {
+                Ok(None)
+            } else {
+                crate::review::mcp::validate_registry_inputs(&review, &input.binding)?;
+                Ok(input.arguments)
+            }
+        });
+    match result {
+        Ok(Some(args)) => server.confirm_registry_source(review, call, args, context),
+        Ok(None) => output(
+            &review,
+            &call.name,
+            crate::review::mcp::registry_input_discarded(&review),
+            context,
+        ),
+        Err(error) => output(
+            &review,
+            &call.name,
+            crate::review::mcp::question_error(&review, &error),
+            context,
+        ),
     }
 }
 
@@ -59,6 +189,7 @@ impl Drop for Capture {
 }
 struct Pending {
     tool: String,
+    owner: String,
     arguments: Value,
     plan: Question,
     requests: Requests,
@@ -97,9 +228,11 @@ pub(super) fn call(
     if let Some(request) = context.request_context()
         && (request.request_state.is_some() || request.input_responses.is_some())
     {
-        return modern_resume(server, &review, &call, context, request);
+        return modern_resume(server, review, &call, context, request);
     }
-    let plan = match Question::prepare(&review, &call.name, &call.arguments) {
+    let operation = operation_call(&call);
+    let operation = operation.as_ref().unwrap_or(&call);
+    let plan = match Question::prepare(&review, &operation.name, &operation.arguments) {
         Ok(plan) => plan,
         Err(error) => {
             return output(
@@ -115,16 +248,12 @@ pub(super) fn call(
         Err(error) => return Outcome::Method(Err(error)),
     };
     if !plan.needs_input() {
-        return output(
-            &review,
-            plan.tool(),
-            plan.propose(&review, &server.connection, &json!({}), &token, &|| {
-                context
-                    .check()
-                    .map_err(|_| crate::policy::Error::Interrupted)
-            }),
-            context,
-        );
+        let value = plan.propose(&review, &server.connection, &json!({}), &token, &|| {
+            context
+                .check()
+                .map_err(|_| crate::policy::Error::Interrupted)
+        });
+        return server.review_guided_result(review, call, value, context);
     }
     let capture = match server
         .questions
@@ -158,6 +287,7 @@ pub(super) fn call(
             token,
             Pending {
                 tool: call.name,
+                owner: review.retry_owner(),
                 arguments: call.arguments,
                 plan,
                 requests,
@@ -167,7 +297,35 @@ pub(super) fn call(
         );
         return Outcome::InputRequired(result);
     }
+    legacy_form(server, review, &call, context, plan, token, capture)
+}
+
+fn legacy_form(
+    server: &Server,
+    review: Arc<Review>,
+    call: &ToolCall,
+    context: &Context,
+    plan: Question,
+    token: String,
+    capture: Capture,
+) -> Outcome {
     let connection = server.connection.clone();
+    let review_requested = requests_review(call);
+    let reservation = if review_requested && let Some(binding) = plan.registry_binding() {
+        match RegistryReservation::new(&server.questions, &review, &token, binding) {
+            Ok(reservation) => Some(reservation),
+            Err(error) => {
+                return output(
+                    &review,
+                    &call.name,
+                    crate::review::mcp::registry_input_error(&review, &error),
+                    context,
+                );
+            }
+        }
+    } else {
+        None
+    };
     let trace = crate::diagnostics::trace::current();
     let waiting = trace
         .as_ref()
@@ -181,7 +339,11 @@ pub(super) fn call(
             let _scope = trace
                 .as_ref()
                 .map(crate::diagnostics::trace::Request::enter);
-            let outcome = finish(&review, &connection, &plan, &token, answer, context);
+            let mut value = finish(&review, &connection, &plan, &token, answer, context);
+            if review_requested && value["error"].is_null() {
+                legacy_review(&review, reservation.as_ref(), &mut value);
+            }
+            let outcome = output(&review, plan.tool(), value, context);
             if let Some(trace) = &trace {
                 trace.finish(match &outcome {
                     Outcome::Tool(result) if result.is_error => "refused",
@@ -196,7 +358,7 @@ pub(super) fn call(
 
 fn modern_resume(
     server: &Server,
-    review: &Review,
+    review: Arc<Review>,
     call: &ToolCall,
     context: &Context,
     request: &RequestContext,
@@ -217,6 +379,9 @@ fn modern_resume(
     let Some(pending) = questions.pending.get_mut(token) else {
         return invalid();
     };
+    if pending.owner != review.retry_owner() {
+        return invalid();
+    }
     if pending.tool != call.name || pending.arguments != call.arguments || pending.rounds >= 8 {
         questions.pending.remove(token);
         return invalid();
@@ -235,14 +400,15 @@ fn modern_resume(
     let answer = answer.clone();
     let pending = questions.pending.remove(token).expect("retained pack form");
     drop(questions);
-    finish(
-        review,
+    let value = finish(
+        &review,
         &server.connection,
         &pending.plan,
         token,
         Answer::Response(answer),
         context,
-    )
+    );
+    server.review_guided_result(review, call.clone(), value, context)
 }
 
 fn finish(
@@ -252,8 +418,8 @@ fn finish(
     token: &str,
     answer: Answer,
     context: &Context,
-) -> Outcome {
-    let value = match answer {
+) -> Value {
+    match answer {
         Answer::Response(answer) if answer.action == Action::Accept => {
             let checkpoint = || {
                 context
@@ -289,11 +455,38 @@ fn finish(
             };
             json!({"schema_version":1,"project_id":review.project_id,"policy_revision":null,"data":null,"missing":[],"truncated":false,"redacted":false,"error":{"code":code,"message":message,"operator_route":null}})
         }
-    };
-    output(review, plan.tool(), value, context)
+    }
 }
 
-fn output(review: &Review, name: &str, value: Value, context: &Context) -> Outcome {
+fn legacy_review(review: &Review, reservation: Option<&RegistryReservation>, value: &mut Value) {
+    let data = &mut value["data"];
+    if data["status"] == "input_collected"
+        && let Some(reservation) = reservation
+    {
+        if let Err(error) = reservation.publish(data["retry_arguments"].take()) {
+            *value = crate::review::mcp::question_error(review, &error);
+            return;
+        }
+        data.as_object_mut()
+            .expect("registry input result")
+            .remove("retry_arguments");
+        data["review_action"] =
+            json!({"tool":"registry_add","arguments":{"review_ref":reservation.token}});
+        data["next_action"] = json!(
+            "Call registry_add with the returned review_ref to review the captured registry source and trust scope. Pass discard: true with that reference to release it instead."
+        );
+    } else if data["apply_arguments"].is_object() && data["proposal_id"].is_string() {
+        data.as_object_mut()
+            .expect("prepared policy review")
+            .remove("apply_arguments");
+        data["review_action"] =
+            json!({"tool":"policy_review","arguments":{"proposal_id":data["proposal_id"]}});
+        data["next_action"] =
+            json!("Call policy_review with the proposal_id for human confirmation.");
+    }
+}
+
+pub(super) fn output(review: &Review, name: &str, value: Value, context: &Context) -> Outcome {
     let failed = !value["error"].is_null();
     Outcome::Tool(response::tool_result(
         name,

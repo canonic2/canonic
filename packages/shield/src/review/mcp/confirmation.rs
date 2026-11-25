@@ -203,6 +203,11 @@ fn change_lines(change: &Value) -> Vec<String> {
         ""
     };
     let line = match change["kind"].as_str() {
+        Some("pack") if change["change"] == "disabled" => format!(
+            "Disable the {} rule pack, version {}{local}.",
+            name(&change["id"]),
+            text(&change["version"])
+        ),
         Some("pack") if change["change"] == "mode" || change["change"] == "role" => {
             let to = if change["change"] == "role" {
                 format!("a {} selection", text(&change["role"]))
@@ -219,7 +224,6 @@ fn change_lines(change: &Value) -> Vec<String> {
             let action = match change["change"].as_str() {
                 Some("added") => "Add",
                 Some("removed") => "Remove",
-                Some("disabled") => "Disable",
                 Some("profile") => "Change profile for",
                 _ => "Update",
             };
@@ -230,8 +234,17 @@ fn change_lines(change: &Value) -> Vec<String> {
             } else {
                 String::new()
             };
+            let selection = if change["dependency"] == true {
+                " · dependency"
+            } else if change["mode"] == "pinned" {
+                " · pinned"
+            } else if change["mode"] == "tracking" {
+                " · tracking"
+            } else {
+                ""
+            };
             format!(
-                "{action} the {} rule pack — version {}, {} profile{from}{local}.",
+                "{action} the {} rule pack — version {}, {} profile{from}{selection}{local}.",
                 name(&change["id"]),
                 text(&change["version"]),
                 text(&change["profile"])
@@ -242,33 +255,7 @@ fn change_lines(change: &Value) -> Vec<String> {
             "Change MCP connection {}{local}. Shield shows its captured settings in the confirmation form and publishes owned connection entries for registered agents.",
             text(&change["id"])
         ),
-        Some("access_paths") => {
-            let mut lines = Vec::new();
-            for (access, label) in [
-                ("read", "read files in"),
-                ("write", "read and change files in"),
-            ] {
-                let old = change["before"][access]
-                    .as_array()
-                    .map_or(&[][..], Vec::as_slice);
-                let new = change["after"][access]
-                    .as_array()
-                    .map_or(&[][..], Vec::as_slice);
-                for (from, to, verb) in [
-                    (new, old, "Allow agents to"),
-                    (old, new, "Remove permission to"),
-                ] {
-                    let count = from.iter().filter(|path| !to.contains(path)).count();
-                    for path in from.iter().filter(|path| !to.contains(path)).take(4) {
-                        lines.push(format!("{verb} {label} {}{local}.", text(path)));
-                    }
-                    if count > 4 {
-                        lines.push(format!("Plus {} more {access} folder changes.", count - 4));
-                    }
-                }
-            }
-            return lines;
-        }
+        Some("access_paths") => return access_path_lines(change, local),
         Some("variable" | "override") => format!(
             "{}: {} {} for the {} rule pack{local} ({} → {}).{}",
             if change["kind"] == "variable" {
@@ -290,6 +277,34 @@ fn change_lines(change: &Value) -> Vec<String> {
         _ => "Additional policy configuration changes are included.".into(),
     };
     vec![line]
+}
+
+fn access_path_lines(change: &Value, local: &str) -> Vec<String> {
+    let mut lines = Vec::new();
+    for (access, label) in [
+        ("read", "read files in"),
+        ("write", "read and change files in"),
+    ] {
+        let old = change["before"][access]
+            .as_array()
+            .map_or(&[][..], Vec::as_slice);
+        let new = change["after"][access]
+            .as_array()
+            .map_or(&[][..], Vec::as_slice);
+        for (from, to, verb) in [
+            (new, old, "Allow agents to"),
+            (old, new, "Remove permission to"),
+        ] {
+            let count = from.iter().filter(|path| !to.contains(path)).count();
+            for path in from.iter().filter(|path| !to.contains(path)).take(4) {
+                lines.push(format!("{verb} {label} {}{local}.", text(path)));
+            }
+            if count > 4 {
+                lines.push(format!("Plus {} more {access} folder changes.", count - 4));
+            }
+        }
+    }
+    lines
 }
 
 /// "3 changes: allow `npm run dev`; add the node rule pack; …" in plain words.

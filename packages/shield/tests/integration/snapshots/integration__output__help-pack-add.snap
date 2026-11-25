@@ -12,7 +12,7 @@ Arguments:
 
 Options:
       --profile <PROFILE>
-          Select a profile; otherwise preserve the selection or ask, preselecting recommended
+          Select a profile; otherwise keep the saved profile or use Recommended
 
           Possible values:
           - loose:       Least restrictive profile

@@ -312,6 +312,7 @@ fn catalog_publishes_every_tool_and_marks_all_state_changes_as_mutations() {
             "policy_draft_remove",
             "policy_propose",
             "policy_reject",
+            "policy_review",
             "policy_withdraw",
             "protection_set",
             "registry_add",
@@ -669,6 +670,7 @@ fn guidance_uses_the_enrolled_agent_never_client_metadata() {
         for name in [
             "policy_propose",
             "policy_apply",
+            "policy_review",
             "pack_add",
             "pack_configure",
             "pack_update",
@@ -1184,6 +1186,7 @@ fn deadline_errors_name_the_outcome_and_the_next_call() {
     }
     for (name, route) in [
         ("policy_apply", "policy_show"),
+        ("policy_review", "policy_show"),
         ("policy_reject", "policy_show"),
         ("request_approve", "request_show"),
         ("request_deny", "request_show"),
@@ -1221,5 +1224,9 @@ fn deadline_errors_name_the_outcome_and_the_next_call() {
         guidance.contains("Nothing was enrolled") && guidance.contains("ask the user"),
         "{guidance}"
     );
+    let guidance = deadline("registry_add", json!({"review":true}));
+    assert!(guidance.contains("unknown") && guidance.contains("registry_list"));
+    let guidance = deadline("pack_add", json!({"reference":"acme/read","review":true}));
+    assert!(guidance.contains("check the review and its outcome"));
     assert!(deadline("pack_list", json!({})).contains("nothing changed"));
 }

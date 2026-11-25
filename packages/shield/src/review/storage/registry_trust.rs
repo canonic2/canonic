@@ -134,17 +134,24 @@ impl Namespace {
         }
         private_files::directory(&self.directory, true)?;
         if !self.directory.join(".objects.lock").exists() {
-            drop(objects::Directory::try_enter(&self.directory)?);
+            objects::initialize_mutex(&self.directory)?;
         }
         Ok(())
     }
     /// Shared guard linearizes final policy use with exclusive head publication.
-    pub(in crate::review) fn guard(&self) -> Result<File, Error> {
+    pub(in crate::review) fn guard(
+        &self,
+        checkpoint: super::Checkpoint<'_>,
+    ) -> Result<File, Error> {
         self.initialize()?;
-        objects::read_lease_wait(&self.directory)
+        objects::read_lease(&self.directory, Some(checkpoint))
+    }
+    pub(in crate::review) fn try_guard(&self) -> Result<File, Error> {
+        self.initialize()?;
+        objects::read_lease(&self.directory, None)
     }
     pub(in crate::review) fn read(&self, identity: &str) -> Result<Option<Retained>, Error> {
-        let _guard = self.guard()?;
+        let _guard = self.try_guard()?;
         self.read_guarded(identity)
     }
     /// Only actual policy use, acquisition or confirmed publication may finish

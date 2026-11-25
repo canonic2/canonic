@@ -4,7 +4,7 @@ expression: text
 ---
 $ shield mcp setup --agent claude
 --- terminal
-Tool permissions → 52 of 53 marked
+Tool permissions → 53 of 54 marked
 Shield review for [PROJECT] (project scope)
 
 set up agent integrations.

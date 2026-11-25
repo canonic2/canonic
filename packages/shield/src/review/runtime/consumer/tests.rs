@@ -180,11 +180,15 @@ fn handoff_lock_prevents_state_writes_until_callback_finishes_and_unwinds_on_pan
                 sender.send(write(&context_for_thread)).unwrap();
             });
             assert!(matches!(
-                receiver.recv_timeout(Duration::from_secs(5)).unwrap(),
-                Err(Error::Locked)
+                receiver.recv_timeout(Duration::from_millis(600)),
+                Err(mpsc::RecvTimeoutError::Timeout)
             ));
             handle
         })
+        .unwrap();
+    receiver
+        .recv_timeout(Duration::from_secs(5))
+        .unwrap()
         .unwrap();
     handle.join().unwrap();
     write(&context).unwrap();

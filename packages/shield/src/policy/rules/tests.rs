@@ -2361,19 +2361,13 @@ fn every_literal_command_that_asks_in_a_chain_keeps_its_own_guidance() {
 #[test]
 fn uninspectable_shell_parts_explain_their_ask_to_agents() {
     let dir = assert_fs::TempDir::new().unwrap();
-    let root = dir
-        .path()
-        .canonicalize()
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .to_owned();
+    let root = dir.path().canonicalize().unwrap();
     let evaluator = prepared(vec![
         json!({"id":"text","decision":"allow","conditions":{"domain":"argv","executable":{"one_of":["echo","cat","find","node"]},"arguments":{"kind":"any"}}}),
         json!({"id":"review","decision":"ask","conditions":{"domain":"argv","executable":"acme-review","arguments":{"kind":"any"}},"guidance":{"alternatives":["acme-review --dry-run"]}}),
     ]);
     let context = Context {
-        cwd: root.clone(),
+        cwd: root.to_str().unwrap().to_owned(),
         environment: None,
         working_files: None,
     };
@@ -2447,7 +2441,7 @@ fn uninspectable_shell_parts_explain_their_ask_to_agents() {
             .evaluate_normalized(
                 &input,
                 &context,
-                &root,
+                &context.cwd,
                 None,
                 &crate::evidence::now(),
                 &|| Ok(()),
@@ -2455,6 +2449,12 @@ fn uninspectable_shell_parts_explain_their_ask_to_agents() {
             .unwrap();
         assert_eq!(value["decision"], decision, "{source}: {value}");
         let detail = crate::agent_message::detail(&value["explanation"]);
+        if source == "node acme.js" {
+            let guidance = &value["explanation"]["guidance"].to_string();
+            assert!(guidance.contains(
+                "Use the complete shell request for one-time approval or an exact-request rule."
+            ));
+        }
         match guidance {
             Some(text) => assert!(
                 detail.as_ref().unwrap().contains(text),

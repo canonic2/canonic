@@ -32,7 +32,9 @@ pub(crate) struct McpMatch {
 impl ResolvedMcp {
     pub(crate) fn facts(&self, arguments: &Value) -> Option<Value> {
         let mut facts = self.connection.as_ref()?.facts(arguments);
-        if self.source.starts_with("host-") {
+        if self.source == "project" {
+            facts["id"] = json!(self.server);
+        } else if self.source.starts_with("host-") {
             facts["source"] = json!(self.source);
             for evidence in facts["evidence_sources"].as_object_mut()?.values_mut() {
                 if evidence["source"] == "reviewed-connection" {

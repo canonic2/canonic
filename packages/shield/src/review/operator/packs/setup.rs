@@ -20,8 +20,6 @@ pub(in crate::review::operator) use crate::review::packs::settings::{Edits, appl
 pub(in crate::review::operator) enum Walk {
     /// Every declared variable whose question applies, in declaration order.
     All,
-    /// New selection: discovered executables are captured in the final review.
-    New,
     /// Only required variables that have no value.
     Missing,
 }
@@ -79,7 +77,7 @@ pub(in crate::review::operator) fn walk(
         next = flow.declarations.len();
         stage = if history.len() >= 2 {
             Stage::Review
-        } else if !options.local && asks_place(settings, &answers) {
+        } else if options.scope == Walk::All && !options.local && asks_place(settings, &answers) {
             Stage::Place
         } else {
             next = history.pop().unwrap_or_default();
@@ -131,6 +129,8 @@ pub(in crate::review::operator) fn walk(
             Stage::Place => {
                 let place = if options.local {
                     Step::Done(Place::Local)
+                } else if options.scope == Walk::Missing {
+                    Step::Done(Place::Suggested)
                 } else {
                     placement(tty, settings, &flow.declarations, &answers)?
                 };
@@ -221,10 +221,8 @@ impl Flow {
     /// Whether this walk asks the variable now: in scope, and every `ask_when`
     /// test holds for the answers so far, or current values where unanswered.
     fn asks(&self, name: &str, declaration: &Declaration, answers: &Answers) -> bool {
-        let in_scope = self.scope == Walk::All
-            || (self.scope == Walk::New
-                && !(declaration.discover.is_some() && self.current.contains_key(name)))
-            || (declaration.required() && !self.current.contains_key(name));
+        let in_scope =
+            self.scope == Walk::All || (declaration.required() && !self.current.contains_key(name));
         let tests = declaration
             .setup
             .as_ref()

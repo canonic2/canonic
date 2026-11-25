@@ -191,13 +191,62 @@ fn mcp_connections_disabled_bindings_do_not_become_host_allowances() {
 }
 
 #[test]
+fn mcp_sql_arguments_are_redacted_from_preview_and_retained_evaluation() {
+    let root = assert_fs::TempDir::new().unwrap();
+    let config = json!({"schema_version":1,"packs":[],"rules":"rules.json","mcp":{"cloud":{
+        "transport":{"type":"http","url":"https://example.com/mcp"},"agents":{"codex":"acme"},
+        "command_fields":{"execute_sql":{"executable":"acme","pointer":"/query","encoding":"argv-v1"}}}}}).to_string();
+    let rules = json!({"schema_version":1,"kind":"custom","capabilities":["structured-rules-v1","argument-rules-v1"],"rules":[
+        {"id":"sql-tool","decision":"allow","conditions":{"domain":"mcp","server":"cloud","tool":"execute_sql"}},
+        {"id":"mapped-command","decision":"allow","conditions":{"domain":"argv","executable":"acme","arguments":{"kind":"any"}}}
+    ]}).to_string();
+    let context = review::mcp::initialize_fixture(
+        root.path(),
+        &Bundle::capture(&config, &[], Some(&rules)).unwrap(),
+    );
+    let project = Path::new(&context.project_root);
+    review::operator::integrations::configure_fixture(
+        project,
+        crate::cli::public::IntegrationChoice::all(),
+        review::integrations::AskFallback::Block,
+    );
+    let marker = "fixture-private-sql-argument";
+    let args = json!({"query":["acme",marker]});
+    assert_permitted(
+        &tool(project, "codex", "mcp__acme__execute_sql", &args),
+        "codex",
+    );
+    let stored = journal(project);
+    assert!(
+        stored.contains("mapped_commands") && stored.contains("mapped-command"),
+        "{stored}"
+    );
+    assert!(!stored.contains(marker), "{stored}");
+
+    let preview = review::mcp::call(
+        &context,
+        &review::mcp::Connection::new("preview-sql".into()),
+        "policy_evaluate",
+        &json!({"input":{"kind":"mcp","server":"cloud","tool":"execute_sql","arguments":args,"original_input":args},
+            "context":{"cwd":project,"environment":null}}),
+        &|| Ok(()),
+    );
+    assert_eq!(preview["data"]["decision"], "allow", "{preview}");
+    assert_eq!(
+        preview["data"]["explanation"]["mapped_commands"][0]["arguments"], "[REDACTED]",
+        "{preview}"
+    );
+    assert!(!preview.to_string().contains(marker), "{preview}");
+}
+
+#[test]
 fn mcp_connections_native_calls_use_stable_identity_full_arguments_and_drift_checks() {
     let root = assert_fs::TempDir::new().unwrap();
     let config=json!({"schema_version":1,"packs":[],"rules":"rules.json","mcp":{"project-cloud":{
         "transport":{"type":"http","url":"https://cloud.example.com/mcp"},"agents":{"claude":"alias","codex":"alias"}}}}).to_string();
     let rules=json!({"schema_version":1,"kind":"custom","capabilities":["structured-rules-v1","requirements-v1","mcp-connection-facts-v1"],"rules":[
         {"id":"inspect","decision":"allow","conditions":{"domain":"mcp","server":"project-cloud","tool":"inspect"},
-            "requirements":{"fields":{"/payload/name":{"text":"Acme Ω \"quotes\""}},"connection":{"/transport/url":{"exact":"https://cloud.example.com/mcp"}}},"on_unmet":{"decision":"deny"}},
+            "requirements":{"fields":{"/payload/name":{"text":"Acme Ω \"quotes\""}},"connection":{"/id":{"exact":"project-cloud"},"/transport/url":{"exact":"https://cloud.example.com/mcp"}}},"on_unmet":{"decision":"deny"}},
         {"id":"delete","decision":"deny","conditions":{"domain":"mcp","server":"project-cloud","tool":"delete"}},
         {"id":"review","decision":"ask","conditions":{"domain":"mcp","server":"project-cloud","tool":"review"}}
     ]}).to_string();

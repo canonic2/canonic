@@ -24,13 +24,13 @@ shield pack info PACK_REFERENCE
 Read the description and profile decisions, then add the same reference:
 
 ```sh
-shield pack add PACK_REFERENCE --profile recommended
+shield pack add PACK_REFERENCE
 shield pack list
 ```
 
 `pack add` reviews permission changes before confirmation. After acceptance,
-`pack list` shows the selection and profile. Omit `--profile` to choose interactively,
-with Recommended preselected.
+`pack list` shows the selection and profile. New selections default to
+Recommended. Use `--profile` to choose another profile.
 
 Profile decisions depend on the pack: installing one does not allow every
 invocation, and Strict does not change Codex's Ask fallback. See
@@ -73,8 +73,7 @@ shield pack update
 
 From an agent, the matching MCP tool is `pack_update`: `{}` selects all
 direct packs and `{"reference":"gate"}` selects one. Append `@VERSION` to select
-an exact release. It prepares the same
-candidate and returns `apply_arguments` for `policy_apply` approval.
+an exact release. Add `review: true` to request human approval of the update.
 
 Review version and permission changes before confirming. Updated packs keep
 their profiles and pin mode at the new versions. Updates run only on demand;
@@ -199,10 +198,11 @@ canonical directory and unsigned trust basis. Relative directories resolve
 against the selected project.
 
 If an agent does not know the alias or location, it can omit that field from
-`registry_add` to show a missing-details form. An omitted scope then requires
-your explicit choice. Submission returns `retry_arguments` for the agent to
-call next; it neither discovers nor enrolls the source. The subsequent call
-shows the separate trust review described above. Supplied fields stay fixed.
+`registry_add` and set `review: true`. Shield collects the missing details,
+then starts a separate trust review. A host that needs a separate call returns
+an opaque reference to the captured details. Supplied fields stay fixed. To
+release captured details, call `registry_add` with the returned `review_ref` and
+`discard: true`.
 
 The default scope is `project`. Set `"scope":"user"` to change the user's
 registry configuration for other projects too; the form states that effect.
@@ -221,10 +221,9 @@ changes. Removing it retires the selector; reinstalling creates a new one.
 
 New unversioned selections choose the highest engine-compatible stable version.
 Shield tries older stable releases when newer ones use an unsupported engine or
-policy format. Invalid digests or artifact identities stop acquisition. When you add a
-new pack without `--profile`, Shield asks for its profile after resolving the
-release, with Recommended preselected; Enter keeps it. Dependencies follow the
-profile you choose. An exact `@version` pins that release. Adding an installed selector
+policy format. Invalid digests or artifact identities stop acquisition. New
+packs default to Recommended and dependencies follow their parent's profile.
+An exact `@version` pins that release. Adding an installed selector
 without a version preserves its version and pin; `--profile` changes its profile
 without requiring the source to be online. Explicit update includes pinned releases,
 keeps their pin mode, and reviews all applicable changes in one transaction.

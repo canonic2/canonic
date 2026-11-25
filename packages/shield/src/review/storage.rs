@@ -33,6 +33,7 @@ pub(crate) struct Store {
     directory: PathBuf,
     root: String,
     writer_owned: Mutex<Option<std::thread::ThreadId>>,
+    _legacy_layout: Option<fs::File>,
 }
 
 /// A store-local witness for conversion reached from an existing writer.
@@ -131,8 +132,9 @@ impl Store {
         // Both state names are checked before the earlier one is renamed, so
         // a link or file there is never moved into place as state.
         let [current, earlier] = crate::layout::state_directories(&root);
-        for p in [root.join(crate::layout::SHIELD), current, earlier] {
-            match fs::symlink_metadata(&p) {
+        let shield = root.join(crate::layout::SHIELD);
+        for p in [&shield, &current, &earlier] {
+            match fs::symlink_metadata(p) {
                 Ok(m) if m.file_type().is_symlink() || !m.is_dir() => {
                     return Err(Error::Invalid("state directories cannot be links or files"));
                 }
@@ -141,15 +143,46 @@ impl Store {
                 Err(e) => return Err(e.into()),
             }
         }
-        if convert {
-            Self::convert_state_name(&root)?;
-        }
+        let legacy_layout = if convert && crate::layout::state(&root) == earlier {
+            Self::legacy_layout(&root, &shield, &earlier)?
+        } else {
+            None
+        };
         Ok(Self {
             directory: crate::layout::state(&root),
             root: root_text,
             writer_owned: Mutex::new(None),
+            _legacy_layout: legacy_layout,
         })
     }
+
+    /// Keep the earlier path stable for stores that open while migration is
+    /// deferred. The lease sits outside the directory being renamed.
+    fn legacy_layout(
+        root: &Path,
+        shield: &Path,
+        earlier: &Path,
+    ) -> Result<Option<fs::File>, Error> {
+        let cache = shield.join("cache");
+        let directory = cache.join("state-layout");
+        match private_directory(&cache).and_then(|()| private_directory(&directory)) {
+            // A read-only source can still use its earlier runtime state.
+            Err(Error::Io(error)) if error.kind() == std::io::ErrorKind::PermissionDenied => {
+                return Ok(None);
+            }
+            result => result?,
+        }
+        match objects::Directory::try_enter(&directory) {
+            Ok(_lease) => Self::convert_state_name(root)?,
+            Err(Error::Locked) => {}
+            Err(error) => return Err(error),
+        }
+        // The exclusive holder only tries the writer lane. A busy writer or
+        // admission holder never delays release of the layout lease.
+        let lease = objects::read_lease(&directory, Some(&|| Ok(())))?;
+        Ok((crate::layout::state(root) == earlier).then_some(lease))
+    }
+
     /// Rename the earlier `.shield/review` state directory to `.shield/state`
     /// once, as its owning writer: under the earlier directory's writer lock,
     /// after checking again that no other process converted it, then add
@@ -165,7 +198,7 @@ impl Store {
         if fs::symlink_metadata(&current).is_ok() || !real_directory(&earlier) {
             return Ok(());
         }
-        let lock = match locking::acquire(&earlier, &|| Ok(())) {
+        let lock = match locking::try_acquire(&earlier) {
             Ok(lock) => lock,
             Err(Error::Locked) => return Ok(()),
             // Another process renamed the folder while this one waited for it.
@@ -503,7 +536,8 @@ impl Store {
                 &state.candidates["project"],
                 &state.policy_revision,
             )?;
-            let guard = super::registry_trust::guard_effective(&state.operator, &effective)?;
+            let guard =
+                super::registry_trust::guard_effective(&state.operator, &effective, &|| Ok(()))?;
             guard.bind_modes(&mut state.operator)?;
             _registry_guard = Some(guard);
         }

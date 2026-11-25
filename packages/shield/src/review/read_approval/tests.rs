@@ -267,7 +267,8 @@ fn terminal_read_receipts_replay_after_row_compaction_without_history_or_new_gra
     assert_eq!(outcome["allowed"], false);
     assert!(outcome["approval"]["approval_id"].is_null());
     context.surface = "mcp".into();
-    let replay = review::approvals::approve(&context, &json!({"request_id":id}), false).unwrap();
+    let replay =
+        review::approvals::approve(&context, &json!({"request_id":id}), false, &|| Ok(())).unwrap();
     assert_eq!(replay["status"], "consumed");
     assert!(replay.get("approval_id").is_none());
     assert!(review::approvals::deny(&context, &id, false).is_err());

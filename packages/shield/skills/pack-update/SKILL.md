@@ -5,8 +5,9 @@ description: Prepare and confirm a requested update to selected Shield packs, or
 
 # Update installed packs
 
-When the user asks to update, call `pack_update` directly. Mention a pack
-update notice after the current task. Prepare an update only on request.
+When the user asks to update, call `pack_update` with `review: true` to
+request human approval. Follow any returned `review_action`. Mention a
+pack update notice after the current task.
 
 ## Prepare the requested update
 
@@ -14,7 +15,7 @@ update notice after the current task. Prepare an update only on request.
   installed selector is unclear.
 - For an exact release, call `pack_update` with
   `{"reference":"<publisher>/<pack>@<version>"}`.
-- For all direct packs, including pins, pass `{}`.
+- For all direct packs, including pins, omit `reference`.
 
 Shield fetches the catalog metadata it needs, resolves compatible dependencies,
 and preserves the profile and pin mode at the resulting versions. If a release
@@ -24,8 +25,9 @@ to check compatibility and report the blocker.
 
 ## Review and apply
 
-Report each version change and any held-back release. Check the proposal's
-permission changes against the project's relevant work:
+To inspect a candidate before asking for approval, omit `review`. Report each
+version change and any held-back release. Check the proposal's permission changes
+against the project's relevant work:
 
 - From `history_list`, take recent requests that asked or were denied, and the
   project's everyday commands.
@@ -35,8 +37,9 @@ permission changes against the project's relevant work:
   now allows". If a command the project relies on would become denied, say so
   and let the user decide before approving.
 
-- Copy `apply_arguments` unchanged to `policy_apply`. Its form is the approval;
-  do not also ask in chat.
+- Review an inspected proposal through `policy_review` with its `proposal_id`.
+  For hosts with native tool approval, use the unchanged `apply_arguments`
+  with `policy_apply`.
 - On decline or cancellation, stop. Do not prepare the same update again.
 - On `stale_revision`, read `pack_list` again and prepare a new update.
 - Do not finish with an undecided proposal; close an abandoned one with

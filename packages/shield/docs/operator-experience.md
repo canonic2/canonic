@@ -81,7 +81,7 @@ interfaces never acquire this operator UI or emit human presentation.
 | `mcp setup [--agent AGENT]... [--remove] [--pending review\|cancel] [--dry-run]` | Install, repair or remove project hooks/MCP integrations; omission opens guided selection or resumes confirmed work; pending reviews conflicts or cancellation; removal keeps unselected agents; restart/trust the agent after registration changes |
 | `status`, `doctor` | Inspect the policy files, history, registrations and reported problems |
 | `pack search`, `pack info` | Discover releases and inspect source, compatibility, profiles and rules before installation |
-| `pack add`, `pack update`, `pack remove` | Acquire or select verified artifacts; review the complete policy comparison before Shield writes it. `pack add` asks for a new pack's profile (Recommended preselected) unless `--profile` is given |
+| `pack add`, `pack update`, `pack remove` | Review resolved changes before Shield writes them. `pack add` defaults new selections to Recommended and preserves saved profiles. Specify `--profile` to change it. An unqualified update includes all direct selections, including pins. |
 | `pack list`, `pack show` | List retained selections or inspect their exact source and artifact |
 | `pack configure` | Set a selection's variable values and rule overrides, guided or with `--set`, `--unset`, `--override` and `--clear-override` |
 | `registry list/add/remove/default [--scope user]` | Inspect or confirm project or user discovery changes independently of installed policy |

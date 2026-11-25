@@ -36,6 +36,7 @@ impl EvaluatedRequest {
         let registry = crate::review::registry_trust::guard_effective(
             &state.operator,
             self.evaluator.effective(),
+            checkpoint,
         )?;
         if registry.revision != self.identity.registry_revision {
             return Err(Error::StaleSnapshot);

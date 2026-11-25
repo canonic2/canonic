@@ -25,6 +25,7 @@ struct Pending {
     tool: String,
     arguments: serde_json::Value,
     review_binding: Option<u64>,
+    action: Option<ToolCall>,
 }
 
 impl Confirmations {
@@ -47,6 +48,7 @@ impl Confirmations {
         message: &str,
         review_binding: Option<u64>,
         mut guard: Option<super::PolicyWait>,
+        action: Option<ToolCall>,
     ) -> Result<canonic_mcp_kit::modern::InputRequiredResult, Refusal> {
         if self.pending.len() >= 8 {
             self.release_closed_reviews();
@@ -76,6 +78,7 @@ impl Confirmations {
                 tool: call.name.clone(),
                 arguments: call.arguments.clone(),
                 review_binding,
+                action,
             },
         );
         Ok(result)
@@ -103,7 +106,7 @@ impl Confirmations {
         &mut self,
         request: &RequestContext,
         call: &ToolCall,
-    ) -> Result<(Decision, Option<u64>), RpcError> {
+    ) -> Result<(Decision, Option<u64>, Option<ToolCall>), RpcError> {
         let invalid = || {
             RpcError::new(
                 rpc::INVALID_PARAMS,
@@ -121,7 +124,7 @@ impl Confirmations {
         if let Some(guard) = &mut pending.guard {
             guard.disarm();
         }
-        Ok((decision, pending.review_binding))
+        Ok((decision, pending.review_binding, pending.action))
     }
 }
 
@@ -171,21 +174,21 @@ mod tests {
         let request = context(None);
         for _ in 0..8 {
             confirmations
-                .begin(&request, &call, "Review", None, None)
+                .begin(&request, &call, "Review", None, None, None)
                 .unwrap();
         }
         assert!(
             confirmations
-                .begin(&request, &call, "Review", None, None)
+                .begin(&request, &call, "Review", None, None, None)
                 .is_err()
         );
         // An answer is accepted however long the question was open, once.
         let token = confirmations.pending.keys().next().unwrap().clone();
-        let (decision, _) = confirmations.resume(&context(Some(&token)), &call).unwrap();
+        let (decision, _, _) = confirmations.resume(&context(Some(&token)), &call).unwrap();
         assert_eq!(decision, Decision::Accepted);
         assert!(confirmations.resume(&context(Some(&token)), &call).is_err());
         confirmations
-            .begin(&request, &call, "Review", None, None)
+            .begin(&request, &call, "Review", None, None, None)
             .unwrap();
         let token = confirmations.pending.keys().next().unwrap().clone();
         let count = confirmations.pending.len();

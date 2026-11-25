@@ -25,8 +25,8 @@ Use history_list or history_show with an absolute project path for history in an
     }
     let approvals = "For one-time approval, follow request_approve and repeat the approved call once unchanged. Ordinary session grants cover eligible Ask decisions only. For a repeated Ask, inspect session_grant_list, propose bounded commands with session_grant_propose, and pass its unchanged apply_arguments to session_grant_approve. Follow denial-specific recovery for Deny. Use session_grant_reconsider only on explicit request and obtain fresh confirmation. \
 Prefer temporary session grants for work limited to this task. Propose persistent policy when the permission should carry over to future sessions. Open skill://shield/custom-rules/SKILL.md via MCP resources/read. Check policy_evaluate and rule_list, preserve scope and deny boundaries, and use rule_add or policy_propose. \
-Update a named pack with pack_update and its reference. Omit reference only to update all direct packs, including pinned packs. For removal use pack_remove, omitting reference only to let the user choose. Use pack_configure for installed settings and pack_info for setup settings before pack_add. In registry_add, use returned retry_arguments for the separate trust review after collecting any missing inputs. \
-Copy apply_arguments unchanged to policy_apply for host confirmation. A preview, report, prepared Task or chat reply grants no approval. For a preparation Task, poll tasks/get and pass its review_arguments to policy_propose. Recover a lost handle with identical creation arguments. Read report_resources via resources/read for more evidence. When an administrative review requires the operator terminal, ask the person to run the returned operator_action. Stop on a decline. Never bypass a refusal or automatically restart failed or cancelled work. ";
+Update a named pack with pack_update and its reference. Omit reference only to update all direct packs, including pinned packs. Use pack_info for setup settings before pack_add and pack_configure for installed settings. Use pack_remove with a reference, or let the person choose what to remove. When the user wants a pack, rule or registry change applied, set review: true to request human confirmation after preparation. Follow a returned review_action when the host needs a separate call. Registry input and source trust require separate decisions. \
+For a separately prepared proposal, use policy_review with its proposal_id or pass unchanged apply_arguments to policy_apply for native tool approval. A preview, report, prepared Task or chat reply grants no approval. For a preparation Task, poll tasks/get and pass its review_arguments to policy_propose. Recover a lost handle with identical creation arguments. Read report_resources via resources/read for more evidence. When an administrative review requires the operator terminal, ask the person to run the returned operator_action. Stop on a decline. Never bypass a refusal or automatically restart failed or cancelled work. ";
     let form_limit = crate::review::hook_approval::MAX_FORM;
     format!(
         "{inspection}When an edit needs one-time approval, the complete form fits at most {form_limit} UTF-8 bytes, including the patch, paths and review text. Before submitting a large patch that needs approval, split it into smaller complete patches at file or hunk boundaries. {approvals}{host}"
@@ -44,15 +44,18 @@ pub(super) fn approval_unavailable(agent: Option<&str>) -> &'static str {
 /// Calls wait in order without a limit, so this covers only a call's own work.
 /// `guided` calls collect input through a form; repeating one asks the user
 /// again and prepares a new review, so they check for a saved one instead.
-pub(super) fn deadline(name: &str, guided: bool) -> &'static str {
+pub(super) fn deadline(name: &str, guided: bool, review: bool) -> &'static str {
     match name {
+        _ if review && crate::review::mcp::prepares_review(name) => {
+            "Shield stopped this call at its time limit. Call policy_show to check the review and its outcome before asking again."
+        }
         _ if guided && crate::review::mcp::prepares_review(name) => {
             "Shield stopped preparing this review at its time limit, so nothing was applied, but a review may have been saved. Call policy_show with status pending before calling the tool again, so the user is not asked twice. If it stops again, tell the user Shield timed out on this call and include the doctor tool's result."
         }
         _ if crate::review::mcp::prepares_review(name) => {
             "Shield stopped preparing this review at its time limit, so nothing was applied. Call the tool again with the same arguments; it returns the review if one was saved. If it stops again, tell the user Shield timed out on this call and include the doctor tool's result."
         }
-        "policy_apply" | "policy_withdraw" | "policy_reject" => {
+        "policy_apply" | "policy_review" | "policy_withdraw" | "policy_reject" => {
             "Shield stopped this call at its time limit; whether it took effect is unknown. Call policy_show with its proposal_id before calling it again."
         }
         "request_approve" | "request_deny" => {
@@ -67,7 +70,7 @@ pub(super) fn deadline(name: &str, guided: bool) -> &'static str {
         "policy_defer" | "policy_draft_remove" => {
             "Shield stopped this call at its time limit; whether it took effect is unknown. Call policy_draft_list before calling it again."
         }
-        "registry_add" if guided => {
+        "registry_add" if guided && !review => {
             "Shield stopped collecting registry details at its time limit. Nothing was enrolled. If the details are still needed, ask the user before opening the form again."
         }
         "registry_add" => {
@@ -364,6 +367,7 @@ impl Serialize for Projection<'_> {
                     "report_resources",
                     "preparation_task_id",
                     "review_arguments",
+                    "review_action",
                     "next_action",
                 ] {
                     if let Some(field) = data.get(key) {

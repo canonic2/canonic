@@ -93,11 +93,11 @@ is set up differently; judge the code, not the name.
 2. Tell the user the packs to install, one line each with its reference and
    what it covers, for example: acme/rust — cargo, rustfmt and Clippy for
    the Rust crates.
-3. Call `pack_add` with all of them in `packs`, using the default profile.
+3. Call `pack_add` with all of them in `packs` and `review: true`, using the default profile.
    Request optional `variables` only when the project needs one; the form
    collects required settings.
-4. Copy `apply_arguments` unchanged to `policy_apply`. Its prompt is the
-   approval; do not also ask in chat.
+4. Follow any returned `review_action` and wait for the human confirmation
+   outcome. The host prompt supplies the decision.
 
 Skip this step when no pack is missing.
 
@@ -128,8 +128,8 @@ Skip this step when no pack is missing.
    miss, such as an extra flag, passing its `after_candidate_id` as
    `candidate_id`. If the scope is wrong, close it with `policy_withdraw` and
    propose a corrected one.
-7. Copy `apply_arguments` unchanged to `policy_apply`. Its form is the
-   approval; do not also ask in chat.
+7. Call `policy_review` with the `proposal_id`. For hosts with native tool
+   approval, use the unchanged `apply_arguments` with `policy_apply`.
 
 ## 6. Finish
 

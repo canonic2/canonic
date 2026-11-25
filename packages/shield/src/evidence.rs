@@ -5,6 +5,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 pub(crate) mod projection;
 
+/// These MCP operations can carry SQL with application data and credentials.
+pub(crate) fn private_mcp_arguments(tool: &str) -> bool {
+    matches!(tool, "execute_sql" | "apply_migration" | "query_logs")
+}
+
 pub(crate) fn redact(value: &mut Value) -> bool {
     match value {
         Value::Object(fields) => {

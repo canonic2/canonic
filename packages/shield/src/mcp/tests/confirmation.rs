@@ -971,7 +971,7 @@ fn confirmation_describes_retained_web_scope_and_removed_requirements() {
     let (transport, project, _) = prepared(Some("claude"), &capabilities(FORM));
     let connection = crate::review::mcp::Connection::new("acme-review".into());
     let message = |args: &Value| {
-        crate::review::mcp::prepare_apply_confirmation(&project.review, &connection, args)
+        crate::review::mcp::prepare_policy_confirmation(&project.review, &connection, args, false)
             .unwrap()
             .unwrap()
             .message

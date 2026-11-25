@@ -808,6 +808,7 @@ fn observation_isolation_check(context: &review::Context) {
     let observed = snapshot
         .resolve_mcp("host:acme", &connections, "host-project")
         .unwrap();
+    assert!(observed.facts(&json!({})).unwrap().get("id").is_none());
     let (_other_root, other) = fixture("recommended");
     let other_project = crate::runtime::Project::open(Path::new(&other.project_root)).unwrap();
     let other_snapshot = other_project.snapshot().unwrap();

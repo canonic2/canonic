@@ -64,6 +64,9 @@ fn receipt(event: &Value, request: &Value) -> Value {
 }
 
 pub(crate) fn decision(context: &Context, mut details: Value) -> Result<Value, Error> {
+    if details.get_mut("operation").is_some_and(redact_mcp_sql) {
+        details["original_input"] = json!("[REDACTED]");
+    }
     // Large selected-pack metadata is diagnostic evidence, not request history.
     // Keep the decision, request, matched rules and source identity when omitting it.
     if !crate::json::fits(&details, 4096) {
@@ -125,10 +128,23 @@ pub(crate) fn completion(
     // that outcome is kept; a missing status never means success.
     let mut details = json!({"delivery_id":input.delivery_id,"input_digest":signature,
         "operation":operation,"evidence":"host-reported","reported_request_id":input.request_id});
+    redact_mcp_sql(&mut details["operation"]);
     if matches!(input.status.as_str(), "failed" | "cancelled") {
         details["status"] = json!(input.status);
     }
     record_completion(context, || details)
+}
+
+fn redact_mcp_sql(operation: &mut Value) -> bool {
+    if operation["kind"] == "mcp"
+        && operation["tool"]
+            .as_str()
+            .is_some_and(crate::evidence::private_mcp_arguments)
+    {
+        operation["arguments"] = json!("[REDACTED]");
+        return true;
+    }
+    false
 }
 
 /// Records an owned native child's result, separate from SDK-supplied observations.

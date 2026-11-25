@@ -191,14 +191,8 @@ fn a_declared_agent_selects_its_review_adapter_only_when_its_integration_is_reco
             &connection,
             &json!({"kind":"rule_add","rule":rule("read", "allow")}),
         );
-        let result = call_with_confirmation(
-            &declared,
-            &connection,
-            "policy_apply",
-            &args,
-            &|| Ok(()),
-            true,
-        );
+        // A native tool-permission call has no Shield form answer.
+        let result = call(&declared, &connection, "policy_apply", &args, &|| Ok(()));
         let proposal = &Store::open(root.path()).unwrap().read().unwrap().proposals[0];
         assert_eq!(proposal.provenance["agent"], "codex");
         if recorded {
@@ -621,7 +615,13 @@ fn host_approved_rules_domains_and_folder_changes_activate_and_retries_are_idemp
         if change["rule"]["conditions"]["domain"] == "web" {
             assert!(readable(&args).contains("could not compare this change"));
         }
-        let result = apply(&context, &connection, &args);
+        let apply = || {
+            let result = call(&context, &connection, "policy_apply", &args, &|| Ok(()));
+            assert!(result["error"].is_null(), "{result}");
+            assert_eq!(result["data"]["status"], "applied");
+            result
+        };
+        let result = apply();
         assert_eq!(
             result["data"]["operator"]["mechanism"],
             "host-tool-permission"
@@ -629,7 +629,7 @@ fn host_approved_rules_domains_and_folder_changes_activate_and_retries_are_idemp
         let state = Store::open(root.path()).unwrap().read().unwrap();
         crate::review::runtime::consumer::load(&context, &|| Ok(())).unwrap();
         let active = json!(state.policy_revision);
-        apply(&context, &connection, &args);
+        apply();
         assert_eq!(
             json!(
                 Store::open(root.path())

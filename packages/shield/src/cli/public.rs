@@ -452,7 +452,7 @@ pub enum PackCommand {
     Add {
         /// Pack name, registry/name, publisher/name, or exact @version.
         reference: String,
-        /// Select a profile; otherwise preserve the selection or ask, preselecting recommended.
+        /// Select a profile; otherwise keep the saved profile or use Recommended.
         #[arg(long, value_enum)]
         profile: Option<Profile>,
         /// Bind a pack variable instead of the guided walk; repeatable.
@@ -462,7 +462,7 @@ pub enum PackCommand {
         #[arg(long)]
         local: bool,
     },
-    /// Update one selection or all tracking selections, after confirmation.
+    /// Update one selection or all direct selections, including pinned packs, after confirmation.
     Update { reference: Option<String> },
     /// Remove an installed selection after reviewing its effects.
     Remove {

@@ -202,10 +202,12 @@ fn packs(before: &Value, after: &Value) -> Vec<Value> {
         .iter()
         .filter(|old| !after.iter().any(|row| key(row) == key(old)))
     {
-        changes.push(
-            json!({"kind":"pack","change":"removed","id":old["id"],"version":old["version"],
-            "profile":old["profile"],"dependency":old["direct"] == false,"mode":mode(old)}),
-        );
+        let mut removed = json!({"kind":"pack","change":"removed","id":old["id"],"version":old["version"],
+            "profile":old["profile"],"dependency":old["direct"] == false,"mode":mode(old)});
+        if old["layer"] == "local" {
+            removed["layer"] = json!("local");
+        }
+        changes.push(removed);
     }
     changes
 }

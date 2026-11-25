@@ -194,7 +194,7 @@ impl Project {
     ///
     /// # Errors
     /// Refuses another project or changed policy files before invoking the callback.
-    /// Invalid state, filesystem and bounded lock/release failures are reported.
+    /// Invalid state, filesystem and lock/release failures are reported.
     /// A lock release failure can occur after the callback has run; it cannot undo it.
     pub fn with_current<T>(
         &self,
@@ -269,6 +269,7 @@ impl NativeSource {
         let registry = crate::review::registry_trust::guard_effective(
             &state.operator,
             self.evaluator.effective(),
+            &|| Ok(()),
         )?;
         if registry.revision != self.identity.registry_revision {
             return Err(Error::StaleSnapshot);
@@ -593,6 +594,7 @@ pub(in crate::review) fn load(
     let registry_guard = crate::review::registry_trust::guard_effective(
         &state.operator,
         policy.evaluator.effective(),
+        checkpoint,
     )?;
     let revision = policy.evaluator.revision().to_owned();
     checkpoint()?;

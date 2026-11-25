@@ -72,6 +72,61 @@ fn value(result: &CandidateEvaluation) -> Value {
 }
 
 #[test]
+fn mcp_previews_only_redact_sql_payloads() {
+    use policy::resolution::normalized::{Context, Input};
+    let config = json!({"schema_version":1,"packs":[],"mcp":{"acme-data":{
+        "transport":{"type":"http","url":"https://example.com/mcp"},
+        "agents":{"codex":"data"}}}});
+    let snapshot = Candidate::from_yaml(&config.to_string())
+        .unwrap()
+        .capture(&[], None)
+        .unwrap();
+    let evaluator = Evaluator::new(vec![(Scope::Project, snapshot)]).unwrap();
+    let context = Context {
+        cwd: request("preview").cwd,
+        environment: None,
+        working_files: None,
+    };
+    let arguments = json!({"query":"fixture payload"});
+    let original_input = json!({"arguments":arguments});
+    for (tool, private) in [
+        ("execute_sql", true),
+        ("apply_migration", true),
+        ("query_logs", true),
+        ("search_docs", false),
+    ] {
+        let input = Input::Mcp {
+            server: "acme-data".into(),
+            tool: tool.into(),
+            arguments: arguments.clone(),
+            original_input: original_input.clone(),
+            connection: None,
+        };
+        let report = evaluator
+            .evaluate_normalized(
+                &input,
+                &context,
+                &context.cwd,
+                None,
+                &crate::evidence::now(),
+                &|| Ok(()),
+            )
+            .unwrap();
+        let preview = &report["normalized_request"];
+        assert_eq!(preview["server"], "acme-data");
+        assert_eq!(preview["tool"], tool);
+        assert_eq!(preview["connection"]["id"], "acme-data");
+        if private {
+            assert_eq!(preview["arguments"], "[REDACTED]");
+            assert_eq!(preview["original_input"], "[REDACTED]");
+        } else {
+            assert_eq!(preview["arguments"], arguments);
+            assert_eq!(preview["original_input"], original_input);
+        }
+    }
+}
+
+#[test]
 fn typed_previews_match_shell_for_declared_directory_options() {
     use policy::resolution::normalized::{Context, Input};
     let root = assert_fs::TempDir::new().unwrap();

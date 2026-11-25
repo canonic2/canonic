@@ -103,7 +103,7 @@ fn pack_list_keeps_explicit_registry_update_observation() {
         (vec!["init", "--no-setup", "--no-baseline"], "yes\n"),
         (vec!["registry", "add", "acme", source], "yes\n"),
         (vec!["registry", "default", "acme"], "yes\n"),
-        (vec!["pack", "add", "acme/parent"], "\nyes\n"),
+        (vec!["pack", "add", "acme/parent"], "yes\n"),
     ] {
         let output = screen(root.path(), &args, answers);
         assert!(output.ends_with("--- exit 0\n"), "{output}");
@@ -178,7 +178,7 @@ fn public_command_steps(source: &str) -> Vec<(&'static str, Vec<&str>, &'static 
             "",
         ),
         ("pack-info-rules", vec!["pack", "info", "acme/test"], ""),
-        ("pack-add", vec!["pack", "add", "acme/parent"], "\nyes\n"),
+        ("pack-add", vec!["pack", "add", "acme/parent"], "yes\n"),
         ("pack-add-missing", vec!["pack", "add", "acme/missing"], ""),
         ("pack-list", vec!["pack", "list"], ""),
         (

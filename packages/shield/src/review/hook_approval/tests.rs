@@ -616,7 +616,8 @@ fn consumed_grant_covers_one_followup_callback_of_the_same_request() {
     owner.session_id = Some("acme-session".into());
     // Reporting the already consumed decision must leave the separate callback
     // capability intact and must not persist a premature terminal receipt.
-    let replay = review::approvals::approve(&owner, &json!({"request_id":id}), false).unwrap();
+    let replay =
+        review::approvals::approve(&owner, &json!({"request_id":id}), false, &|| Ok(())).unwrap();
     assert_eq!(replay["status"], "consumed");
     assert_eq!(replay["allowed"], false);
     assert!(replay.get("approval_id").is_none());
@@ -733,7 +734,9 @@ fn new_native_denials_are_compact_and_replay_without_policy_preparation() {
     assert_eq!(replay["status"], "revoked");
     assert_eq!(replay["allowed"], false);
     assert!(replay.get("approval_id").is_none());
-    assert!(review::approvals::approve(&owner, &json!({"request_id":id}), false).is_err());
+    assert!(
+        review::approvals::approve(&owner, &json!({"request_id":id}), false, &|| Ok(())).is_err()
+    );
 }
 
 #[test]
@@ -850,7 +853,7 @@ fn an_unenrolled_connection_of_the_requesting_agent_is_told_why_it_cannot_approv
     assert!(message.contains("not connected to Shield"), "{message}");
     assert!(message.contains("shield mcp setup"), "{message}");
     assert!(matches!(
-        review::approvals::confirmation(&unenrolled, &group),
+        review::approvals::confirmation(&unenrolled, &group, &|| Ok(())),
         Err(Error::Grouped { request, .. }) if request == first
     ));
     assert!(matches!(

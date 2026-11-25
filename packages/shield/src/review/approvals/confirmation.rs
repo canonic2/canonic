@@ -1,6 +1,6 @@
 //! One human review across consumer kinds, retaining each consumer's authority checks.
 use crate::review::{
-    Context, Error, clock, hook_approval,
+    Checkpoint, Context, Error, clock, hook_approval,
     model::State,
     project, read_approval, run_approval,
     runtime::consumer::{self, Snapshot},
@@ -139,7 +139,11 @@ fn question(
     })
 }
 
-pub(crate) fn confirmation(context: &Context, args: &Value) -> Result<String, Error> {
+pub(crate) fn confirmation(
+    context: &Context,
+    args: &Value,
+    checkpoint: Checkpoint<'_>,
+) -> Result<String, Error> {
     let (ids, list) = hook_approval::requested(args)?;
     let state = project::authorization(context)?;
     if terminal(&state, context, &ids, list)?.is_some() {
@@ -148,11 +152,16 @@ pub(crate) fn confirmation(context: &Context, args: &Value) -> Result<String, Er
     if only_hooks(&state, &ids) {
         return hook_approval::confirmation_in(&state, context, args);
     }
-    let snapshot = consumer::load(context, &|| Ok(()))?;
+    let snapshot = consumer::load(context, checkpoint)?;
     question(&state, context, &ids, &snapshot)
 }
 
-pub(crate) fn approve(context: &Context, args: &Value, confirmed: bool) -> Result<Value, Error> {
+pub(crate) fn approve(
+    context: &Context,
+    args: &Value,
+    confirmed: bool,
+    checkpoint: Checkpoint<'_>,
+) -> Result<Value, Error> {
     let (ids, list) = hook_approval::requested(args)?;
     let before = project::authorization(context)?;
     if let Some(value) = terminal(&before, context, &ids, list)? {
@@ -162,10 +171,10 @@ pub(crate) fn approve(context: &Context, args: &Value, confirmed: bool) -> Resul
         return hook_approval::approve(context, args, confirmed);
     }
     if !confirmed {
-        confirmation(context, args)?;
+        confirmation(context, args, checkpoint)?;
         return Err(Error::ApprovalRequired);
     }
-    let snapshot = consumer::load(context, &|| Ok(()))?;
+    let snapshot = consumer::load(context, checkpoint)?;
     Store::open(Path::new(&context.project_root))?.update_checkpoint(context, &|| Ok(()), |state| {
         if let Some(value)=terminal(state,context,&ids,list)? {return Ok(value);}
         question(state, context, &ids, &snapshot)?;

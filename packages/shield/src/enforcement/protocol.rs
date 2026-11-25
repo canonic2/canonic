@@ -1109,7 +1109,6 @@ fn evaluate_mcp_policy(
     let Ok(evidence) = snapshot.evaluate_resource(request, resource) else {
         return (failure(Some(&input.request_id), "invalid-input"), 2);
     };
-    let observation = json!({"request":evidence.request(),"evaluation":evidence.evaluation()});
     if prepared
         .observation
         .as_ref()
@@ -1117,6 +1116,24 @@ fn evaluate_mcp_policy(
     {
         return (failure(Some(&input.request_id), "mcp-binding-changed"), 2);
     }
+    let evaluation = evidence.evaluation();
+    let observation = if crate::evidence::private_mcp_arguments(tool) {
+        // A mapped command or requirement can echo arguments in translated
+        // evidence. Apply the evaluator's privacy marks before recording it.
+        let projected = crate::evidence::projection::encode_controlled_with_sources(
+            evaluation.evaluation(),
+            4 * 1024 * 1024,
+            &|| Ok(()),
+            &[],
+        )
+        .map_or_else(
+            |_| json!({"decision":evaluation.decision,"reason":evaluation.evaluation().reason}),
+            |(value, _)| value,
+        );
+        json!({"request":evidence.request(),"evaluation":{"decision":evaluation.decision,"evaluation":projected}})
+    } else {
+        json!({"request":evidence.request(),"evaluation":evaluation})
+    };
     let (decision, code) = match handoff(project, AgentAccess::Ordinary, evidence, |_, _| ()) {
         Ok(()) => ("allow", "policy-allow"),
         Err(Error::Denied) => ("deny", "policy-deny"),

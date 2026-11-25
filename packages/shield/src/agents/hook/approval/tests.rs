@@ -341,7 +341,7 @@ fn web_reviews_decline_suppresses_save_offers_in_ten_native_calls() {
         before_form["hookSpecificOutput"]["permissionDecision"], "allow",
         "{before_form}"
     );
-    review::mcp::prepare_apply_confirmation(&context, &connection, args)
+    review::mcp::prepare_policy_confirmation(&context, &connection, args, false)
         .unwrap()
         .unwrap()
         .claim_web_offer()
@@ -480,7 +480,7 @@ fn web_domain_review_precedes_execution_and_keeps_one_time_permission_separate()
             "deny"
         );
         if agent == "claude" {
-            review::mcp::prepare_apply_confirmation(&context, &connection, arguments)
+            review::mcp::prepare_policy_confirmation(&context, &connection, arguments, false)
                 .unwrap()
                 .unwrap()
                 .claim_web_offer()

@@ -992,6 +992,49 @@ fn argv_fixture(executable: &str, decision: &str) -> assert_fs::TempDir {
 }
 
 #[test]
+fn native_read_waits_for_project_writer_and_reaches_its_policy_decision() {
+    use std::{
+        sync::mpsc,
+        thread,
+        time::{Duration, Instant},
+    };
+
+    let root = argv_fixture("cat", "allow");
+    let root = root.path();
+    std::fs::write(root.join("package.json"), "{}").unwrap();
+    thread::scope(|scope| {
+        let writer = std::fs::OpenOptions::new()
+            .write(true)
+            .open(root.join(".shield/state/writer.lock"))
+            .unwrap();
+        writer.lock().unwrap();
+        let (answer, result) = mpsc::channel();
+        scope.spawn(move || {
+            answer
+                .send(call(root, "codex", "cat package.json"))
+                .unwrap();
+        });
+        let ticket = root.join(".shield/state/writer-queue/0");
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !ticket.is_file() {
+            assert!(Instant::now() < deadline, "native read never queued");
+            thread::sleep(Duration::from_millis(5));
+        }
+        assert!(matches!(
+            result.recv_timeout(Duration::from_millis(600)),
+            Err(mpsc::RecvTimeoutError::Timeout)
+        ));
+        writer.unlock().unwrap();
+        let reply = result.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert_permitted(&reply, "codex");
+        assert_eq!(
+            denial_decision(&call(root, "codex", "cat .shield/state/state.json")),
+            "deny"
+        );
+    });
+}
+
+#[test]
 fn heredoc_scaffolding_checks_destinations_without_an_extra_approval() {
     let root = assert_fs::TempDir::new().unwrap();
     let rules = json!({"schema_version":1,"kind":"custom",

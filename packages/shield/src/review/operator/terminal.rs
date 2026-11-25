@@ -192,15 +192,6 @@ impl Terminal {
             if back { "back" } else { "cancel" },
         )
     }
-    /// A pack profile, with Recommended preselected; init and add share it.
-    pub(super) fn choose_profile(
-        &mut self,
-        title: &str,
-        context: &str,
-    ) -> Result<crate::policy::Profile, Error> {
-        self.choose_profile_step(title, context, crate::policy::Profile::Recommended)?
-            .or_cancel()
-    }
     /// The profile as one step of a guided flow, starting at `default`.
     pub(super) fn choose_profile_step(
         &mut self,

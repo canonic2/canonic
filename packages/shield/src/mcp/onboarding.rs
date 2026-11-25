@@ -226,7 +226,7 @@ impl Bootstrap {
                 .confirmations
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .begin(request, call, &message, Some(binding), None);
+                .begin(request, call, &message, Some(binding), None, None);
             return match confirmation {
                 Ok(question) => {
                     self.plans
@@ -316,7 +316,7 @@ impl Bootstrap {
                 .remove(&binding)
         });
         match (answer, plan) {
-            (Ok((decision, _)), Some(plan)) => Outcome::Tool(finish(
+            (Ok((decision, _, _)), Some(plan)) => Outcome::Tool(finish(
                 plan,
                 decision,
                 &self.input,

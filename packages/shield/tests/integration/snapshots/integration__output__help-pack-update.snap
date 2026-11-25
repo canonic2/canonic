@@ -2,7 +2,7 @@
 source: tests/integration/output.rs
 expression: "String::from_utf8_lossy(&output.get_output().stdout)"
 ---
-Update one selection or all tracking selections, after confirmation
+Update one selection or all direct selections, including pinned packs, after confirmation
 
 Usage: shield pack update [OPTIONS] [REFERENCE]
 

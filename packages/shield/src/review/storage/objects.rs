@@ -1,5 +1,5 @@
 //! Owned private regular files and directory mutexes for review storage.
-use super::{Error, private};
+use super::{Checkpoint, Error, locking::Backoff, private};
 use std::{
     fs::{self, File, OpenOptions},
     path::{Path, PathBuf},
@@ -40,42 +40,30 @@ pub(in crate::review) fn read_file(path: &Path) -> Result<File, Error> {
     open(path, false, false)
 }
 
-/// Share the directory's mutex through a short final authority guard. The
-/// caller initializes and validates the private directory before acquiring.
-pub(in crate::review) fn read_lease(path: &Path) -> Result<File, Error> {
-    read_lease_retry(path, || false)
+pub(in crate::review) fn initialize_mutex(path: &Path) -> Result<(), Error> {
+    open(&path.join(".objects.lock"), true, true)?;
+    Ok(())
 }
 
-/// Registry trust tolerates brief publication contention. SDK admission keeps
-/// using the immediate lease so its separate namespace locks cannot stack waits.
-pub(in crate::review) fn read_lease_wait(path: &Path) -> Result<File, Error> {
-    let started = std::time::Instant::now();
-    let budget = std::time::Duration::from_millis(500);
-    read_lease_retry(path, || {
-        let remaining = budget.saturating_sub(started.elapsed());
-        if remaining.is_zero() {
-            return false;
-        }
-        std::thread::sleep(remaining.min(std::time::Duration::from_millis(25)));
-        true
-    })
-}
-
-fn read_lease_retry(path: &Path, mut retry: impl FnMut() -> bool) -> Result<File, Error> {
+/// Share the directory's mutex. Callers without a checkpoint can choose to try once.
+pub(in crate::review) fn read_lease(
+    path: &Path,
+    checkpoint: Option<Checkpoint<'_>>,
+) -> Result<File, Error> {
     let path = path.join(".objects.lock");
     let file = read_file(&path)?;
+    let mut backoff = Backoff::new();
     loop {
+        if let Some(checkpoint) = checkpoint {
+            checkpoint()?;
+        }
         match file.try_lock_shared() {
             Ok(()) => {
-                // Publication may have changed the namespace while we waited.
                 checked(&path, &file)?;
                 return Ok(file);
             }
-            Err(fs::TryLockError::WouldBlock) => {
-                if !retry() {
-                    return Err(Error::Locked);
-                }
-            }
+            Err(fs::TryLockError::WouldBlock) if checkpoint.is_some() => backoff.wait(),
+            Err(fs::TryLockError::WouldBlock) => return Err(Error::Locked),
             Err(fs::TryLockError::Error(error)) => return Err(error.into()),
         }
     }
@@ -204,19 +192,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn shared_authority_waits_for_a_brief_publication() {
+    fn shared_authority_excludes_exclusive_publication_and_accepts_other_readers() {
         let root = assert_fs::TempDir::new().unwrap();
         super::super::private_directory(root.path()).unwrap();
-        let mut publisher = Some(Directory::enter(root.path()).unwrap());
-        // Release only after the reader actually observes contention. This
-        // exercises retry without relying on thread scheduling or elapsed time.
-        let reader = read_lease_retry(root.path(), || {
-            drop(publisher.take().expect("one contended attempt"));
-            true
-        })
-        .unwrap();
-        assert!(publisher.is_none());
-        let other = read_lease_wait(root.path()).unwrap();
+        initialize_mutex(root.path()).unwrap();
+        let reader = read_lease(root.path(), None).unwrap();
+        let other = read_lease(root.path(), None).unwrap();
         assert!(matches!(
             Directory::try_enter(root.path()),
             Err(Error::Locked)
@@ -226,21 +207,25 @@ mod tests {
     }
 
     #[test]
-    fn shared_authority_still_refuses_a_publisher_that_remains_busy() {
+    fn shared_lease_checks_cancellation_while_publisher_holds_lock() {
         let root = assert_fs::TempDir::new().unwrap();
         super::super::private_directory(root.path()).unwrap();
-        let publisher = Directory::enter(root.path()).unwrap();
-        assert!(matches!(read_lease_wait(root.path()), Err(Error::Locked)));
-        publisher.check_owner().unwrap();
-        drop(publisher);
-        read_lease(root.path()).unwrap();
-    }
-
-    #[test]
-    fn immediate_shared_authority_refuses_without_retrying() {
-        let root = assert_fs::TempDir::new().unwrap();
-        super::super::private_directory(root.path()).unwrap();
-        let _publisher = Directory::enter(root.path()).unwrap();
-        assert!(matches!(read_lease(root.path()), Err(Error::Locked)));
+        let writer = Directory::enter(root.path()).unwrap();
+        assert!(matches!(read_lease(root.path(), None), Err(Error::Locked)));
+        let checks = std::cell::Cell::new(0);
+        let checkpoint = || {
+            checks.set(checks.get() + 1);
+            if checks.get() == 3 {
+                Err(crate::policy::Error::Interrupted)
+            } else {
+                Ok(())
+            }
+        };
+        assert!(matches!(
+            read_lease(root.path(), Some(&checkpoint)),
+            Err(Error::Policy(crate::policy::Error::Interrupted))
+        ));
+        drop(writer);
+        read_lease(root.path(), None).unwrap();
     }
 }

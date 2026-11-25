@@ -57,6 +57,79 @@ fn sdk_admission_does_not_read_policy_sources_or_rewrite_checkpoint() {
 }
 
 #[test]
+fn sdk_admission_waits_for_profile_and_context_writers() {
+    use std::{sync::mpsc, thread, time::Duration};
+
+    let (root, _) = enrolled();
+    let fixture = testing::Fixture::new(root.path()).unwrap();
+    let root = root.path();
+    for namespace in ["sdk-read-profiles", "sdk-read-contexts"] {
+        let issued = fixture.scoped(|| mint(root, mapping::digest())).unwrap();
+        let directory = fixture
+            .scoped(|| files::directory(namespace, false))
+            .unwrap();
+        thread::scope(|scope| {
+            let writer = objects::Directory::enter(&directory).unwrap();
+            let (started, ready) = mpsc::channel();
+            let (reply, result) = mpsc::channel();
+            let fixture = &fixture;
+            scope.spawn(move || {
+                started.send(()).unwrap();
+                reply
+                    .send(fixture.scoped(|| {
+                        RegisteredReadConsumer::admit_secret(root, issued.0)?;
+                        Ok(())
+                    }))
+                    .unwrap();
+            });
+            ready.recv_timeout(Duration::from_secs(5)).unwrap();
+            assert!(matches!(
+                result.recv_timeout(Duration::from_millis(100)),
+                Err(mpsc::RecvTimeoutError::Timeout)
+            ));
+            drop(writer);
+            result
+                .recv_timeout(Duration::from_secs(5))
+                .unwrap()
+                .unwrap();
+        });
+    }
+}
+
+#[test]
+fn sdk_admission_cancellation_releases_the_profile_lease() {
+    let (root, _) = enrolled();
+    let fixture = testing::Fixture::new(root.path()).unwrap();
+    fixture
+        .scoped(|| {
+            let issued = mint(root.path(), mapping::digest())?;
+            let profiles = files::directory("sdk-read-profiles", false)?;
+            let contexts = files::directory("sdk-read-contexts", false)?;
+            let writer = objects::Directory::enter(&contexts)?;
+            let checks = std::cell::Cell::new(0);
+            let checkpoint = || {
+                checks.set(checks.get() + 1);
+                if checks.get() < 3 {
+                    return Ok(());
+                }
+                assert!(matches!(
+                    objects::Directory::try_enter(&profiles),
+                    Err(Error::Locked)
+                ));
+                Err(crate::policy::Error::Interrupted)
+            };
+            assert!(matches!(
+                RegisteredReadConsumer::admit_with_secret(root.path(), issued.0, &checkpoint),
+                Err(Error::Policy(crate::policy::Error::Interrupted))
+            ));
+            objects::Directory::try_enter(&profiles)?;
+            drop(writer);
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[test]
 fn expired_contexts_and_missing_namespace_mutex_refuse_without_diagnostic_repair() {
     let (root, _) = enrolled();
     let fixture = testing::Fixture::new(root.path()).unwrap();

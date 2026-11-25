@@ -131,11 +131,10 @@ exact capture. Stale reviews require a fresh decision.
   requested to refresh generated permission rules.
   See [pause or resume Shield](project-review.md#pause-or-resume-shield).
 - `registry_add` accepts `name` and a local directory or HTTPS `location`.
-  Omit either to ask the person for the missing details in a form. If scope is
-  omitted in that form workflow, the person must choose `project` or `user`.
-  Submission returns exact `retry_arguments`; call `registry_add` with those
-  arguments for the separate trust review. Input collection does not read the
-  source or enroll it, and defaults never supply missing answers.
+  Omit either to collect the missing detail. Scope defaults to `project`.
+  Set `review: true` to continue to a separate trust form after input. If the
+  host needs a separate call, follow `review_action` using its opaque reference.
+  Input collection only supplies details. Discovery and trust review are separate.
   It discovers and validates the source, then asks the person to review its
   canonical location, registry identity, signing-key fingerprint and trust basis.
   Discovery grants no trust; acceptance enrolls exactly the reviewed source.
@@ -462,10 +461,11 @@ Installed settings can also be changed later with `pack_configure`.
 
 The form retains the exact acquired releases. A registry change while it is open
 does not substitute another release. A changed project policy or review context
-requires a new `pack_add` call and fresh answers. Submission saves a
-proposal and writes no file; review its pack versions, profiles, values and scope, then copy its
-`apply_arguments` unchanged to `policy_apply` for separate final approval.
-Decline, dismissal and unavailable forms create no proposal. If any `pack_add`
+requires a new `pack_add` call and fresh answers. Submission prepares the exact
+pack versions, profiles, values and scope for approval. With `review: true`,
+Shield requests approval or returns the next `review_action`. Otherwise use
+`policy_review` when ready. Declining, dismissing or failing to open the settings
+form creates no proposal. If any `pack_add`
 reply is lost, inspect `policy_show` before retrying, including when no settings
 form opened. A fresh call can create another proposal; do not reconstruct private
 form answers.
@@ -518,8 +518,9 @@ one selection and its dependencies. Use `{"reference":"main/canonic/gate@0.2.7"}
 to request an exact release. Call `pack_update` directly for a known selection.
 It fetches the catalog metadata it needs. Profiles and pin modes are retained,
 and applying changes requires review and approval. Call `pack_remove` with
-`{"reference":"gate"}` to remove one selection using the same dependency checks
-as `shield pack remove`.
+`{"reference":"gate"}` to remove one project selection using the same dependency
+checks as `shield pack remove`. Pass `layer: local` with an explicit reference
+to remove the selection from your local configuration.
 
 To let the person choose installed packs, call `pack_remove` with `{}`. The form
 shows exact installed selectors and accepts 1–16 selections from a list of at
@@ -533,10 +534,10 @@ clients can use explicit single-pack references; Shield never narrows the list
 silently. Empty, duplicate or unknown choices refuse. If policy or review
 metadata changes while the form is open, request a fresh form and new answers.
 
-These tools prepare a proposal without writing files. Inspect the returned changes, then
-copy `apply_arguments` unchanged to `policy_apply` for user approval. Preparing
-an update or removal does not change active policy. Use `pack_show` with a
-`reference` to inspect one installed selection, its source and retained rules.
+Set `review: true` to request human approval. Follow any returned `review_action`.
+Omit `review` to prepare an inactive proposal, then use `policy_review` when ready
+to ask the person to approve it. Use `pack_show` with a `reference` to inspect one
+installed selection, its source and retained rules.
 
 ## Choose installed pack settings
 
@@ -566,11 +567,11 @@ but a form containing a list of choices returns `input_unavailable` without
 preparing a proposal. In that case, collect the values in conversation and use
 the ordinary proposal route. Do not turn the list into one selected value.
 
-Submitting the form only saves a proposal. Review its scope, then let the agent
-copy the returned `apply_arguments` unchanged to `policy_apply` for separate
-final approval. Claude uses a separate confirmation form; Codex keeps its host
-tool approval. Declining or dismissing the settings form creates no proposal
-and ends the offer. A changed selection needs a new form and proposal.
+With `review: true`, submitting the form prepares a proposal for human approval.
+Follow `review_action` if the settings result requests a separate call. Omit
+`review` to prepare an inactive proposal. Declining or dismissing the settings
+form before submission ends the offer. A changed selection needs a new form and
+proposal.
 
 If the host cannot display the requested form, ask for the settings in the
 conversation and call `pack_configure` with direct `set` arguments.
@@ -584,6 +585,16 @@ connection. At most eight can be open at once; answer or cancel one to ask anoth
 
 ## Proposals and operator review
 
+For a requested installation, update, removal or rule change, set `review: true`
+on the pack or rule tool. Shield collects required inputs if needed, then asks
+the person to approve the exact captured plan. When the host needs a separate
+call after collecting inputs, follow `review_action` with the opaque proposal ID.
+An existing proposal can be reviewed with `policy_review {"proposal_id":"…"}`.
+Omit `review` to prepare an inactive proposal for inspection. On a host that
+only supports native tool approval, pass that proposal's `apply_arguments`
+unchanged to `policy_apply`. Previews and drafts have their own tools and do not
+authorize a write.
+
 Known settings can be passed directly to `pack_configure` without a form, using
 the CLI's operations as JSON fields: `set`, `unset`, `override` and
 `clear_override`, with optional `layer`. For example:
@@ -594,7 +605,7 @@ the CLI's operations as JSON fields: `set`, `unset`, `override` and
 
 To remove those choices, use `{"reference":"acme/settings","unset":["manager"],"clear_override":["build"]}`.
 Do not mix direct settings with `variables`, which selects a user-input form.
-Both modes return a proposal and require `policy_apply` approval.
+Both modes require approval before writing policy.
 
 `policy_propose` accepts one tagged `change` or a `changes` array of
 1–16 changes. A batch applies in order to one candidate; approval writes all
@@ -608,9 +619,9 @@ supersession links, and an ASCII `idempotency_key` of 1–128 characters.
 | `pack_configure` | Set variables or rule overrides on an installed pack. |
 | `access_path_add`, `access_path_remove` | Add or remove one absolute read/write directory. |
 
-Every change except `pack_update` and `pack_remove` accepts `layer: project`
-(default) or `local` for uncommitted local configuration. Rules use the project
-condition schema.
+Pack updates retain the selections' existing scope. The other changes accept
+`layer: project` (default) or `local` for uncommitted local configuration. Rules
+use the project condition schema.
 
 A proposal is built on the policy files as they are, hand edits included, and
 applying it keeps those edits. If the files change between proposal and
@@ -1162,9 +1173,9 @@ before retrying, even if no form opened. Consumed form state cannot be replayed
 and private answers must not be reconstructed.
 
 Keep stdin open until you have the replies you need. When it closes, queued
-`policy_propose`, `pack_add`, `pack_configure`, `pack_update`, `pack_remove`, `policy_withdraw` and `policy_apply`
-calls are refused with `-32800` and never run, a pending confirmation is
-withdrawn, and read-only tools still finish.
+policy mutations, including `policy_review` and `policy_apply`, are refused
+with `-32800`. A pending confirmation is withdrawn, and read-only tools
+still finish.
 
 Closing stdin drains admitted work and joins the worker before exit 0. Framing or
 transport failure cancels and joins work and exits 1. Resident clients complete

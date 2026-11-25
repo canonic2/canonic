@@ -44,7 +44,7 @@ pub(crate) struct Server {
     connection: Arc<crate::review::mcp::Connection>,
     confirmations: Mutex<confirmation::Confirmations>,
     policy_waits: PolicyWaits,
-    questions: Mutex<elicitation::Questions>,
+    questions: Arc<Mutex<elicitation::Questions>>,
     log: Option<Arc<crate::diagnostics::Log>>,
     preparations: Arc<crate::review::preparation_tasks::Runtime>,
     task_schema: std::sync::OnceLock<canonic_mcp_kit::ResultSchema>,
@@ -87,7 +87,7 @@ impl Server {
             connection,
             confirmations: Mutex::new(confirmation::Confirmations::default()),
             policy_waits: PolicyWaits::default(),
-            questions: Mutex::new(elicitation::Questions::default()),
+            questions: Arc::new(Mutex::new(elicitation::Questions::default())),
             log: None,
             preparations,
             task_schema: std::sync::OnceLock::new(),
@@ -111,7 +111,7 @@ impl Server {
             return Ok(());
         }
         let before = self.review();
-        if crate::review::mcp::prepares_review(name)
+        if (crate::review::mcp::prepares_review(name) || name == "policy_review")
             && crate::agents::review::for_context(&before).confirmation()
                 == crate::agents::review::Confirmation::Terminal
         {
@@ -133,7 +133,10 @@ impl Server {
             return self.runtime_refusal(&call, context, &error);
         }
         let review = self.review_for_request(context);
-        let input_form = needs_input_form(&call) || elicitation::owns(self, context);
+        let input_form = elicitation::owns(self, context)
+            || (context.request_context().is_none_or(|request| {
+                request.request_state.is_none() && request.input_responses.is_none()
+            }) && needs_input_form(&call));
         if !input_form && let Some(outcome) = self.resume_confirmation(&review, &call, context) {
             return outcome;
         }
@@ -147,14 +150,59 @@ impl Server {
         if input_form {
             return elicitation::call(self, review, call, context);
         }
+        if call.name == "policy_review" {
+            let args = crate::review::mcp::review_arguments(
+                &review,
+                call.arguments["proposal_id"].as_str().unwrap_or_default(),
+            );
+            return match args {
+                Ok(args) => self.policy_apply(
+                    review,
+                    ReviewedCall::with_action(call, "policy_apply", args),
+                    context,
+                ),
+                Err(error) => Self::policy_apply_failure(&review, &call, &error),
+            };
+        }
+        if call.name == "registry_add" && call.arguments["review_ref"].is_string() {
+            return elicitation::use_registry_inputs(self, review, call, context);
+        }
+        if requests_review(&call) && crate::review::mcp::prepares_review(&call.name) {
+            let operation = operation_call(&call);
+            let operation = operation.as_ref().unwrap_or(&call);
+            let value = crate::review::mcp::call_with_bound_confirmation(
+                &review,
+                &self.connection,
+                &operation.name,
+                &operation.arguments,
+                &|| {
+                    context
+                        .check()
+                        .map_err(|_| crate::policy::Error::Interrupted)
+                },
+                false,
+                None,
+            );
+            return self.review_guided_result(review, call, value, context);
+        }
         if let Some(outcome) = tasks::create(self, &review, &call, context) {
             return outcome;
         }
+        self.dispatch_tool(review, call, context)
+    }
+
+    fn dispatch_tool(
+        &self,
+        review: Arc<crate::review::Context>,
+        call: ToolCall,
+        context: &stdio::Context,
+    ) -> Outcome {
+        let operation = operation_call(&call);
         match crate::review::mcp::admin_confirmation(
             &review,
             &self.connection,
             &call.name,
-            &call.arguments,
+            &operation.as_ref().unwrap_or(&call).arguments,
             &|| {
                 context
                     .check()
@@ -162,7 +210,17 @@ impl Server {
             },
         ) {
             Ok(Some((message, binding))) => {
-                return self.confirm_bound(review, call, context, message, Some(binding), None);
+                return self.confirm_operation(
+                    review,
+                    ReviewedCall {
+                        request: call,
+                        action: operation,
+                    },
+                    context,
+                    message,
+                    Some(binding),
+                    None,
+                );
             }
             Err(error) => {
                 return Outcome::Tool(response::tool_result(
@@ -197,12 +255,12 @@ impl Server {
         // Connection edits always show their private settings in a form;
         // ordinary policy retains the adapter's existing approval mechanism.
         if call.name == "policy_apply" {
-            return self.policy_apply(review, call, context);
+            return self.policy_apply(review, call.into(), context);
         }
         Outcome::Tool(reply(
             &review,
             &self.connection,
-            &call,
+            operation.as_ref().unwrap_or(&call),
             context,
             Answer::None,
         ))
@@ -252,13 +310,13 @@ impl Server {
         context: &stdio::Context,
         message: String,
     ) -> Outcome {
-        self.confirm_bound(review, call, context, message, None, None)
+        self.confirm_operation(review, call.into(), context, message, None, None)
     }
 
-    fn confirm_bound(
+    fn confirm_operation(
         &self,
         review: Arc<crate::review::Context>,
-        call: ToolCall,
+        call: ReviewedCall,
         context: &stdio::Context,
         message: String,
         review_binding: Option<u64>,
@@ -280,7 +338,7 @@ impl Server {
             return Outcome::Tool(reply(
                 &review,
                 &self.connection,
-                &call,
+                call.operation(),
                 context,
                 review_binding.map_or(Answer::Failed("approval_unavailable"), |id| {
                     Answer::AdminFailed(id, "approval_unavailable")
@@ -292,7 +350,14 @@ impl Server {
                 .confirmations
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .begin(request, &call, &message, review_binding, guard);
+                .begin(
+                    request,
+                    &call.request,
+                    &message,
+                    review_binding,
+                    guard,
+                    call.action.clone(),
+                );
             return match interim {
                 Ok(result) => Outcome::InputRequired(result),
                 Err(confirmation::Refusal::Full(error)) => {
@@ -304,7 +369,7 @@ impl Server {
                 Err(confirmation::Refusal::Unavailable) => Outcome::Tool(reply(
                     &review,
                     &self.connection,
-                    &call,
+                    call.operation(),
                     context,
                     review_binding.map_or(Answer::Failed("approval_unavailable"), |id| {
                         Answer::AdminFailed(id, "approval_unavailable")
@@ -330,28 +395,18 @@ impl Server {
                 .as_ref()
                 .map(crate::diagnostics::trace::Request::enter);
             drop(waiting);
-            let answer = match decision {
-                Decision::Accepted => {
-                    review_binding.map_or(Answer::Accepted, Answer::AdminAccepted)
-                }
-                Decision::Declined => review_binding
-                    .map_or(Answer::Failed("approval_declined"), |id| {
-                        Answer::AdminFailed(id, "approval_declined")
-                    }),
-                Decision::Cancelled => review_binding.map_or(
-                    Answer::Failed(if call.name == "policy_apply" {
-                        "approval_cancelled"
-                    } else {
-                        "approval_declined"
-                    }),
-                    |id| Answer::AdminFailed(id, "approval_declined"),
-                ),
-                Decision::Unavailable => review_binding
-                    .map_or(Answer::Failed("approval_unavailable"), |id| {
-                        Answer::AdminFailed(id, "approval_unavailable")
-                    }),
+            let cancelled = if review_binding.is_none() && call.operation().name == "policy_apply" {
+                "approval_cancelled"
+            } else {
+                "approval_declined"
             };
-            let result = reply(&review, &admin.connection, &call, context, answer);
+            let result = reply(
+                &review,
+                &admin.connection,
+                call.operation(),
+                context,
+                confirmation_answer(decision, review_binding, cancelled),
+            );
             if let Some(trace) = &trace {
                 trace.finish(if result.is_error {
                     "refused"
@@ -372,7 +427,11 @@ impl Server {
         call: ToolCall,
         context: &stdio::Context,
     ) -> Outcome {
-        match crate::review::approvals::confirmation(&review, &call.arguments) {
+        match crate::review::approvals::confirmation(&review, &call.arguments, &|| {
+            context
+                .check()
+                .map_err(|_| crate::policy::Error::Interrupted)
+        }) {
             Ok(message) => self.confirm_apply(review, call, context, message),
             Err(_) => Outcome::Tool(reply(
                 &review,
@@ -406,19 +465,22 @@ impl Server {
     fn policy_apply(
         &self,
         review: Arc<crate::review::Context>,
-        call: ToolCall,
+        call: ReviewedCall,
         context: &stdio::Context,
     ) -> Outcome {
-        match crate::review::mcp::prepare_apply_confirmation(
+        let operation = call.operation();
+        // Shield's own review routes always confirm in its form.
+        match crate::review::mcp::prepare_policy_confirmation(
             &review,
             &self.connection,
-            &call.arguments,
+            &operation.arguments,
+            call.action.is_some(),
         ) {
             Ok(Some(question)) => {
                 let mut guard = match PolicyWait::begin(
                     &self.policy_waits,
                     &review,
-                    &call.arguments,
+                    &operation.arguments,
                     &question.proposal_id,
                     context.request_id(),
                 ) {
@@ -428,15 +490,15 @@ impl Server {
                 if let Err(error) = question.claim_web_offer() {
                     // A competing connection may own the durable offer.
                     guard.disarm();
-                    return Self::policy_apply_failure(&review, &call, &error);
+                    return Self::policy_apply_failure(&review, operation, &error);
                 }
-                self.confirm_bound(review, call, context, question.message, None, Some(guard))
+                self.confirm_operation(review, call, context, question.message, None, Some(guard))
             }
-            Err(error) => Self::policy_apply_failure(&review, &call, &error),
+            Err(error) => Self::policy_apply_failure(&review, operation, &error),
             Ok(None) => Outcome::Tool(reply(
                 &review,
                 &self.connection,
-                &call,
+                operation,
                 context,
                 Answer::None,
             )),
@@ -457,6 +519,81 @@ impl Server {
             !committed,
             &|| Ok(()),
         ))
+    }
+
+    fn review_guided_result(
+        &self,
+        review: Arc<crate::review::Context>,
+        call: ToolCall,
+        value: serde_json::Value,
+        context: &stdio::Context,
+    ) -> Outcome {
+        if value["error"].is_null() && requests_review(&call) {
+            if call.name == "registry_add" && value["data"]["status"] == "input_collected" {
+                return self.confirm_registry_source(
+                    review,
+                    call,
+                    value["data"]["retry_arguments"].clone(),
+                    context,
+                );
+            }
+            if value["data"]["apply_arguments"].is_object() {
+                return self.policy_apply(
+                    review,
+                    ReviewedCall::with_action(
+                        call,
+                        "policy_apply",
+                        value["data"]["apply_arguments"].clone(),
+                    ),
+                    context,
+                );
+            }
+        }
+        elicitation::output(&review, &call.name, value, context)
+    }
+
+    fn confirm_registry_source(
+        &self,
+        review: Arc<crate::review::Context>,
+        request: ToolCall,
+        args: serde_json::Value,
+        context: &stdio::Context,
+    ) -> Outcome {
+        let call = ReviewedCall::with_action(request, "registry_add", args);
+        let operation = call.operation();
+        match crate::review::mcp::admin_confirmation(
+            &review,
+            &self.connection,
+            &operation.name,
+            &operation.arguments,
+            &|| {
+                context
+                    .check()
+                    .map_err(|_| crate::policy::Error::Interrupted)
+            },
+        ) {
+            Ok(Some((text, binding))) => {
+                self.confirm_operation(review, call, context, text, Some(binding), None)
+            }
+            Ok(None) => Outcome::Tool(reply(
+                &review,
+                &self.connection,
+                operation,
+                context,
+                Answer::None,
+            )),
+            Err(error) => elicitation::output(
+                &review,
+                &operation.name,
+                crate::review::mcp::admin_form_error(
+                    &review,
+                    &operation.name,
+                    &operation.arguments,
+                    &error,
+                ),
+                context,
+            ),
+        }
     }
 
     fn runtime_refusal(
@@ -509,22 +646,21 @@ impl Server {
             crate::review::mcp::discard_admin(&self.connection, binding);
         }
         Some(match decision {
-            Ok((decision, binding)) => Outcome::Tool(reply(
-                review,
-                &self.connection,
-                call,
-                context,
-                if decision == Decision::Accepted {
-                    binding.map_or(Answer::Accepted, Answer::AdminAccepted)
+            Ok((decision, binding, action)) => {
+                let call = action.as_ref().unwrap_or(call);
+                let cancelled = if call.name == "policy_apply" {
+                    "approval_cancelled"
                 } else {
-                    let code = match decision {
-                        Decision::Cancelled if call.name == "policy_apply" => "approval_cancelled",
-                        Decision::Declined | Decision::Cancelled => "approval_declined",
-                        _ => "approval_unavailable",
-                    };
-                    binding.map_or(Answer::Failed(code), |id| Answer::AdminFailed(id, code))
-                },
-            )),
+                    "approval_declined"
+                };
+                Outcome::Tool(reply(
+                    review,
+                    &self.connection,
+                    call,
+                    context,
+                    confirmation_answer(decision, binding, cancelled),
+                ))
+            }
             Err(error) => Outcome::Method(Err(error)),
         })
     }
@@ -595,7 +731,10 @@ impl stdio::Handler for Server {
         };
         stdio::DeadlineMessages {
             queued: None,
-            running: Some(messages::deadline(&call.name, needs_input_form(call)).to_owned()),
+            running: Some(
+                messages::deadline(&call.name, needs_input_form(call), requests_review(call))
+                    .to_owned(),
+            ),
         }
     }
 
@@ -651,6 +790,7 @@ impl stdio::Handler for Server {
 fn needs_input_form(call: &ToolCall) -> bool {
     matches!(call.name.as_str(), "pack_add" | "pack_update")
         || (call.name == "registry_add"
+            && call.arguments.get("review_ref").is_none()
             && ["name", "location"]
                 .iter()
                 .any(|key| call.arguments.get(key).is_none()))
@@ -660,6 +800,58 @@ fn needs_input_form(call: &ToolCall) -> bool {
                 || !["set", "unset", "override", "clear_override"]
                     .iter()
                     .any(|key| call.arguments.get(key).is_some())))
+}
+
+fn requests_review(call: &ToolCall) -> bool {
+    crate::review::mcp::supports_guided_review(&call.name) && call.arguments["review"] == true
+}
+
+fn operation_call(call: &ToolCall) -> Option<ToolCall> {
+    if call.arguments.get("review").is_none()
+        || !crate::review::mcp::supports_guided_review(&call.name)
+    {
+        return None;
+    }
+    let mut operation = call.clone();
+    operation
+        .arguments
+        .as_object_mut()
+        .expect("review field in object")
+        .remove("review");
+    Some(operation)
+}
+
+/// The host answers the original call. Only Shield supplies the routed operation.
+struct ReviewedCall {
+    request: ToolCall,
+    action: Option<ToolCall>,
+}
+
+impl From<ToolCall> for ReviewedCall {
+    fn from(request: ToolCall) -> Self {
+        Self {
+            request,
+            action: None,
+        }
+    }
+}
+
+impl ReviewedCall {
+    fn operation(&self) -> &ToolCall {
+        self.action.as_ref().unwrap_or(&self.request)
+    }
+
+    fn with_action(request: ToolCall, name: &str, arguments: serde_json::Value) -> Self {
+        let operation = ToolCall {
+            name: name.into(),
+            arguments,
+            progress_token: request.progress_token.clone(),
+        };
+        Self {
+            request,
+            action: Some(operation),
+        }
+    }
 }
 
 fn nul_arguments(review: &crate::review::Context, call: &ToolCall) -> Outcome {
@@ -686,6 +878,20 @@ enum Answer {
     AdminAccepted(u64),
     AdminFailed(u64, &'static str),
     Failed(&'static str),
+}
+
+fn confirmation_answer(
+    decision: Decision,
+    binding: Option<u64>,
+    cancelled: &'static str,
+) -> Answer {
+    let code = match decision {
+        Decision::Accepted => return binding.map_or(Answer::Accepted, Answer::AdminAccepted),
+        Decision::Declined => "approval_declined",
+        Decision::Cancelled => cancelled,
+        Decision::Unavailable => "approval_unavailable",
+    };
+    binding.map_or(Answer::Failed(code), |id| Answer::AdminFailed(id, code))
 }
 
 type PolicyWaits = Arc<Mutex<BTreeMap<String, serde_json::Value>>>;

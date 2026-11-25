@@ -11,7 +11,7 @@ pub(crate) mod testing;
 mod tests;
 
 use super::{
-    Context, Error,
+    Checkpoint, Context, Error,
     model::State,
     storage::{Store, objects},
 };
@@ -37,7 +37,9 @@ mod unsupported_tests {
     #[test]
     fn new_sdk_profile_refuses_without_a_supported_parent_binary_guard() {
         assert!(super::ensure_supported().is_err());
-        assert!(super::RegisteredReadConsumer::admit(std::path::Path::new(".")).is_err());
+        assert!(
+            super::RegisteredReadConsumer::admit(std::path::Path::new("."), &|| Ok(())).is_err()
+        );
         assert!(super::mint(std::path::Path::new("."), "").is_err());
     }
 }
@@ -88,18 +90,27 @@ pub(crate) struct RegisteredReadConsumer {
 }
 
 impl RegisteredReadConsumer {
-    pub(crate) fn admit(project: &Path) -> Result<Self, Error> {
+    pub(crate) fn admit(project: &Path, checkpoint: Checkpoint<'_>) -> Result<Self, Error> {
         ensure_supported()?;
         let secret = secret()?;
-        Self::admit_secret(project, secret)
+        Self::admit_with_secret(project, secret, checkpoint)
     }
 
+    #[cfg(test)]
     fn admit_secret(project: &Path, secret: Secret) -> Result<Self, Error> {
+        Self::admit_with_secret(project, secret, &|| Ok(()))
+    }
+
+    fn admit_with_secret(
+        project: &Path,
+        secret: Secret,
+        checkpoint: Checkpoint<'_>,
+    ) -> Result<Self, Error> {
         ensure_supported()?;
         let profile_directory = files::directory("sdk-read-profiles", false)?;
-        let profile_lease = objects::read_lease(&profile_directory)?;
+        let profile_lease = objects::read_lease(&profile_directory, Some(checkpoint))?;
         let context_directory = files::directory("sdk-read-contexts", false)?;
-        let context_lease = objects::read_lease(&context_directory)?;
+        let context_lease = objects::read_lease(&context_directory, Some(checkpoint))?;
         let record = files::contexts(&context_directory)?
             .contexts
             .remove(&secret.hash())
@@ -195,7 +206,7 @@ pub(crate) fn mint(project: &Path, mapping_digest: &str) -> Result<IssuedReadCon
     };
     let profile_key = profile.key()?;
     let profile_directory = files::directory("sdk-read-profiles", false)?;
-    let _profile_lease = objects::read_lease(&profile_directory)?;
+    let _profile_lease = objects::read_lease(&profile_directory, None)?;
     if files::profiles(&profile_directory)?
         .profiles
         .get(&profile_key)
