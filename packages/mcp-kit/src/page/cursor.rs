@@ -1,6 +1,7 @@
 //! Versioned bounded base64url continuation codec and query/revision binding.
 
 use super::{Error, MAX_CURSOR_BYTES, MAX_KEY_BYTES};
+use crate::content::{base64url, decode_base64url};
 use sha2::{Digest, Sha256};
 
 const VERSION: u8 = 1;
@@ -83,10 +84,7 @@ impl Scope {
         }
         let checksum = digest(&bytes);
         bytes.extend(&checksum[..CHECKSUM]);
-        let text = crate::content::base64(&bytes)
-            .trim_end_matches('=')
-            .replace('+', "-")
-            .replace('/', "_");
+        let text = base64url(&bytes);
         if text.len() > MAX_CURSOR_BYTES {
             return Err(Error::InvalidPosition("sort key exceeds 110 bytes".into()));
         }
@@ -117,22 +115,11 @@ impl Scope {
 }
 
 pub(super) fn decode(cursor: &str) -> Result<Vec<u8>, Error> {
-    if cursor.is_empty()
-        || cursor.len() > MAX_CURSOR_BYTES
-        || !cursor
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
-    {
+    if cursor.len() > MAX_CURSOR_BYTES {
         return Err(Error::InvalidCursor);
     }
-    let mut padded = cursor.replace('-', "+").replace('_', "/");
-    match padded.len() % 4 {
-        0 => {}
-        2 => padded.push_str("=="),
-        3 => padded.push('='),
-        _ => return Err(Error::InvalidCursor),
-    }
-    let bytes = crate::content::decode_base64(&padded, 192).map_err(|_| Error::InvalidCursor)?;
+    let bytes =
+        decode_base64url(cursor, HEADER + MAX_KEY_BYTES + CHECKSUM).ok_or(Error::InvalidCursor)?;
     if bytes.len() < HEADER + CHECKSUM || bytes[0] != VERSION || bytes[65] > 1 {
         return Err(Error::InvalidCursor);
     }

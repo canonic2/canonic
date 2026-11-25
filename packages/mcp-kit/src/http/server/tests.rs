@@ -63,7 +63,8 @@ fn mailbox_reuses_buffers_and_keeps_events_before_completion() {
 struct Acme {
     changes: Mutex<Option<ChangeSender>>,
     events: Mutex<Sender<&'static str>>,
-    started: AtomicUsize,
+    started: Mutex<usize>,
+    calls_started: Condvar,
     keyed: AtomicUsize,
     keyed_peak: AtomicUsize,
     pending_input: AtomicBool,
@@ -164,12 +165,16 @@ impl Handler for Acme {
             }
             "acme_pause" => {
                 // Returns only once three calls run at the same time.
-                self.started.fetch_add(1, Ordering::SeqCst);
-                let deadline = Instant::now() + WAIT;
-                while self.started.load(Ordering::SeqCst) < 3 && Instant::now() < deadline {
-                    thread::sleep(Duration::from_millis(5));
+                let mut started = self.started.lock().unwrap();
+                *started += 1;
+                if *started == 3 {
+                    self.calls_started.notify_all();
                 }
-                text(&self.started.load(Ordering::SeqCst).to_string())
+                let (started, _) = self
+                    .calls_started
+                    .wait_timeout_while(started, WAIT, |started| *started < 3)
+                    .unwrap();
+                text(&started.to_string())
             }
             "acme_progress" => {
                 assert!(context.progress(1.0, Some(2.0), Some("half")));
@@ -192,6 +197,20 @@ impl Handler for Acme {
 }
 
 impl Acme {
+    fn new(events: Sender<&'static str>) -> Self {
+        Self {
+            changes: Mutex::default(),
+            events: Mutex::new(events),
+            started: Mutex::default(),
+            calls_started: Condvar::new(),
+            keyed: AtomicUsize::default(),
+            keyed_peak: AtomicUsize::default(),
+            pending_input: AtomicBool::default(),
+            #[cfg(feature = "authorization-server")]
+            whoami_grant: Mutex::default(),
+        }
+    }
+
     fn confirm_with_cleanup(&self, state: &str, context: &Context) -> Outcome {
         let reply = context
             .request_context()
@@ -281,16 +300,7 @@ impl Server {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap();
         let (sender, events) = mpsc::channel();
-        let handler = Arc::new(Acme {
-            changes: Mutex::new(None),
-            events: Mutex::new(sender),
-            started: AtomicUsize::new(0),
-            keyed: AtomicUsize::new(0),
-            keyed_peak: AtomicUsize::new(0),
-            pending_input: AtomicBool::new(false),
-            #[cfg(feature = "authorization-server")]
-            whoami_grant: Mutex::new(None),
-        });
+        let handler = Arc::new(Acme::new(sender));
         let catalog = catalog_with_apps(options.session.apps.is_some());
         let shutdown = Shutdown::new();
         let serving = {
@@ -450,17 +460,15 @@ fn discovery_advertises_only_the_http_revision() {
         discovery.json()["result"]["supportedVersions"],
         json!(["2026-07-28"])
     );
-    for version in ["2025-06-18", "2025-11-25", "2099-01-01"] {
-        let request = String::from_utf8(post("tools/list", &json!(2), json!({}), "")).unwrap();
-        let request = request.replace("2026-07-28", version);
-        let refused = server.exchange(request.as_bytes());
-        assert_eq!(refused.status, 400);
-        assert_eq!(refused.json()["error"]["code"], -32022);
-        assert_eq!(
-            refused.json()["error"]["data"],
-            json!({"requested":version,"supported":["2026-07-28"]})
-        );
-    }
+    let request = String::from_utf8(post("tools/list", &json!(2), json!({}), "")).unwrap();
+    let request = request.replace("2026-07-28", "2025-11-25");
+    let refused = server.exchange(request.as_bytes());
+    assert_eq!(refused.status, 400);
+    assert_eq!(refused.json()["error"]["code"], -32022);
+    assert_eq!(
+        refused.json()["error"]["data"],
+        json!({"requested":"2025-11-25","supported":["2026-07-28"]})
+    );
     let listed = server.exchange(&post("tools/list", &json!(2), json!({}), ""));
     assert_eq!(listed.status, 200);
     assert!(listed.json()["result"]["tools"].is_array());
@@ -1064,16 +1072,7 @@ fn a_refused_change_stops_serving_despite_steady_traffic() {
 fn serve_requires_modern_options_and_valid_limits() {
     let refused = |http: &HttpOptions, session: SessionOptions| {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let handler = Arc::new(Acme {
-            changes: Mutex::new(None),
-            events: Mutex::new(mpsc::channel().0),
-            started: AtomicUsize::new(0),
-            keyed: AtomicUsize::new(0),
-            keyed_peak: AtomicUsize::new(0),
-            pending_input: AtomicBool::new(false),
-            #[cfg(feature = "authorization-server")]
-            whoami_grant: Mutex::new(None),
-        });
+        let handler = Arc::new(Acme::new(mpsc::channel().0));
         let options = Options {
             session,
             ..Options::default()

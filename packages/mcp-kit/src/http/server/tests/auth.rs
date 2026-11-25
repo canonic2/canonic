@@ -9,10 +9,10 @@ use crate::http::{
 const RESOURCE: &str = "http://127.0.0.1/mcp";
 
 /// Accepts a few fixed tokens; `acme-slow` waits until released.
+#[derive(Default)]
 struct Verifier {
-    slow_started: AtomicBool,
-    released: AtomicBool,
-    slow_done: AtomicBool,
+    // Publishes the release sender once the slow verifier can wait for it.
+    slow_started: Option<Sender<Sender<()>>>,
 }
 
 impl TokenVerifier for Verifier {
@@ -32,12 +32,11 @@ impl TokenVerifier for Verifier {
             "acme-foreign" => Ok(Grant::new(vec!["https://other.example.com/mcp".to_owned()])),
             "acme-down" => Err(Rejection::Unavailable),
             "acme-slow" => {
-                self.slow_started.store(true, Ordering::SeqCst);
-                let deadline = Instant::now() + WAIT;
-                while !self.released.load(Ordering::SeqCst) && Instant::now() < deadline {
-                    thread::sleep(Duration::from_millis(5));
-                }
-                self.slow_done.store(true, Ordering::SeqCst);
+                let (release, resume) = mpsc::channel();
+                self.slow_started.as_ref().unwrap().send(release).unwrap();
+                resume
+                    .recv_timeout(WAIT)
+                    .expect("verifier was never released");
                 Ok(ours())
             }
             _ => Err(Rejection::invalid()),
@@ -70,25 +69,18 @@ impl ScopePolicy for Policy {
     }
 }
 
-fn protected() -> (HttpOptions, Arc<Verifier>) {
-    let verifier = Arc::new(Verifier {
-        slow_started: AtomicBool::new(false),
-        released: AtomicBool::new(false),
-        slow_done: AtomicBool::new(false),
-    });
+fn protected(verifier: Verifier) -> HttpOptions {
     let resource = ResourceServer::new(ResourceOptions::new(
         RESOURCE,
         vec!["https://auth.example.com".to_owned()],
     ))
     .unwrap();
-    let http = HttpOptions {
+    HttpOptions {
         authorization: Some(
-            HttpAuthorization::new(resource, Arc::clone(&verifier) as Arc<dyn TokenVerifier>)
-                .with_policy(Arc::new(Policy)),
+            HttpAuthorization::new(resource, Arc::new(verifier)).with_policy(Arc::new(Policy)),
         ),
         ..http()
-    };
-    (http, verifier)
+    }
 }
 
 fn bearer(token: &str) -> String {
@@ -97,7 +89,7 @@ fn bearer(token: &str) -> String {
 
 #[test]
 fn protected_requests_are_verified_before_the_body_and_carry_the_grant() {
-    let (http, _) = protected();
+    let http = protected(Verifier::default());
     let server = Server::start(http, None);
     let metadata = server.exchange(
         b"GET /.well-known/oauth-protected-resource/mcp HTTP/1.1\r\nHost: localhost\r\n\r\n",
@@ -202,7 +194,7 @@ fn protected_requests_are_verified_before_the_body_and_carry_the_grant() {
 
 #[test]
 fn a_listen_refused_for_its_scopes_releases_its_stream() {
-    let (http, _) = protected();
+    let http = protected(Verifier::default());
     let server = Server::start(
         http,
         Some(SubscriptionOptions {
@@ -248,7 +240,7 @@ fn a_listen_refused_for_its_scopes_releases_its_stream() {
 
 #[test]
 fn listen_streams_end_with_their_result_when_the_grant_expires() {
-    let (http, _) = protected();
+    let http = protected(Verifier::default());
     let server = Server::start(http, Some(SubscriptionOptions::default()));
     let mut stream = server.connect();
     stream
@@ -269,7 +261,10 @@ fn listen_streams_end_with_their_result_when_the_grant_expires() {
 
 #[test]
 fn a_slow_verifier_delays_only_its_own_request() {
-    let (http, verifier) = protected();
+    let (started, waiting) = mpsc::channel();
+    let http = protected(Verifier {
+        slow_started: Some(started),
+    });
     let server = Server::start(http, None);
     let mut slow = server.connect();
     slow.write_all(&call(
@@ -279,14 +274,9 @@ fn a_slow_verifier_delays_only_its_own_request() {
         &bearer("acme-slow"),
     ))
     .unwrap();
-    let deadline = Instant::now() + WAIT;
-    while !verifier.slow_started.load(Ordering::SeqCst) {
-        assert!(
-            Instant::now() < deadline,
-            "the slow verification never started"
-        );
-        thread::sleep(Duration::from_millis(5));
-    }
+    let release = waiting
+        .recv_timeout(WAIT)
+        .expect("the slow verification never started");
     let fast = server.exchange(&call(
         &json!("fast"),
         "acme_whoami",
@@ -295,8 +285,9 @@ fn a_slow_verifier_delays_only_its_own_request() {
     ));
     assert_eq!(fast.json()["result"]["content"][0]["text"], "user-1");
     // The fast request finished while the slow verification was still waiting.
-    assert!(!verifier.slow_done.load(Ordering::SeqCst));
-    verifier.released.store(true, Ordering::SeqCst);
+    release
+        .send(())
+        .expect("the slow verification stopped waiting");
     let slow = Reply::read(&mut BufReader::new(slow));
     assert_eq!(slow.json()["id"], "slow");
 }

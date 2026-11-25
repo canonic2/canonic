@@ -2,6 +2,7 @@
 //! authorization server's endpoints share.
 
 use super::store::Digest;
+pub(super) use crate::content::base64url;
 use crate::http::Response;
 use serde_json::{Value, json};
 use sha2::{Digest as _, Sha256};
@@ -33,29 +34,6 @@ pub(super) fn digest(value: &str) -> Digest {
 /// SHA-256 of raw bytes, such as a fetched key set.
 pub(super) fn digest_bytes(bytes: &[u8]) -> Digest {
     Digest(Sha256::digest(bytes).into())
-}
-
-/// Decodes canonical unpadded base64url of at most `limit` decoded bytes.
-pub(super) fn decode_base64url(text: &str, limit: usize) -> Option<Vec<u8>> {
-    if text.bytes().any(|byte| matches!(byte, b'+' | b'/' | b'=')) {
-        return None;
-    }
-    let mut standard = text.replace('-', "+").replace('_', "/");
-    match standard.len() % 4 {
-        0 => {}
-        2 => standard.push_str("=="),
-        3 => standard.push('='),
-        _ => return None,
-    }
-    crate::content::decode_base64(&standard, limit).ok()
-}
-
-/// Unpadded base64url.
-pub(super) fn base64url(bytes: &[u8]) -> String {
-    crate::content::base64(bytes)
-        .trim_end_matches('=')
-        .replace('+', "-")
-        .replace('/', "_")
 }
 
 /// The S256 challenge of a PKCE verifier.

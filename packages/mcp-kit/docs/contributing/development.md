@@ -84,6 +84,15 @@ flushes; they test reopen/recovery alongside the in-memory protocol transport.
 See the [documentation index](../README.md) for usage guides. When changing
 an API, keep its rustdoc and the corresponding guide consistent.
 
+## Measuring test performance
+
+Use `cargo nextest run --locked --all-features` to collect test durations.
+Rank individual tests and sum their durations by module. Rerun the slowest
+tests in isolation to see which costs persist, and sample the stacks of
+CPU-bound tests to locate the work. When comparing Cargo profiles, measure
+warm suite time, the rebuild after the same source edit, and a build from an
+empty target directory for each profile.
+
 ## Individual Rust verification
 
 Run Rust verification categories individually and select only those needed for

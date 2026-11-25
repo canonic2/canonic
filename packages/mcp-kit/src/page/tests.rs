@@ -50,6 +50,18 @@ fn cursor_refuses_foreign_query_revision_version_and_malformed_input() {
     for text in ["", "A", "{}", "bad=", &"a".repeat(257)] {
         assert_eq!(scope.decode(text), Err(Error::InvalidCursor));
     }
+    let keyset = Scope::new("records", digest(b"filter"));
+    let mut noncanonical = keyset.encode(&Position::Keyset(Vec::new())).unwrap();
+    let last = noncanonical.pop().unwrap();
+    // An 82-byte cursor leaves four unused bits in the last sextet.
+    noncanonical.push(match last {
+        'A' => 'B',
+        'Q' => 'R',
+        'g' => 'h',
+        'w' => 'x',
+        _ => panic!("expected a canonical final sextet"),
+    });
+    assert_eq!(keyset.decode(&noncanonical), Err(Error::InvalidCursor));
     let mut bytes = cursor::decode(&cursor).unwrap();
     bytes[0] += 1;
     let end = bytes.len() - 16;

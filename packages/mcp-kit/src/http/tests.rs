@@ -218,29 +218,31 @@ fn protocol_version_header_must_name_the_modern_revision_and_match_the_body() {
             .filter(|(field, _)| !field.eq_ignore_ascii_case(name))
             .collect()
     };
-    let missing = receive(&without(PROTOCOL_VERSION_HEADER), &request);
-    assert_eq!(refusal(&missing), (400, Some(-32020)));
-    let Exchange::Respond(response) = missing else {
-        unreachable!()
+    let Exchange::Respond(response) = receive(&without(PROTOCOL_VERSION_HEADER), &request) else {
+        panic!("expected an error for the missing version header");
     };
+    assert_eq!(response.status, 400);
     let reply: Value = serde_json::from_slice(&response.body).unwrap();
+    assert_eq!(reply["error"]["code"], -32020);
     assert_eq!(reply["id"], "a", "the request ID is known once classified");
 
     let repeated = headers("tools/list", &[("mcp-protocol-version", b"2026-07-28")]);
     assert_eq!(refusal(&receive(&repeated, &request)), (400, Some(-32020)));
 
-    let mut legacy = without(PROTOCOL_VERSION_HEADER);
-    legacy.push((PROTOCOL_VERSION_HEADER, b"2025-11-25"));
-    let refused = receive(&legacy, &request);
-    assert_eq!(refusal(&refused), (400, Some(-32022)));
-    let Exchange::Respond(response) = refused else {
-        unreachable!()
-    };
-    let reply: Value = serde_json::from_slice(&response.body).unwrap();
-    assert_eq!(
-        reply["error"]["data"],
-        json!({"requested": "2025-11-25", "supported": ["2026-07-28"]})
-    );
+    for version in ["2025-06-18", "2025-11-25", "2099-01-01"] {
+        let mut unsupported = without(PROTOCOL_VERSION_HEADER);
+        unsupported.push((PROTOCOL_VERSION_HEADER, version.as_bytes()));
+        let Exchange::Respond(response) = receive(&unsupported, &request) else {
+            panic!("expected an error for unsupported version {version}");
+        };
+        assert_eq!(response.status, 400);
+        let reply: Value = serde_json::from_slice(&response.body).unwrap();
+        assert_eq!(reply["error"]["code"], -32022);
+        assert_eq!(
+            reply["error"]["data"],
+            json!({"requested": version, "supported": ["2026-07-28"]})
+        );
+    }
 
     let initialize = br#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"acme","version":"1"}}}"#;
     let fields = headers("initialize", &[]);

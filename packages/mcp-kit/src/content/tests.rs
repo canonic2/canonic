@@ -5,6 +5,31 @@ use crate::{Content, Resource, ResourceCatalog, ResourceContents, ResourceTempla
 use serde_json::json;
 
 #[test]
+fn base64url_decoder_enforces_canonical_tails_alphabet_and_limits() {
+    let cases: &[(&str, usize, Option<&[u8]>)] = &[
+        ("", 0, Some(b"")),
+        ("Zg", 1, Some(b"f")),
+        ("Zm8", 2, Some(b"fo")),
+        ("Zm9v", 3, Some(b"foo")),
+        ("-_8", 2, Some(&[0xfb, 0xff])),
+        ("Zh", 1, None),
+        ("Zm9", 2, None),
+        ("Zm9vA", 4, None),
+        ("+_8", 2, None),
+        ("-/8", 2, None),
+        ("Zg==", 3, None),
+        ("Zm8", 1, None),
+    ];
+    for &(encoded, limit, expected) in cases {
+        assert_eq!(
+            decode_base64url(encoded, limit).as_deref(),
+            expected,
+            "{encoded:?} with limit {limit}"
+        );
+    }
+}
+
+#[test]
 fn content_audio_encodes_and_restores_exact_bytes() {
     for bytes in [
         vec![],

@@ -1,10 +1,8 @@
 //! Compact JSON Web Signatures and JSON Web Key Sets for OAuth assertions:
 //! bounded decoding, key set preparation and RS256/ES256 verification.
 
-use super::{
-    assertion::{MAX_KEY_SET_BYTES, MAX_KEYS, RSA_MODULUS_BITS, SigningAlgorithm},
-    wire,
-};
+use super::assertion::{MAX_KEY_SET_BYTES, MAX_KEYS, RSA_MODULUS_BITS, SigningAlgorithm};
+use crate::content::decode_base64url;
 // RS256 hashes with the SHA-256 that `rsa` is built on.
 use rsa::{BoxedUint, pkcs1v15, sha2::Sha256, signature::Verifier as _};
 use serde_json::{Map, Value};
@@ -57,10 +55,10 @@ pub(super) fn parse(token: &str, limit: usize) -> Option<Compact<'_>> {
     };
     let signed = header.len() + 1 + payload.len();
     Some(Compact {
-        header: object(&wire::decode_base64url(header, limit)?)?,
-        claims: object(&wire::decode_base64url(payload, limit)?)?,
+        header: object(&decode_base64url(header, limit)?)?,
+        claims: object(&decode_base64url(payload, limit)?)?,
         signing_input: &token.as_bytes()[..signed],
-        signature: wire::decode_base64url(signature, limit)?,
+        signature: decode_base64url(signature, limit)?,
     })
 }
 
@@ -182,8 +180,8 @@ fn prepare(jwk: &Value) -> Option<Key> {
     };
     let key = match text("kty")? {
         "RSA" => {
-            let modulus = wire::decode_base64url(text("n")?, RSA_MODULUS_BITS.end() / 8)?;
-            let exponent = wire::decode_base64url(text("e")?, MAX_EXPONENT_BYTES)?;
+            let modulus = decode_base64url(text("n")?, RSA_MODULUS_BITS.end() / 8)?;
+            let exponent = decode_base64url(text("e")?, MAX_EXPONENT_BYTES)?;
             let public = rsa::PublicKey::new_with_size_limits(
                 BoxedUint::from_be_slice_vartime(&modulus),
                 BoxedUint::from_be_slice_vartime(&exponent),
@@ -196,8 +194,8 @@ fn prepare(jwk: &Value) -> Option<Key> {
             }
         }
         "EC" if text("crv") == Some("P-256") => {
-            let x = wire::decode_base64url(text("x")?, COORDINATE_BYTES)?;
-            let y = wire::decode_base64url(text("y")?, COORDINATE_BYTES)?;
+            let x = decode_base64url(text("x")?, COORDINATE_BYTES)?;
+            let y = decode_base64url(text("y")?, COORDINATE_BYTES)?;
             if x.len() != COORDINATE_BYTES || y.len() != COORDINATE_BYTES {
                 return None;
             }
