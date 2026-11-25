@@ -240,18 +240,13 @@ impl Staged {
     /// # Panics
     /// Panics if the private unpublished-file invariant is violated. Publication
     /// consumes this value, so callers cannot reach that state.
-    pub fn replace_file(mut self, expected: Option<&(Vec<u8>, u32)>) -> Result<()> {
-        safe(&self.path)?;
+    pub fn replace_file(self, expected: Option<&(Vec<u8>, u32)>) -> Result<()> {
         if read_file(&self.path)?.as_ref() != expected {
             return Err(Error::Conflict(
                 "Native file changed during publication".into(),
             ));
         }
-        let temporary = self.temporary.as_ref().expect("unpublished staging file");
-        fs::rename(temporary, &self.path)?;
-        self.temporary.take();
-        sync_parent(&self.path)?;
-        Ok(())
+        self.publish()
     }
     /// Revalidate the destination after the slow write and flush, immediately
     /// before the rename. Editors do not take setup locks, so this narrows the
@@ -264,24 +259,24 @@ impl Staged {
     /// # Panics
     /// Panics if the private unpublished-file invariant is violated. Publication
     /// consumes this value, so callers cannot reach that state.
-    pub fn replace(mut self, expected: Option<&str>) -> Result<()> {
-        safe(&self.path)?;
+    pub fn replace(self, expected: Option<&str>) -> Result<()> {
         if read(&self.path)?.as_deref() != expected {
             return Err(Error::Conflict(format!(
                 "Configuration changed during setup: {}; run setup again",
                 self.path.display()
             )));
         }
-        let temporary = self
-            .temporary
-            .take()
-            .expect("staged file is published once");
-        if let Err(error) = fs::rename(&temporary, &self.path) {
-            let _ = fs::remove_file(temporary);
-            return Err(error.into());
-        }
-        sync_parent(&self.path)?;
-        Ok(())
+        self.publish()
+    }
+
+    /// Rename the staged file over the destination; on failure, dropping
+    /// `self` removes the staged file. The callers' reads already validated
+    /// the destination path through [`safe`].
+    fn publish(mut self) -> Result<()> {
+        let temporary = self.temporary.as_ref().expect("unpublished staging file");
+        fs::rename(temporary, &self.path)?;
+        self.temporary = None;
+        sync_parent(&self.path)
     }
 }
 

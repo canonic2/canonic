@@ -4,9 +4,6 @@ use std::path::PathBuf;
 
 /// Explicit selections and removal never infer intent from installed CLIs.
 pub(super) fn defaults(context: &Context, options: &Options) -> Vec<String> {
-    if options.remove || !options.agents.is_empty() {
-        return options.agents.clone();
-    }
     let search_path: Vec<_> =
         std::env::var_os("PATH").map_or_default(|value| std::env::split_paths(&value).collect());
     defaults_on_path(context, options, &search_path)

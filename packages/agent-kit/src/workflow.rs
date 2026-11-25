@@ -251,7 +251,7 @@ impl Plan {
 /// Returns an error for invalid product or agent selections, unsupported scopes,
 /// malformed host configuration, filesystem failures or ownership conflicts.
 pub fn prepare(context: &Context, options: &Options) -> Result<Plan> {
-    prepare_with_inputs(context, options, &Inputs::default())
+    prepare_inputs(context, options, &Inputs::default(), SetupPolicy::default())
 }
 
 /// Prepare registration using the embedding product's explicit policy.
@@ -266,15 +266,7 @@ pub fn prepare_with_policy(
     PreparationSession::new(context, options.scope, policy).prepare(options)
 }
 
-pub(crate) fn prepare_with_inputs(
-    context: &Context,
-    options: &Options,
-    inputs: &Inputs,
-) -> Result<Plan> {
-    prepare_inputs(context, options, inputs, SetupPolicy::default())
-}
-
-fn prepare_inputs(
+pub(crate) fn prepare_inputs(
     context: &Context,
     options: &Options,
     inputs: &Inputs,
@@ -438,10 +430,7 @@ fn server_change(
     let ledger_before = inputs.read(&ledger)?;
     let owned = ownership(context, &destination.path, ledger_before.as_deref())?;
     if let Some(record) = &owned {
-        if current.is_some()
-            && current != record.desired
-            && !(record.pending && current == record.previous)
-        {
+        if edited(record, current.as_ref()) {
             return Err(Error::Conflict(format!(
                 "Owned {} entry was edited in {}; resolve it manually",
                 context.product,
@@ -459,22 +448,13 @@ fn server_change(
     if options.remove && current.is_none() && owned.is_none() {
         return Ok(None);
     }
-    let ownership_unchanged = owned
-        .as_ref()
-        .is_some_and(|r| !r.pending && r.desired == desired && r.previous == desired);
     let after = if options.remove && before.is_none() {
         None
     } else {
         Some(after)
     };
-    let record = storage::Record {
-        version: 1,
-        path: destination.path.clone(),
-        product: context.product.clone(),
-        previous: current,
-        desired,
-        pending: owned.as_ref().is_some_and(|r| r.pending),
-    };
+    let (record, ownership_unchanged) =
+        next_record(context, &destination.path, owned.as_ref(), current, desired);
     Ok(Some(Change {
         kind: Kind::Server,
         agents: destination.surfaces,
@@ -512,11 +492,7 @@ fn definition_change(
     };
     let desired = after.clone().map(Value::String);
     match &owned {
-        Some(record)
-            if current.is_some()
-                && current != record.desired
-                && !(record.pending && current == record.previous) =>
-        {
+        Some(record) if edited(record, current.as_ref()) => {
             return Err(Error::Conflict(format!(
                 "{} was edited after setup wrote it; restore or delete it, then run setup again",
                 path.display()
@@ -533,9 +509,8 @@ fn definition_change(
     if options.remove && current.is_none() && owned.is_none() {
         return Ok(None);
     }
-    let ownership_unchanged = owned
-        .as_ref()
-        .is_some_and(|r| !r.pending && r.desired == desired && r.previous == desired);
+    let (record, ownership_unchanged) =
+        next_record(context, &path, owned.as_ref(), current, desired);
     Ok(Some(Change {
         kind: Kind::Definition,
         launch: if options.remove {
@@ -546,14 +521,7 @@ fn definition_change(
             )
         },
         agents: vec![host.id.into()],
-        record: storage::Record {
-            version: 1,
-            path: path.clone(),
-            product: context.product.clone(),
-            previous: current,
-            desired,
-            pending: owned.as_ref().is_some_and(|r| r.pending),
-        },
+        record,
         path,
         before,
         after,
@@ -579,11 +547,9 @@ fn claude_other_rules(
     let current = inputs.document(&path, agents::Format::Json)?.allowed()?;
     let ledger_before = inputs.read(&ledger(context, &path))?;
     // As in claude_approvals: an interrupted publication may own either side.
-    let owned: Vec<String> = ownership(context, &path, ledger_before.as_deref())?
-        .into_iter()
-        .flat_map(|record| [record.desired, record.previous.filter(|_| record.pending)])
-        .flatten()
-        .flat_map(|rules| setting_rules(Some(&rules)))
+    let record = ownership(context, &path, ledger_before.as_deref())?;
+    let owned: Vec<String> = owned_sides(record.as_ref())
+        .flat_map(|rules| setting_rules(Some(rules)))
         .collect();
     let server = format!("mcp__{}", context.product);
     let others: Vec<String> = current
@@ -612,6 +578,49 @@ fn claude_other_rules(
         .cloned()
         .collect();
     Ok((kept, others))
+}
+
+/// Whether an owned file holds an entry setup neither wrote nor was writing.
+fn edited(record: &storage::Record, current: Option<&Value>) -> bool {
+    current.is_some()
+        && current != record.desired.as_ref()
+        && !(record.pending && current == record.previous.as_ref())
+}
+
+/// The values an ownership record may own on disk: its desired side and,
+/// while an interrupted publication is pending, its previous side.
+fn owned_sides(record: Option<&storage::Record>) -> impl Iterator<Item = &Value> {
+    record
+        .into_iter()
+        .flat_map(|r| {
+            [
+                r.desired.as_ref(),
+                r.previous.as_ref().filter(|_| r.pending),
+            ]
+        })
+        .flatten()
+}
+
+/// The ownership record a change publishes, keeping an interrupted
+/// publication pending, and whether the stored record already matches it.
+fn next_record(
+    context: &Context,
+    path: &std::path::Path,
+    owned: Option<&storage::Record>,
+    previous: Option<Value>,
+    desired: Option<Value>,
+) -> (storage::Record, bool) {
+    let unchanged =
+        owned.is_some_and(|r| !r.pending && r.desired == desired && r.previous == desired);
+    let record = storage::Record {
+        version: 1,
+        path: path.to_owned(),
+        product: context.product.clone(),
+        previous,
+        desired,
+        pending: owned.is_some_and(|r| r.pending),
+    };
+    (record, unchanged)
 }
 
 fn ledger(context: &Context, path: &std::path::Path) -> PathBuf {
@@ -760,13 +769,16 @@ fn claude_approvals(
         .filter(|rule| !desired.contains(rule))
         .cloned()
         .collect();
-    let (current, edited) = inputs
-        .document(&path, agents::Format::Json)?
-        .allow_list(&stale, &desired)?;
-    let (owned_hook, previous_hook, edited) = hooks::claude(
-        edited,
+    let document = inputs.document(&path, agents::Format::Json)?;
+    let (current, rules) = document.plan_allow_list(&stale, &desired)?;
+    let hook = hooks::claude(
+        &document,
         record.as_ref(),
         context.prompt_hook.as_ref().filter(|_| !options.remove),
+    )?;
+    let edited = document.edit_settings(
+        rules.as_deref().map(|rules| ("allow", rules)),
+        hook.groups_for_edit(),
     )?;
     let now_owned: Vec<String> = desired
         .iter()
@@ -785,8 +797,8 @@ fn claude_approvals(
         Some(hook) => json!({"permission_rules":rules,"prompt_hook":hook}),
         None => json!(rules),
     };
-    let desired = (!options.remove).then(|| settings(&now_owned, owned_hook));
-    let previous = record.as_ref().map(|_| settings(&owned, previous_hook));
+    let desired = (!options.remove).then(|| settings(&now_owned, hook.owned));
+    let previous = record.as_ref().map(|_| settings(&owned, hook.observed));
     let ownership_unchanged = record
         .as_ref()
         .is_some_and(|r| !r.pending && r.desired == desired && r.previous == desired);

@@ -108,14 +108,88 @@ impl Prepared {
         }
     }
 
-    /// The current `permissions.allow` rules, validated as [`Self::allow_list`] does.
+    /// Read and validate the current `permissions.allow` rules.
     pub(crate) fn allowed(&self) -> Result<Vec<String>> {
         let Parsed::Json(root) = &self.parsed else {
             return Err(Error::invalid(
                 "Permission rules require JSON configuration",
             ));
         };
-        allow_rules(root)
+        permission_rules(root, "allow")
+    }
+
+    pub(crate) fn plan_allow_list(
+        &self,
+        remove: &[String],
+        add: &[String],
+    ) -> Result<(Vec<String>, Option<Vec<String>>)> {
+        let current = self.allowed()?;
+        let updated = updated_permission_rules(&current, remove, add);
+        Ok((current, updated))
+    }
+
+    /// Render changed settings fields together against the original ranges.
+    pub(crate) fn edit_settings(
+        &self,
+        rules: Option<(&str, &[String])>,
+        hooks: Option<(&str, &[Value])>,
+    ) -> Result<String> {
+        count_edit();
+        let Parsed::Json(root) = &self.parsed else {
+            return Err(Error::invalid("Claude settings require JSON configuration"));
+        };
+        let mut writes = Vec::new();
+        if let Some((decision, rules)) = rules {
+            writes.push(JsonWrite::field(
+                root,
+                "permissions",
+                decision,
+                serde_json::json!(rules),
+            )?);
+        }
+        if let Some((event, groups)) = hooks {
+            writes.push(JsonWrite::field(
+                root,
+                "hooks",
+                event,
+                serde_json::json!(groups),
+            )?);
+        }
+        let mut edits = Vec::new();
+        if let [first, second] = writes.as_slice()
+            && std::ptr::eq(first.object, second.object)
+        {
+            // Both parents are absent. Append them together at the root.
+            append_members(
+                &self.source,
+                first.object,
+                &[(first.key, &first.value), (second.key, &second.value)],
+                &mut edits,
+            )?;
+        } else {
+            for write in writes {
+                if let Some(entry) = write
+                    .object
+                    .members
+                    .iter()
+                    .find(|member| member.key == write.key)
+                {
+                    edits.push((
+                        entry.node.range.clone(),
+                        serde_json::to_string_pretty(&write.value)
+                            .expect("serializing a JSON value cannot fail"),
+                    ));
+                } else {
+                    append_members(
+                        &self.source,
+                        write.object,
+                        &[(write.key, &write.value)],
+                        &mut edits,
+                    )?;
+                }
+            }
+        }
+        Ok(apply_text_edits(&self.source, edits))
     }
 
     fn edit_path(
@@ -137,18 +211,21 @@ impl Prepared {
         }
     }
 
-    pub(crate) fn allow_list(
+    fn permission_list(
         &self,
+        decision: &str,
         remove: &[String],
         add: &[String],
     ) -> Result<(Vec<String>, String)> {
-        count_edit();
         let Parsed::Json(root) = &self.parsed else {
             return Err(Error::invalid(
                 "Permission rules require JSON configuration",
             ));
         };
-        edit_allow_list(&self.source, root, remove, add)
+        let current = permission_rules(root, decision)?;
+        let updated = updated_permission_rules(&current, remove, add);
+        let edited = self.edit_settings(updated.as_deref().map(|rules| (decision, rules)), None)?;
+        Ok((current, edited))
     }
 
     /// The groups under `hooks.<event>`: JSON hook files, or Codex's inline
@@ -168,41 +245,20 @@ impl Prepared {
             }
             Parsed::Yaml(_) => return Err(Error::invalid("Hooks require JSON configuration")),
         };
-        let (_, list) = hook_nodes(root, event)?;
-        list.map_or_else(
-            || Ok(Vec::new()),
-            |list| {
-                list.node
-                    .to_value()
-                    .as_array()
-                    .cloned()
-                    .ok_or_else(|| Error::invalid(format!("Hooks for {event} must be a list")))
-            },
-        )
-    }
-
-    pub(crate) fn replace_hook_groups(&self, event: &str, groups: &[Value]) -> Result<String> {
-        count_edit();
-        if self.hook_groups(event)? == groups {
-            return Ok(self.source.to_string());
-        }
-        let Parsed::Json(root) = &self.parsed else {
-            return Err(Error::invalid("Hooks require JSON configuration"));
+        let Some(hooks) = root.members.iter().find(|m| m.key == "hooks") else {
+            return Ok(Vec::new());
         };
-        let after = serde_json::json!(groups);
-        json_edit(&self.source, root, &["hooks"], event, Some(&after)).map(|(_, text)| text)
+        if !hooks.node.value.is_object() {
+            return Err(Error::invalid("Hooks must be an object of event lists"));
+        }
+        match hooks.node.members.iter().find(|m| m.key == event) {
+            Some(list) if list.node.value.is_array() => {
+                Ok(list.node.elements.iter().map(Node::to_value).collect())
+            }
+            Some(_) => Err(list_error()),
+            None => Ok(Vec::new()),
+        }
     }
-}
-
-fn hook_nodes<'a>(root: &'a Node, event: &str) -> Result<(Option<&'a Member>, Option<&'a Member>)> {
-    let hooks = root.members.iter().find(|m| m.key == "hooks");
-    if hooks.is_some_and(|h| !h.node.value.is_object()) {
-        return Err(Error::invalid("Hooks must be an object of event lists"));
-    }
-    Ok((
-        hooks,
-        hooks.and_then(|h| h.node.members.iter().find(|m| m.key == event)),
-    ))
 }
 
 /// Replace or remove one named entry, returning its previous value and edited text.
@@ -479,7 +535,56 @@ impl Parser<'_> {
     }
 }
 
+struct JsonWrite<'a> {
+    object: &'a Node,
+    key: &'a str,
+    value: Value,
+}
+
+impl<'a> JsonWrite<'a> {
+    fn field(root: &'a Node, parent: &'a str, key: &'a str, value: Value) -> Result<Self> {
+        Ok(match json_group(root, &[parent])? {
+            Ok(object) => Self { object, key, value },
+            Err(_) => Self {
+                object: root,
+                key: parent,
+                value: serde_json::json!({key: value}),
+            },
+        })
+    }
+}
+
+type TextEdit = (Range<usize>, String);
+
+fn apply_text_edits(source: &str, mut edits: Vec<TextEdit>) -> String {
+    // Preserve the comma before a member inserted at the same byte.
+    edits.sort_by_key(|(range, _)| range.start);
+    let capacity = edits.iter().fold(source.len(), |len, (range, text)| {
+        len - range.len() + text.len()
+    });
+    let mut result = String::with_capacity(capacity);
+    let mut cursor = 0;
+    for (range, text) in edits {
+        result.push_str(&source[cursor..range.start]);
+        result.push_str(&text);
+        cursor = range.end;
+    }
+    result.push_str(&source[cursor..]);
+    result
+}
+
 fn insert(source: &str, object: &Node, name: &str, value: &Value) -> Result<String> {
+    let mut edits = Vec::new();
+    append_members(source, object, &[(name, value)], &mut edits)?;
+    Ok(apply_text_edits(source, edits))
+}
+
+fn append_members(
+    source: &str,
+    object: &Node,
+    members: &[(&str, &Value)],
+    edits: &mut Vec<TextEdit>,
+) -> Result<()> {
     if !object.value.is_object() {
         return Err(Error::invalid("MCP server collection must be an object"));
     }
@@ -500,16 +605,6 @@ fn insert(source: &str, object: &Node, name: &str, value: &Value) -> Result<Stri
             (line.chars().all(|c| c == ' ' || c == '\t') && !line.is_empty()).then_some(line)
         })
         .map_or_else(|| format!("{parent_indent}{unit}"), str::to_owned);
-    let mut bytes = Vec::new();
-    let mut serializer = serde_json::Serializer::with_formatter(
-        &mut bytes,
-        serde_json::ser::PrettyFormatter::with_indent(unit.as_bytes()),
-    );
-    value
-        .serialize(&mut serializer)
-        .map_err(|e| Error::invalid(e.to_string()))?;
-    let encoded = String::from_utf8(bytes).map_err(|e| Error::invalid(e.to_string()))?;
-    let encoded = encoded.replace('\n', &format!("\n{child_indent}"));
     let closing = object.range.end - 1;
     let line_start = source[..closing].rfind('\n').map_or(0, |index| index + 1);
     let own_line = source[line_start..closing]
@@ -522,18 +617,36 @@ fn insert(source: &str, object: &Node, name: &str, value: &Value) -> Result<Stri
         "\n"
     };
     let suffix = if own_line { "" } else { &parent_indent };
-    let new = format!(
-        "{prefix}{child_indent}{}: {encoded}\n{suffix}",
-        serde_json::to_string(name).expect("serializing a string cannot fail"),
-    );
-    let mut result = source.to_owned();
-    result.insert_str(position, &new);
+    let mut new = prefix.to_owned();
+    for (index, (name, value)) in members.iter().enumerate() {
+        if index > 0 {
+            new.push_str(",\n");
+        }
+        let mut bytes = Vec::new();
+        let mut serializer = serde_json::Serializer::with_formatter(
+            &mut bytes,
+            serde_json::ser::PrettyFormatter::with_indent(unit.as_bytes()),
+        );
+        value
+            .serialize(&mut serializer)
+            .map_err(|e| Error::invalid(e.to_string()))?;
+        let encoded = String::from_utf8(bytes).map_err(|e| Error::invalid(e.to_string()))?;
+        let encoded = encoded.replace('\n', &format!("\n{child_indent}"));
+        new.push_str(&child_indent);
+        new.push_str(&serde_json::to_string(name).expect("serializing a string cannot fail"));
+        new.push_str(": ");
+        new.push_str(&encoded);
+    }
+    new.push('\n');
+    new.push_str(suffix);
     if let Some(last) = object.members.last()
         && last.comma.is_none()
     {
-        result.insert(last.node.range.end, ',');
+        let end = last.node.range.end;
+        edits.push((end..end, ",".into()));
     }
-    Ok(result)
+    edits.push((position..position, new));
+    Ok(())
 }
 
 /// Edit `name` in the object at `path` (one key per level), creating missing
@@ -862,16 +975,17 @@ pub fn hook_group(
     present: bool,
 ) -> Result<(bool, String)> {
     let document = Prepared::parse(source, Format::Json)?;
-    let current = document.hook_groups(event)?;
-    let was = current.contains(group);
+    let mut groups = document.hook_groups(event)?;
+    let was = groups.contains(group);
     if was == present {
         return Ok((was, source.into()));
     }
-    let mut after: Vec<Value> = current.iter().filter(|v| *v != group).cloned().collect();
     if present {
-        after.push(group.clone());
+        groups.push(group.clone());
+    } else {
+        groups.retain(|value| value != group);
     }
-    let edited = document.replace_hook_groups(event, &after)?;
+    let edited = document.edit_settings(None, Some((event, &groups)))?;
     Ok((was, edited))
 }
 
@@ -887,30 +1001,71 @@ pub fn allow_list(
     remove: &[String],
     add: &[String],
 ) -> Result<(Vec<String>, String)> {
-    Prepared::parse(source, Format::Json)?.allow_list(remove, add)
+    permission_list(source, "allow", remove, add)
 }
 
-/// The current rules, after validating `permissions` and `permissions.allow`.
-fn allow_rules(root: &Node) -> Result<Vec<String>> {
+/// Read or edit an exact Claude Code permission list. Unrelated rules and
+/// settings are preserved.
+///
+/// # Errors
+/// Returns an error for malformed JSON, unsupported decisions, or a selected
+/// permission list that is not a string list.
+pub fn permission_list(
+    source: &str,
+    decision: &str,
+    remove: &[String],
+    add: &[String],
+) -> Result<(Vec<String>, String)> {
+    validate_permission_decision(decision)?;
+    Prepared::parse(source, Format::Json)?.permission_list(decision, remove, add)
+}
+
+/// Read Claude Code permission lists from one strict JSON document.
+/// Returns the requested decisions in order, with empty lists for absent fields.
+///
+/// # Errors
+/// Returns an error for malformed JSON, unsupported decisions, or a selected
+/// permission list that is not a list of strings.
+pub fn read_permission_lists<'a>(
+    source: &str,
+    decisions: &[&'a str],
+) -> Result<Vec<(&'a str, Vec<String>)>> {
+    let root = Parser::parse(source, true)?;
+    decisions
+        .iter()
+        .map(|&decision| {
+            validate_permission_decision(decision)?;
+            Ok((decision, permission_rules(&root, decision)?))
+        })
+        .collect()
+}
+
+fn validate_permission_decision(decision: &str) -> Result<()> {
+    if matches!(decision, "deny" | "ask" | "allow") {
+        Ok(())
+    } else {
+        Err(Error::invalid("Unknown permission list"))
+    }
+}
+
+fn permission_rules(root: &Node, decision: &str) -> Result<Vec<String>> {
     let permissions = root.members.iter().find(|m| m.key == "permissions");
-    let allow = permissions.and_then(|p| p.node.members.iter().find(|m| m.key == "allow"));
+    let list = permissions.and_then(|p| p.node.members.iter().find(|m| m.key == decision));
     if permissions.is_some_and(|p| !p.node.value.is_object()) {
         return Err(Error::invalid("Permissions must be an object"));
     }
-    match allow {
-        Some(allow) => serde_json::from_value(allow.node.to_value())
+    match list {
+        Some(list) => serde_json::from_value(list.node.to_value())
             .map_err(|_| Error::invalid("Permission rules must be a list of strings")),
         None => Ok(Vec::new()),
     }
 }
 
-fn edit_allow_list(
-    source: &str,
-    root: &Node,
+fn updated_permission_rules(
+    current: &[String],
     remove: &[String],
     add: &[String],
-) -> Result<(Vec<String>, String)> {
-    let current = allow_rules(root)?;
+) -> Option<Vec<String>> {
     let mut after: Vec<String> = current
         .iter()
         .filter(|rule| !remove.contains(rule))
@@ -921,17 +1076,53 @@ fn edit_allow_list(
             after.push(rule.clone());
         }
     }
-    if after == current {
-        return Ok((current, source.into()));
-    }
-    let list = serde_json::json!(after);
-    let (_, edited) = json_edit(source, root, &["permissions"], "allow", Some(&list))?;
-    Ok((current, edited))
+    (after != current).then_some(after)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn prompt_hook_and_approval_edits_share_the_original_settings_ranges() {
+        const EVENT: &str = "UserPromptSubmit";
+        let rules = ["mcp__acme__observe".to_owned()];
+        let groups = [serde_json::json!({"hooks":[{"type":"command","command":"acme hook"}]})];
+        for source in [
+            "{}",
+            r#"{"unrelated": [ 1, 2 ]}"#,
+            r#"{"permissions":{"deny":[]}}"#,
+            r#"{
+  "permissions": {
+    "deny": []
+  }
+}"#,
+            r#"{"permissions":{"deny": [ "Bash(other:*)" ]},"hooks":{}}"#,
+            r#"{"hooks":{"UserPromptSubmit":[]},"permissions":{"allow":[]}}"#,
+            r#"{"permissions":{"allow":[]},"unrelated": [ 1, 2 ]}"#,
+        ] {
+            let document = Prepared::parse(source, Format::Json).unwrap();
+            let edited = document
+                .edit_settings(Some(("allow", &rules)), Some((EVENT, &groups)))
+                .unwrap();
+            let mut expected: Value = serde_json::from_str(source).unwrap();
+            expected["permissions"]["allow"] = serde_json::json!(rules);
+            expected["hooks"][EVENT] = serde_json::json!(groups);
+            assert_eq!(serde_json::from_str::<Value>(&edited).unwrap(), expected);
+            for literal in [
+                r#""unrelated": [ 1, 2 ]"#,
+                r#""deny":[]"#,
+                r#""deny": []"#,
+                r#""deny": [ "Bash(other:*)" ]"#,
+            ] {
+                if source.contains(literal) {
+                    assert!(edited.contains(literal));
+                }
+            }
+            let document = Prepared::parse(edited.as_str(), Format::Json).unwrap();
+            assert_eq!(document.edit_settings(None, None).unwrap(), edited);
+        }
+    }
 
     #[test]
     fn json_list_helpers_preserve_unrelated_bytes_and_validate_selected_lists() {
@@ -1013,6 +1204,46 @@ mod tests {
             (false, "{}".into())
         );
         assert_eq!(allow_list("{}", &[], &[]).unwrap(), (vec![], "{}".into()));
+    }
+
+    #[test]
+    fn permission_list_preserves_other_decisions() {
+        let source = r#"{"permissions":{"allow": [ "keep" ],"ask":[1],"deny":["old"]}}"#;
+        let (previous, edited) =
+            permission_list(source, "deny", &["old".into()], &["new".into()]).unwrap();
+        assert_eq!(previous, ["old"]);
+        assert_eq!(edited, source.replace(r#"["old"]"#, "[\n  \"new\"\n]"));
+        assert_eq!(
+            permission_list(&edited, "deny", &[], &["new".into()]).unwrap(),
+            (vec!["new".into()], edited)
+        );
+        assert!(permission_list(source, "ask", &[], &[]).is_err());
+        assert!(permission_list(source, "unknown", &[], &[]).is_err());
+    }
+
+    #[test]
+    fn read_permission_lists_preserves_order_and_validates_selected_lists() {
+        let source = r#"{"permissions":{"allow":["one","two"],"ask":[1],"deny":["three"]}}"#;
+        assert_eq!(
+            read_permission_lists(source, &["deny", "allow", "deny"]).unwrap(),
+            [
+                ("deny", vec!["three".to_owned()]),
+                ("allow", vec!["one".to_owned(), "two".to_owned()]),
+                ("deny", vec!["three".to_owned()]),
+            ]
+        );
+        assert_eq!(
+            read_permission_lists(r#"{"permissions":{"allow":["one"]}}"#, &["ask"]).unwrap(),
+            [("ask", Vec::<String>::new())]
+        );
+        for (source, decisions) in [
+            (source, &["deny", "ask"][..]),
+            (source, &["unknown"][..]),
+            (r#"{"permissions":1}"#, &["allow"][..]),
+            (r#"{"permissions":{},}"#, &["allow"][..]),
+        ] {
+            assert!(read_permission_lists(source, decisions).is_err());
+        }
     }
 
     #[test]
@@ -1157,7 +1388,7 @@ mod tests {
             assert_eq!(
                 prepared.allowed().map_err(|e| e.to_string()),
                 prepared
-                    .allow_list(&[], &[])
+                    .permission_list("allow", &[], &[])
                     .map(|(rules, _)| rules)
                     .map_err(|e| e.to_string())
             );

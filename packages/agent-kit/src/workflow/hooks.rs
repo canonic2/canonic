@@ -6,6 +6,19 @@ use serde_json::Value;
 
 const EVENT: &str = "UserPromptSubmit";
 
+#[derive(Default)]
+pub(super) struct HookEdit {
+    pub(super) owned: Option<Value>,
+    pub(super) observed: Option<Value>,
+    groups: Option<Vec<Value>>,
+}
+
+impl HookEdit {
+    pub(super) fn groups_for_edit(&self) -> Option<(&'static str, &[Value])> {
+        self.groups.as_deref().map(|groups| (EVENT, groups))
+    }
+}
+
 pub(super) fn settings_hook(value: Option<&Value>) -> Option<&Value> {
     value
         .and_then(|v| v.get("prompt_hook"))
@@ -13,10 +26,10 @@ pub(super) fn settings_hook(value: Option<&Value>) -> Option<&Value> {
 }
 
 pub(super) fn claude(
-    source: String,
+    document: &Prepared,
     record: Option<&storage::Record>,
     desired: Option<&Value>,
-) -> Result<(Option<Value>, Option<Value>, String)> {
+) -> Result<HookEdit> {
     let previous = settings_hook(record.and_then(|r| r.desired.as_ref()));
     let pending = settings_hook(
         record
@@ -25,17 +38,13 @@ pub(super) fn claude(
     );
     let previous: Vec<_> = [previous, pending].into_iter().flatten().collect();
     if desired.is_none() && previous.is_empty() {
-        return Ok((None, None, source));
+        return Ok(HookEdit::default());
     }
-    edit(&Prepared::parse(source, Format::Json)?, &previous, desired)
+    edit(document, &previous, desired)
 }
 
 /// Own newly inserted groups, leaving an equivalent pre-existing group unowned.
-pub(super) fn edit(
-    document: &Prepared,
-    previous: &[&Value],
-    desired: Option<&Value>,
-) -> Result<(Option<Value>, Option<Value>, String)> {
+fn edit(document: &Prepared, previous: &[&Value], desired: Option<&Value>) -> Result<HookEdit> {
     if let Some(desired) = desired {
         crate::agents::prompt_handlers(desired)?;
     }
@@ -44,42 +53,40 @@ pub(super) fn edit(
         .iter()
         .find(|group| previous.contains(group))
         .cloned();
+    let original_count = groups.len();
     groups.retain(|group| !previous.contains(&group) || Some(group) == desired);
-    let others: Vec<_> = groups
-        .iter()
-        .filter(|g| Some(*g) != desired)
-        .cloned()
-        .collect();
+    let removed = groups.len() != original_count;
     for group in previous {
-        refuse_modified_group(&others, group)?;
+        refuse_modified_group(groups.iter().filter(|g| Some(*g) != desired), group)?;
     }
-    let Some(desired) = desired else {
-        return Ok((
-            None,
-            observed,
-            document.replace_hook_groups(EVENT, &groups)?,
-        ));
+    let owned = if let Some(desired) = desired {
+        let present = groups.contains(desired);
+        if !present {
+            refuse_modified_group(&groups, desired)?;
+            groups.push(desired.clone());
+        }
+        (!present || previous.contains(&desired)).then(|| desired.clone())
+    } else {
+        None
     };
-    let present = groups.contains(desired);
-    if !present {
-        refuse_modified_group(&groups, desired)?;
-        groups.push(desired.clone());
-    }
-    Ok((
-        (!present || previous.contains(&desired)).then(|| desired.clone()),
+    Ok(HookEdit {
+        owned,
         observed,
-        document.replace_hook_groups(EVENT, &groups)?,
-    ))
+        groups: (removed || groups.len() != original_count).then_some(groups),
+    })
 }
 
-fn refuse_modified_group(groups: &[Value], group: &Value) -> Result<()> {
+fn refuse_modified_group<'a>(
+    groups: impl IntoIterator<Item = &'a Value>,
+    group: &Value,
+) -> Result<()> {
     let commands: Vec<_> = group["hooks"]
         .as_array()
         .into_iter()
         .flatten()
         .filter_map(|h| h["command"].as_str())
         .collect();
-    if groups.iter().any(|g| {
+    if groups.into_iter().any(|g| {
         g["hooks"]
             .as_array()
             .into_iter()
@@ -120,8 +127,7 @@ pub(super) fn codex(
     };
     let requested = context.prompt_hook.as_ref().filter(|_| !options.remove);
     if let Some(group) = requested {
-        let others: Vec<_> = inline.iter().filter(|g| *g != group).cloned().collect();
-        refuse_modified_group(&others, group)?;
+        refuse_modified_group(inline.iter().filter(|g| *g != group), group)?;
     }
     let requested = requested.filter(|group| !inline.contains(group));
     if owned.is_none() && requested.is_none() {
@@ -135,11 +141,12 @@ pub(super) fn codex(
         .and_then(|r| r.previous.as_ref());
     let previous_groups: Vec<_> = [previous, pending].into_iter().flatten().collect();
     let document = inputs.document(&path, Format::Json)?;
-    let (desired, observed, edited) = edit(&document, &previous_groups, requested)?;
+    let update = edit(&document, &previous_groups, requested)?;
+    let edited = document.edit_settings(None, update.groups_for_edit())?;
     if before.as_deref() == Some(&edited) && owned.is_none() {
         return Ok(None);
     }
-    let desired = desired.filter(|_| !options.remove);
+    let desired = update.owned.filter(|_| !options.remove);
     let ownership_unchanged = owned
         .as_ref()
         .is_some_and(|r| !r.pending && r.desired == desired && r.previous == desired);
@@ -155,7 +162,7 @@ pub(super) fn codex(
             version: 1,
             path: path.clone(),
             product: context.product.clone(),
-            previous: observed,
+            previous: update.observed,
             desired,
             pending: owned.is_some_and(|r| r.pending),
         },
@@ -246,19 +253,21 @@ mod tests {
         let new = json!({"hooks":[{"type":"command","command":"acme hook user-prompt"}]});
         let source = json!({"hooks":{"UserPromptSubmit":[old]}}).to_string();
         let document = Prepared::parse(source, Format::Json).unwrap();
-        let (desired, observed, _) = edit(&document, &[&new, &old], Some(&new)).unwrap();
-        assert_eq!(observed, Some(old.clone()));
+        let update = edit(&document, &[&new, &old], Some(&new)).unwrap();
+        assert_eq!(update.observed, Some(old.clone()));
         // A second pending record must still accept the unchanged on-disk old
         // group if replacement did not happen before another interruption.
-        let (desired, observed, after) = edit(
+        let update = edit(
             &document,
-            &[desired.as_ref().unwrap(), observed.as_ref().unwrap()],
+            &[
+                update.owned.as_ref().unwrap(),
+                update.observed.as_ref().unwrap(),
+            ],
             Some(&new),
         )
         .unwrap();
-        assert_eq!(desired, Some(new.clone()));
-        assert_eq!(observed, Some(old));
-        let value: Value = serde_json::from_str(&after).unwrap();
-        assert_eq!(value["hooks"][EVENT], json!([new]));
+        assert_eq!(update.owned, Some(new.clone()));
+        assert_eq!(update.observed, Some(old));
+        assert_eq!(update.groups.as_deref(), Some([new].as_slice()));
     }
 }

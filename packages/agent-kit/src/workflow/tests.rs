@@ -67,9 +67,8 @@ fn installed(prompt_hook: Option<Value>) -> (tempfile::TempDir, Context, Options
 fn unchanged_rerun_inspects_without_edits_and_bounds_preparation_edits() {
     let hook = json!({"hooks":[{"type":"command","command":"acme hook","timeout":5}]});
     // Without a hook: three server entries and Claude's rules, one edit each.
-    // A hook adds Codex's hooks.json and a second edit of Claude's settings,
-    // which applies the hook to the rule edit's output.
-    for (prompt_hook, expected_edits, expected_changes) in [(None, 4, 4), (Some(hook), 6, 5)] {
+    // A hook adds Codex's hooks.json. Claude still renders its settings once.
+    for (prompt_hook, expected_changes) in [(None, 4), (Some(hook), 5)] {
         let (_temp, context, options, paths) = installed(prompt_hook);
         let ledgers: Vec<_> = paths.iter().map(|p| ledger(&context, p)).collect();
         let snapshot =
@@ -86,7 +85,7 @@ fn unchanged_rerun_inspects_without_edits_and_bounds_preparation_edits() {
         // Read-only inspection never constructs a discarded edited document.
         assert_eq!(edits(), start);
         let plan = prepare_inputs(&context, &options, &inputs, SetupPolicy::default()).unwrap();
-        assert_eq!(edits() - start, expected_edits);
+        assert_eq!(edits() - start, expected_changes);
         assert_eq!(plan.changes.len(), expected_changes);
         for path in &paths {
             assert_eq!(inputs.counts(path), (1, 1), "{}", path.display());

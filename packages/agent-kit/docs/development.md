@@ -40,6 +40,13 @@ test-name substring; `--lib` selects library tests, and `--test <name>` would
 select a future integration target. No additional test framework is needed for the
 current fixtures.
 
+Use the package's unoptimized development profile for routine tests. Cargo's
+test profile inherits its optimization settings. Optimizing dependencies
+adds substantial compile time on a fresh target for a small saving on a warm
+test run. When investigating a slow test, compare its time in the full suite
+with a focused run before profiling it. Assess any profile change using
+warm test runs, incremental rebuilds and fresh-target builds.
+
 `src/tests.rs` exercises registration, discovery, host encodings, formatting
 preservation, tool approvals, ownership conflicts, repair/removal, and partial
 publication. `storage.rs` has a kernel-lock lifetime regression. Fixtures own

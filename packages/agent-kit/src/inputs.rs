@@ -125,7 +125,13 @@ mod tests {
             agents: vec!["claude".into(), "copilot-cli".into(), "claude".into()],
             ..Default::default()
         };
-        let plan = crate::workflow::prepare_with_inputs(&context, &options, &inputs).unwrap();
+        let plan = crate::workflow::prepare_inputs(
+            &context,
+            &options,
+            &inputs,
+            crate::SetupPolicy::default(),
+        )
+        .unwrap();
         assert_ne!(
             plan.review()["registrations"].as_array().unwrap(),
             &Vec::<serde_json::Value>::new()
