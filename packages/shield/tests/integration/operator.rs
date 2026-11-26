@@ -117,7 +117,7 @@ fn an_explicit_only_checkout_is_its_own_project_without_prior_state() {
         assert_eq!(status["configuration"]["source"], "explicit", "{status}");
         assert_eq!(status["configuration"]["file"], "policy/acme.yml");
     }
-    assert!(checkout.path().join(".shield/state/state.json").is_file());
+    assert!(!checkout.path().join(".shield/state").exists());
     assert!(!checkout.path().join(".shield/config.yml").exists());
     // The ancestor project was never opened.
     assert!(!root.path().join(".shield/state").exists());
@@ -159,7 +159,9 @@ fn policy_file_conflicts_are_visible_in_status_and_doctor() {
     }
     let output = command("status").arg("--json").output().unwrap();
     let report: Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert!(report["policy_files"]["fetch_error"].is_null(), "{report}");
+    assert_eq!(report["policy_files"]["code"], "conflict", "{report}");
+    assert_eq!(report["next"]["tool"], "doctor", "{report}");
+    assert!(!root.path().join(".shield/state").exists());
     assert_eq!(std::fs::read_to_string(lock.path()).unwrap(), broken);
     lock.write_str(r#"{"packs":[]}"#).unwrap();
     let local = root.child(".shield/config.local.yml");
@@ -686,6 +688,64 @@ fn guided_add_asks_setup_questions_in_declaration_order_and_reasks_refused_value
         .expect("selection");
     assert_eq!(selection["variables"], json!({"profile": "acme-other"}));
     assert_eq!(selection["overrides"], json!({"cloud": "off"}));
+}
+
+#[test]
+#[cfg(any(unix, windows))]
+fn guided_add_back_revisits_answered_packs_across_a_pack_without_questions() {
+    let root = TempDir::new().expect("project");
+    let source = TempDir::new().expect("registry");
+    let mut entries = Vec::new();
+    for name in ["a", "b", "c"] {
+        let id = format!("acme/{name}");
+        let path = format!("{name}.json");
+        let mut pack = json!({"schema_version":1,"kind":"pack","id":id,"version":"0.1.0",
+            "description":"Acme setup fixture","license":"UNLICENSED","maintainers":["Acme"],"engines":{"shield":"*"},
+            "capabilities":["structured-rules-v1","argument-rules-v1","variables-v1"],
+            "variables":{"selection":{"type":"choice","description":"Select a value",
+                "required":name != "b","values":["original","changed"]}},
+            "rules":[{"id":"inspect","decision":"allow","conditions":{"domain":"argv","executable":format!("acme-{name}"),"arguments":{"kind":"any"}}}]});
+        if name == "a" {
+            pack["capabilities"]
+                .as_array_mut()
+                .unwrap()
+                .push(json!("dependencies-v1"));
+            pack["dependencies"] = json!([{"pack":"acme/b","requirement":"^0.1"},{"pack":"acme/c","requirement":"^0.1"}]);
+        }
+        let bytes = pack.to_string();
+        source.child(&path).write_str(&bytes).unwrap();
+        entries.push(json!({"id":id,"version":"0.1.0","path":path,"sha256":fixture_digest(bytes.as_bytes())}));
+    }
+    source
+        .child("catalog.json")
+        .write_str(&json!({"schema_version":1,"packs":entries}).to_string())
+        .unwrap();
+    assert_eq!(interactive(&root, &["init"], "yes\n")["code"], 0);
+    let registered = interactive(
+        &root,
+        &["registry", "add", "acme", source.path().to_str().unwrap()],
+        "yes\n",
+    );
+    assert_eq!(registered["code"], 0, "{registered}");
+    let answers = format!(
+        "@{}",
+        json!([
+            {"wait":"acme/a: selection","keys":"1"},
+            {"wait":"acme/c: selection","keys":"\u{1b}"},
+            {"wait":"acme/a: selection","keys":"2"},
+            {"wait":"acme/c: selection","keys":"1"},
+            "yes"
+        ])
+    );
+    let added = interactive(&root, &["pack", "add", "acme/a@0.1.0"], &answers);
+    assert_eq!(added["code"], 0, "{added}");
+    let config = std::fs::read_to_string(root.path().join(".shield/config.yml")).unwrap();
+    let config: Value = serde_saphyr::from_str(&config).unwrap();
+    let packs = config["packs"].as_array().unwrap();
+    let variables = |id: &str| &packs.iter().find(|pack| pack["id"] == id).unwrap()["variables"];
+    assert_eq!(variables("acme/a"), &json!({"selection":"changed"}));
+    assert!(variables("acme/b").is_null());
+    assert_eq!(variables("acme/c"), &json!({"selection":"original"}));
 }
 
 #[test]
@@ -1354,6 +1414,99 @@ fn confirmed_rules_publish_immediately_and_cancellation_preserves_authority() {
     assert_eq!(
         interactive(&root, &["rule", "remove", "status"], "yes\n")["code"],
         1
+    );
+}
+
+#[test]
+#[cfg(unix)]
+#[ignore = "profiles policy edits through a controlling terminal"]
+fn trace_terminal_pack_and_rule_changes_with_fresh_and_aged_state() {
+    let source = local_dependency_source();
+    let registry = source.path().to_str().unwrap();
+    for (age, retained_edits) in [("fresh", 0), ("aged", 4)] {
+        let root = TempDir::new().unwrap();
+        confirmed(&root, &["init"]);
+        confirmed(&root, &["registry", "add", "fixture", registry]);
+        for index in 0..retained_edits {
+            let id = format!("seed-{index}");
+            let result = interactive(
+                &root,
+                &["rule", "add"],
+                &format!("{id}\nargv\nacme\n[\"inspect\"]\nallow\nInspect Acme\n\nyes\n"),
+            );
+            assert_eq!(result["code"], 0, "{result}");
+            confirmed(&root, &["rule", "remove", &id]);
+        }
+        trace_terminal_edit(
+            &root,
+            age,
+            &["pack", "add", "fixture/parent", "--profile", "recommended"],
+            "yes\n",
+        );
+        trace_terminal_edit(
+            &root,
+            age,
+            &["rule", "add"],
+            "acme-inspect\nargv\nacme\n[\"inspect\"]\nallow\nInspect Acme\n\nyes\n",
+        );
+        assert_eq!(
+            query(&root, &["pack", "list"])["packs"]
+                .as_array()
+                .unwrap()
+                .len(),
+            2
+        );
+        let rules = std::fs::read_to_string(root.path().join(".shield/rules.yml")).unwrap();
+        assert!(rules.contains("acme-inspect"), "{rules}");
+    }
+}
+
+#[cfg(unix)]
+fn trace_terminal_edit(root: &TempDir, age: &str, command: &[&str], answers: &str) {
+    let logs = TempDir::new().unwrap();
+    let mut args = command.to_vec();
+    args.extend(["--debug-log-dir", logs.path().to_str().unwrap()]);
+    let result = interactive(root, &args, answers);
+    assert_eq!(result["code"], 0, "{result}");
+    let log = std::fs::read_dir(logs.path())
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .find(|path| path.extension().is_some_and(|ext| ext == "jsonl"))
+        .expect("diagnostic log");
+    let records = std::fs::read_to_string(log).unwrap();
+    let mut completed = false;
+    for record in records
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).unwrap())
+    {
+        let fields = &record["fields"];
+        match record["event"].as_str() {
+            Some("request_end") => {
+                completed = true;
+                assert_eq!(fields["outcome"], "success", "{fields}");
+                eprintln!("terminal_edit {age} {} {fields}", command[0]);
+            }
+            Some("request_span")
+                if matches!(
+                    fields["stage"].as_str(),
+                    Some(
+                        "policy.files"
+                            | "policy.capture_sources"
+                            | "policy.write"
+                            | "projection.generate"
+                            | "state.write"
+                    )
+                ) =>
+            {
+                eprintln!("terminal_span {age} {} {fields}", command[0]);
+            }
+            _ => {}
+        }
+    }
+    assert!(
+        completed,
+        "{age} {} must record its completed trace",
+        command[0]
     );
 }
 

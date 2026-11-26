@@ -458,12 +458,14 @@ pub enum PackCommand {
         /// Bind a pack variable instead of the guided walk; repeatable.
         #[arg(long = "set", value_name = "NAME=VALUE")]
         set: Vec<String>,
-        /// Add the pack to your uncommitted local configuration only.
+        /// Add the pack to this checkout's local configuration.
         #[arg(long)]
         local: bool,
     },
     /// Update one selection or all direct selections, including pinned packs, after confirmation.
     Update { reference: Option<String> },
+    /// Restore missing locked pack artifacts to this machine without changing policy.
+    Restore,
     /// Remove an installed selection after reviewing its effects.
     Remove {
         reference: String,
@@ -487,7 +489,7 @@ pub enum PackCommand {
         /// Remove a rule override. Repeatable.
         #[arg(long = "clear-override", value_name = "ID")]
         clear: Vec<String>,
-        /// Change your uncommitted local configuration instead of the shared one.
+        /// Change this checkout's local configuration.
         #[arg(long)]
         local: bool,
     },

@@ -144,19 +144,6 @@ fn mcp_connections_unknown_bindings_fail_closed_when_snapshot_is_unavailable() {
                     .contains("MCP bindings could not be checked"),
                 "{response}"
             );
-            let completion = translate_for(
-                project,
-                agent,
-                Event::Completed,
-                &serde_json::to_vec(&json!({"hook_event_name":"PostToolUse","tool_name":format!("mcp__{alias}__inspect"),
-                    "tool_use_id":"acme-tool","session_id":"acme-session","cwd":project,"tool_input":{}}))
-                .unwrap(),
-            );
-            assert_eq!(
-                completion,
-                json!({"systemMessage":"Shield completion history unavailable; MCP bindings could not be checked."}),
-                "a completion cannot be denied, so it reports the gap instead"
-            );
         }
     }
     fs::write(&path, original).unwrap();
@@ -171,6 +158,135 @@ fn mcp_connections_unknown_bindings_fail_closed_when_snapshot_is_unavailable() {
             json!({})
         );
     }
+}
+
+#[test]
+fn mcp_completions_use_retained_call_identity_after_policy_and_binding_changes() {
+    let (_root, context) = snapshot_fixture();
+    let project = Path::new(&context.project_root);
+    let name = "mcp__acme_snapshot__inspect";
+    let arguments = json!({"query":"acme-managed-input"});
+    for agent in ["claude", "codex"] {
+        assert_permitted(&tool(project, agent, name, &arguments), agent);
+    }
+    fs::write(
+        project.join(".shield/config.yml"),
+        "schema_version: 1\npacks: [\n",
+    )
+    .unwrap();
+    fs::write(project.join(".mcp.json"), "{").unwrap();
+    let log = std::sync::Arc::new(crate::diagnostics::Log::create(&project.join("logs")).unwrap());
+    let trace = log.request("hook", "mcp-completions", None, None).unwrap();
+    let private = "acme-unverified-callback-input";
+    {
+        let _scope = trace.enter();
+        for (agent, event, phase, arguments) in [
+            ("claude", "PostToolUse", Event::Completed, arguments.clone()),
+            ("codex", "PostToolUse", Event::Completed, arguments.clone()),
+            (
+                "claude",
+                "PostToolUseFailure",
+                Event::Failed,
+                json!({"query":private}),
+            ),
+        ] {
+            let host = native_host(project, agent, event, name, &arguments);
+            assert_eq!(
+                translate_for(project, agent, phase, &serde_json::to_vec(&host).unwrap()),
+                json!({}),
+                "{agent}: {event}"
+            );
+        }
+    }
+    assert_eq!(trace.recorded_count("integration.rebind_attempts"), 0);
+    assert_eq!(trace.recorded_count("policy.preparations"), 0);
+    assert_eq!(trace.recorded_count("history.appended_records"), 3);
+    trace.finish("success");
+    assert!(!journal(project).contains(private));
+    let history = review::history_events(project).unwrap();
+    let events = history["events"].as_array().unwrap();
+    for agent in ["claude", "codex"] {
+        let event = |name| {
+            events
+                .iter()
+                .find(|event| {
+                    event["provenance"]["agent"] == agent
+                        && event["provenance"]["host_event_name"] == name
+                })
+                .unwrap()
+        };
+        let decision = event("PreToolUse");
+        let completed = event("PostToolUse");
+        assert_eq!(
+            completed["links"]["decision_event_id"],
+            decision["event_id"]
+        );
+        assert_eq!(completed["details"]["operation"]["arguments"], arguments);
+    }
+    let failed = events
+        .iter()
+        .find(|event| event["provenance"]["host_event_name"] == "PostToolUseFailure")
+        .unwrap();
+    assert!(failed["links"]["decision_event_id"].is_null());
+    assert_eq!(failed["details"]["operation"]["arguments"], "[REDACTED]");
+}
+
+#[test]
+fn external_native_mcp_completion_retains_only_unlinked_evidence() {
+    let (root, _) = fixture();
+    let name = "mcp__external__inspect";
+    let arguments = json!({"query":"acme-private-callback-input"});
+    assert_eq!(tool(root.path(), "claude", name, &arguments), json!({}));
+    let host = native_host(root.path(), "claude", "PostToolUse", name, &arguments);
+    assert_eq!(
+        translate_for(
+            root.path(),
+            "claude",
+            Event::Completed,
+            &serde_json::to_vec(&host).unwrap()
+        ),
+        json!({})
+    );
+    assert!(!journal(root.path()).contains("acme-private-callback-input"));
+    let history = review::history_events(root.path()).unwrap();
+    let events = history["events"].as_array().unwrap();
+    assert_eq!(events.len(), 1, "{history}");
+    assert_eq!(events[0]["kind"], "completion");
+    assert!(events[0]["links"]["decision_event_id"].is_null());
+    assert!(events[0]["links"]["request_id"].is_null());
+    assert_eq!(
+        events[0]["details"]["operation"],
+        json!({"kind":"mcp","alias":"external","tool":"inspect","arguments":"[REDACTED]"})
+    );
+}
+
+#[test]
+fn mcp_completion_does_not_open_policy_to_initialize_missing_history() {
+    let (_source, context) = snapshot_fixture();
+    let root = assert_fs::TempDir::new().unwrap();
+    let source = Path::new(&context.project_root).join(".shield");
+    let shield = root.path().join(".shield");
+    fs::create_dir(&shield).unwrap();
+    for name in ["config.yml", "rules.json"] {
+        fs::copy(source.join(name), shield.join(name)).unwrap();
+    }
+    let host = native_host(
+        root.path(),
+        "codex",
+        "PostToolUse",
+        "mcp__acme_snapshot__inspect",
+        &json!({}),
+    );
+    assert_eq!(
+        translate_for(
+            root.path(),
+            "codex",
+            Event::Completed,
+            &serde_json::to_vec(&host).unwrap()
+        ),
+        json!({"systemMessage":"Shield could not record the tool completion in history."})
+    );
+    assert!(!shield.join("state").exists());
 }
 
 #[test]

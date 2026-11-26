@@ -1,6 +1,7 @@
 //! Durable admission, recovery, cancellation and retained evidence without activation.
 use super::*;
 use crate::review::preparation_tasks::TTL_MS;
+use std::time::{Duration, Instant};
 
 fn fixture() -> (assert_fs::TempDir, Context, Runtime) {
     let (root, context) = crate::review::tests::enrolled();
@@ -14,6 +15,40 @@ pub(super) fn input(key: &str) -> Value {
         .unwrap()
         .retain(|_, value| !value.is_null());
     value
+}
+
+#[test]
+fn preparation_progress_survives_a_snapshot_reader_holding_the_lease() {
+    use std::{sync::mpsc, thread};
+
+    let (_root, _, runtime) = fixture();
+    let store = runtime.store().unwrap();
+    let (record, _owner) = store
+        .reserve(&input("acme-progress"), &|| Ok(()))
+        .unwrap()
+        .unwrap();
+    let reader = storage::objects::read_lease(&store.root, None).unwrap();
+    thread::scope(|scope| {
+        let (started, waiting) = mpsc::channel();
+        let (sent, done) = mpsc::channel();
+        let store = &store;
+        let id = &record.id;
+        scope.spawn(move || {
+            started.send(()).unwrap();
+            sent.send(store.stage(id, "Checking Acme policy")).unwrap();
+        });
+        waiting.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert!(matches!(
+            done.recv_timeout(Duration::from_millis(600)),
+            Err(mpsc::RecvTimeoutError::Timeout)
+        ));
+        drop(reader);
+        done.recv_timeout(Duration::from_secs(5)).unwrap().unwrap();
+    });
+    assert_eq!(
+        store.get(&record.id).unwrap().message,
+        "Checking Acme policy"
+    );
 }
 
 #[test]
@@ -195,7 +230,23 @@ fn preparation_tasks_cancellation_remains_responsive_while_a_worker_is_finishing
         .unwrap();
     let store = runtime.store().unwrap();
     assert_eq!(store.get(&record.id).unwrap().status, "working");
-    store.cancel(&record.id).unwrap();
+    let reader = storage::objects::read_lease(&store.root, None).unwrap();
+    let checks = std::cell::Cell::new(0);
+    let checkpoint = || {
+        checks.set(checks.get() + 1);
+        if checks.get() == 3 {
+            Err(crate::policy::Error::Interrupted)
+        } else {
+            Ok(())
+        }
+    };
+    assert!(matches!(
+        store.cancel(&record.id, &checkpoint),
+        Err(Error::Policy(crate::policy::Error::Interrupted))
+    ));
+    assert!(!store.get(&record.id).unwrap().cancel_requested);
+    drop(reader);
+    store.cancel(&record.id, &|| Ok(())).unwrap();
     assert!(store.get(&record.id).unwrap().cancel_requested);
     release.send(()).unwrap();
     runtime.join();
@@ -223,17 +274,20 @@ fn preparation_tasks_recover_interrupted_owners_without_replaying_or_creating_pr
     drop(owner);
     let record_path = store.directory(&record.id).unwrap().join("record.json");
     let recorded = std::fs::read(&record_path).unwrap();
+    let other_poll =
+        storage::objects::read_lease(&store.directory(&record.id).unwrap(), None).unwrap();
     assert_eq!(
         observer
             .observation_store()
+            .observe(&record.id, true, &|| Ok(()))
             .unwrap()
-            .observe(&record.id)
-            .unwrap()
+            .record
             .status,
         "failed"
     );
     assert_eq!(std::fs::read(&record_path).unwrap(), recorded);
     assert_eq!(store.get(&record.id).unwrap().status, "working");
+    drop(other_poll);
     // Actual mutating access still persists recovery after prior observation.
     assert_eq!(
         observer.store().unwrap().get(&record.id).unwrap().status,
@@ -274,13 +328,17 @@ fn preparation_task_observation_never_repairs_a_missing_mutex() {
     std::fs::remove_file(&owner_mutex).unwrap();
     let record_path = store.directory(&record.id).unwrap().join("record.json");
     let recorded = std::fs::read(&record_path).unwrap();
-    let observer = Runtime::new(&context).observation_store().unwrap();
-    let recorded_status = observer.observe(&record.id).unwrap();
+    let reopened = Runtime::new(&context);
+    let observer = reopened.observation_store();
+    let recorded_status = observer
+        .observe(&record.id, true, &|| Ok(()))
+        .unwrap()
+        .record;
     assert_eq!(recorded_status.status, "working");
     assert!(recorded_status.message.contains("unchecked"));
     assert!(!owner_mutex.exists());
     assert_eq!(std::fs::read(&record_path).unwrap(), recorded);
-    assert!(observer.observe(&record.id).is_ok());
+    assert!(observer.observe(&record.id, true, &|| Ok(())).is_ok());
     assert_eq!(std::fs::read(&record_path).unwrap(), recorded);
     assert!(!owner_mutex.exists());
 }
@@ -293,7 +351,7 @@ fn preparation_tasks_cancel_intent_wins_late_completion_and_terminal_rewrites_re
         .reserve(&input("acme-cancel"), &|| Ok(()))
         .unwrap()
         .unwrap();
-    store.cancel(&record.id).unwrap();
+    store.cancel(&record.id, &|| Ok(())).unwrap();
     assert!(store.get(&record.id).unwrap().cancel_requested);
     store
         .settle(
@@ -309,7 +367,7 @@ fn preparation_tasks_cancel_intent_wins_late_completion_and_terminal_rewrites_re
     store
         .settle(&record.id, "failed", "late failure", None)
         .unwrap();
-    store.cancel(&record.id).unwrap();
+    store.cancel(&record.id, &|| Ok(())).unwrap();
     assert_eq!(std::fs::read(&path).unwrap(), before);
     assert!(
         storage::Store::open(root.path())
@@ -387,12 +445,119 @@ fn preparation_tasks_idempotency_expiry_and_cancelled_creation_keep_exact_record
     assert!(store.reserve(&changed, &|| Ok(())).is_err());
     drop(owner);
     let mut expired = record;
+    expired.status = "failed".into();
     expired.created = clock::now_ms().unwrap() - TTL_MS - 1;
     expired.updated = expired.created;
     store.save(&expired).unwrap();
     assert!(matches!(store.get(&expired.id), Err(Error::Missing)));
     store.reserve(&input("acme-next"), &|| Ok(())).unwrap();
     assert!(!store.directory(&expired.id).unwrap().exists());
+}
+
+#[test]
+fn preparation_tasks_keep_an_aged_owned_worker_live_until_settlement() {
+    for cancel in [false, true] {
+        let (_root, context, runtime) = fixture();
+        let store = runtime.store().unwrap();
+        let arguments = input("acme-owned");
+        let (mut record, owner) = store.reserve(&arguments, &|| Ok(())).unwrap().unwrap();
+        let _owner = owner.unwrap();
+        record.created = clock::now_ms().unwrap() - TTL_MS - 1;
+        record.updated = record.created;
+        store.save(&record).unwrap();
+
+        let observation = store.observe(&record.id, false, &|| Ok(())).unwrap();
+        assert_eq!(observation.record.status, "working");
+        let (replayed, duplicate) = store.reserve(&arguments, &|| Ok(())).unwrap().unwrap();
+        assert_eq!(replayed.id, record.id);
+        assert!(duplicate.is_none());
+        if cancel {
+            store.cancel(&record.id, &|| Ok(())).unwrap();
+        }
+        let publish: Publish = Box::new(|_, data| Ok(data));
+        store.run(&record.id, &context, &arguments, &publish);
+        let outcome = store.observe(&record.id, true, &|| Ok(())).unwrap();
+        assert_eq!(
+            outcome.record.status,
+            if cancel { "cancelled" } else { "completed" }
+        );
+        assert_eq!(outcome.result.is_some(), !cancel);
+    }
+}
+
+#[test]
+fn preparation_tasks_completed_worker_keeps_its_result_while_settlement_waits() {
+    use clap::Parser as _;
+    use std::{sync::mpsc, thread};
+
+    let (_root, context, runtime) = fixture();
+    let store = runtime.store().unwrap();
+    let arguments = input("acme-settlement");
+    let (record, owner) = store.reserve(&arguments, &|| Ok(())).unwrap().unwrap();
+    let logs = assert_fs::TempDir::new().unwrap();
+    let cli = crate::cli::Cli::parse_from([
+        "shield",
+        "--debug-log-dir",
+        logs.path().to_str().unwrap(),
+        "status",
+    ]);
+    let log = std::sync::Arc::new(crate::diagnostics::Log::open(&cli));
+    let trace = log
+        .request("mcp", "preparation_settlement", None, None)
+        .unwrap();
+    thread::scope(|scope| {
+        let (publishing, ready) = mpsc::channel();
+        let (release, proceed) = mpsc::channel();
+        let worker_store = &store;
+        let id = record.id.as_str();
+        let request = trace.clone();
+        let worker = scope.spawn(move || {
+            let _scope = request.enter();
+            let _owner = owner.unwrap();
+            let publish: Publish = Box::new(move |_, data| {
+                publishing.send(()).unwrap();
+                proceed.recv_timeout(Duration::from_secs(5)).unwrap();
+                Ok(data)
+            });
+            worker_store.run(id, &context, &arguments, &publish);
+        });
+        ready.recv_timeout(Duration::from_secs(5)).unwrap();
+        let writer = Directory::enter(&store.root).unwrap();
+        let checks = std::cell::Cell::new(0);
+        assert!(matches!(
+            store.observe(id, true, &|| {
+                checks.set(checks.get() + 1);
+                if checks.get() == 3 {
+                    Err(crate::policy::Error::Interrupted)
+                } else {
+                    Ok(())
+                }
+            }),
+            Err(Error::Policy(crate::policy::Error::Interrupted))
+        ));
+        release.send(()).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while trace.recorded_count("state.object_lease_waits") == 0 {
+            assert!(
+                !worker.is_finished(),
+                "worker exited without waiting to settle"
+            );
+            assert!(Instant::now() < deadline, "worker never reached settlement");
+            thread::sleep(Duration::from_millis(5));
+        }
+        assert!(store.directory(id).unwrap().join("result.json").is_file());
+        assert_eq!(store.get(id).unwrap().status, "working");
+        drop(writer);
+        worker.join().unwrap();
+    });
+    trace.finish("success");
+    let observed = store.observe(&record.id, true, &|| Ok(())).unwrap();
+    assert_eq!(observed.record.status, "completed");
+    assert_eq!(
+        observed.result.unwrap()["data"]["preparation_task_id"],
+        record.id
+    );
+    assert!(store.capture(&record.id).is_ok());
 }
 
 #[test]
@@ -414,10 +579,14 @@ fn preparation_tasks_worker_finishes_private_capture_without_creating_live_autho
         .unwrap();
     runtime.join();
     let store = runtime.store().unwrap();
-    let completed = store.get(&record.id).unwrap();
-    assert_eq!(completed.status, "completed", "{}", completed.message);
+    let completed = store.observe(&record.id, true, &|| Ok(())).unwrap();
     assert_eq!(
-        store.result(&completed).unwrap()["data"]["preparation_task_id"],
+        completed.record.status, "completed",
+        "{}",
+        completed.record.message
+    );
+    assert_eq!(
+        completed.result.unwrap()["data"]["preparation_task_id"],
         record.id
     );
     assert!(store.capture(&record.id).is_ok());
@@ -432,9 +601,11 @@ fn preparation_tasks_worker_finishes_private_capture_without_creating_live_autho
     let checkpoint = std::fs::read(&checkpoint_path).unwrap();
     let record_path = store.directory(&record.id).unwrap().join("record.json");
     let recorded = std::fs::read(&record_path).unwrap();
-    let observed = reopened.observation_store().unwrap();
-    let observed_record = observed.observe(&record.id).unwrap();
-    assert!(observed.result(&observed_record).is_ok());
+    let observed = reopened
+        .observation_store()
+        .observe(&record.id, true, &|| Ok(()))
+        .unwrap();
+    assert!(observed.result.is_some());
     assert_eq!(std::fs::read(&checkpoint_path).unwrap(), checkpoint);
     assert_eq!(std::fs::read(&record_path).unwrap(), recorded);
     assert_eq!(
@@ -467,7 +638,7 @@ fn copied_task_directories_are_repaired_only_by_owned_writers() {
         .unwrap();
     drop(owner);
     let (_copied, current, runtime) = fixture();
-    let target = runtime.observation_store().unwrap();
+    let target = runtime.observation_store();
     copy(&source.root, &target.root);
     let old_directory = target.directory(&old.id).unwrap();
     let neighbor = target.root.join("acme-user-neighbor");
@@ -482,7 +653,7 @@ fn copied_task_directories_are_repaired_only_by_owned_writers() {
     for path in [&target.root, &old_directory, &neighbor] {
         std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
     }
-    assert!(target.observe(&old.id).is_err());
+    assert!(target.observe(&old.id, true, &|| Ok(())).is_err());
     assert_eq!(std::fs::read(&record_path).unwrap(), recorded);
     for path in [&target.root, &old_directory, &neighbor] {
         assert_eq!(
@@ -512,7 +683,7 @@ fn copied_task_directories_are_repaired_only_by_owned_writers() {
         .unwrap()
         .unwrap();
     assert_eq!(fresh.project, current.project_id);
-    assert!(writer.observe(&old.id).is_err());
+    assert!(writer.observe(&old.id, true, &|| Ok(())).is_err());
     assert!(!old_directory.exists());
     assert_eq!(
         std::fs::metadata(&neighbor).unwrap().permissions().mode() & 0o777,

@@ -285,6 +285,13 @@ impl PackDocument {
         {
             extra.insert("executable-discovery-v1".to_owned());
         }
+        if self
+            .variables
+            .values()
+            .any(variables::Declaration::executable_paths)
+        {
+            extra.insert("executable-path-lists-v1".to_owned());
+        }
         if features.selectors.parts {
             extra.insert("variable-parts-v1".to_owned());
         }

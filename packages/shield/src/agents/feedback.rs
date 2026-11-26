@@ -74,6 +74,7 @@ fn raw_deny(code: &str) -> Reply {
         "invalid-host-input" | "invalid-host-event" | "invalid-input" => "Shield: invalid request. Correct the tool input before retrying.".to_owned(),
         "invalid-context" => "Shield: the working directory is unavailable or outside this project's permitted context. Use an existing project directory or an external directory approved for this tool. An external shell working directory requires write access. Additional folder access requires policy_propose and the user's policy_apply confirmation.".to_owned(),
         "runtime-busy" => "Shield: Shield state is briefly locked; retry the request.".to_owned(),
+        "policy-changed" => "Shield: policy changed or a rule expired while checking this request. Retry the identical request to evaluate current policy.".to_owned(),
         "handoff-failed" | "project-changed" => "Shield: current authorization could not be verified. Inspect the status tool and retry only after the user resolves any protection problem.".to_owned(),
         "compiled-cache-unavailable" => "Shield: its compiled policy folder is unusable. Call the doctor tool and ask the user to fix the folder or choose another with shield mcp setup --cache-dir, then retry the original request.".to_owned(),
         "protection-failure" => "Shield could not verify this hook's project state. Use the doctor or status MCP tool to diagnose it, then request any necessary integration repair with mcp_setup and in-session user confirmation. Do not edit protected runtime state.".to_owned(),

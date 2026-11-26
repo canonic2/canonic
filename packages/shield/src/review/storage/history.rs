@@ -89,6 +89,53 @@ pub(in crate::review) struct View {
 #[cfg(test)]
 pub(in crate::review) use locking::lock_diagnostics;
 pub(in crate::review) use locking::{lock, lock_control, lock_optional};
+
+/// Mask transient comparison hashes before they enter the journal. The key
+/// stays in local state and is never included in an exported observation.
+/// The caller owns the history lock, including when creating the key.
+pub(in crate::review) fn protect_digests(
+    store: &Store,
+    project_id: &str,
+    details: &mut Value,
+    fields: &[&str],
+) -> Result<(), Error> {
+    use ring::{
+        hmac,
+        rand::{SecureRandom, SystemRandom},
+    };
+
+    let path = store.directory.join("history-comparison.key");
+    let mut key = [0; 32];
+    match super::objects::read_file(&path) {
+        Ok(mut file) => {
+            if file.metadata()?.len() != key.len() as u64 {
+                return Err(Error::Invalid("invalid history comparison key"));
+            }
+            file.read_exact(&mut key)?;
+        }
+        Err(Error::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => {
+            SystemRandom::new()
+                .fill(&mut key)
+                .map_err(|_| Error::Invalid("history key entropy unavailable"))?;
+            super::super::files::write_private(&path, &key)?;
+        }
+        Err(error) => return Err(error),
+    }
+    let key = hmac::Key::new(hmac::HMAC_SHA256, &key);
+    for &field in fields {
+        let digest = details[field]
+            .as_str()
+            .ok_or(Error::Invalid("missing history comparison digest"))?;
+        let mut mac = hmac::Context::with_key(&key);
+        mac.update(project_id.as_bytes());
+        mac.update(field.as_bytes());
+        mac.update(digest.as_bytes());
+        let tag = mac.sign();
+        details[field] = json!(canonic_registry_kit::digest::encode(tag.as_ref()));
+    }
+    Ok(())
+}
+
 fn regular(path: &Path) -> Result<(), Error> {
     let m = fs::symlink_metadata(path)?;
     if !m.is_file() || m.file_type().is_symlink() {
@@ -787,36 +834,42 @@ fn recover_tail(recovery: &Path, file: &mut File) -> Result<(), Error> {
         .ok_or(Error::Invalid("corrupt history tail"))?
         + 1;
     let fragment = &tail[boundary..];
-    let mut options = OpenOptions::new();
-    options.append(true);
-    if recovery.exists() {
+    let mut preserved = if let Some(file) = create_error_record(recovery)? {
+        file
+    } else {
         regular(recovery)?;
         if fs::metadata(recovery)?.len() + fragment.len() as u64 > 1024 * 1024 {
             return Err(Error::Invalid(
                 "preserved history failure budget exhausted; clear to reset",
             ));
         }
-    } else {
-        options.create_new(true);
-    }
-    private(&mut options);
-    let mut preserved = options.open(recovery)?;
+        OpenOptions::new().append(true).open(recovery)?
+    };
     preserved.write_all(fragment)?;
     sync(&preserved)?;
     file.set_len(start + boundary as u64)?;
     Ok(())
 }
 pub(in crate::review) fn mark_failure(store: &Store, state: &State) {
-    if !resources::failure_fits(store).unwrap_or(false) {
-        return;
+    // Marker presence is sufficient. An empty file needs no payload budget or
+    // capacity scan, which could race a segment rotation under the history lock.
+    if let Ok(path) = error_path(store, state)
+        && let Ok(Some(file)) = create_error_record(&path)
+    {
+        let _ = sync(&file);
+        #[cfg(unix)]
+        let _ = File::open(&store.directory).and_then(|directory| sync(&directory));
     }
-    if let Ok(path) = error_path(store, state) {
-        let mut options = OpenOptions::new();
-        options.write(true).create_new(true);
-        private(&mut options);
-        if let Ok(mut file) = options.open(path) {
-            let _ = file.write_all(b"optional history publication failed\n");
-        }
+}
+
+fn create_error_record(path: &Path) -> std::io::Result<Option<File>> {
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    private(&mut options);
+    match options.open(path) {
+        Ok(file) => Ok(Some(file)),
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => Ok(None),
+        Err(error) => Err(error),
     }
 }
 /// Removes segments and failure records of every other generation, and segment

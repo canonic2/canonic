@@ -21,13 +21,34 @@ use std::{
 /// The plan format this engine writes and loads. Change it whenever compiled
 /// bytes would decide differently, such as how patterns are prepared, so
 /// plans written before the change are rebuilt instead of loaded.
-pub(crate) const FORMAT: &str = "SHPLAN16";
+pub(crate) const FORMAT: &str = "SHPLAN18";
 const MAGIC: &[u8] = FORMAT.as_bytes();
 const HEADER: usize = 16;
 const ENTRY: usize = 16;
 pub(crate) const MAX_BYTES: usize = 512 * 1024 * 1024;
 const MAX_ROWS: usize = 1_000_000;
 const PATTERN_OWNER: usize = u32::MAX as usize;
+type Timestamp = canonic_registry_kit::timestamp::Parts;
+
+/// The clock interval in which the set of active custom rules stays the same.
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct ExpirationWindow {
+    since: Option<Timestamp>,
+    until: Option<Timestamp>,
+}
+
+impl ExpirationWindow {
+    pub(crate) fn contains_now(&self) -> Result<bool, Error> {
+        let now = policy_time()?;
+        Ok(self.since.is_none_or(|since| since <= now)
+            && self.until.is_none_or(|until| now < until))
+    }
+}
+
+fn policy_time() -> Result<Timestamp, Error> {
+    canonic_registry_kit::timestamp::parse(&crate::evidence::policy_now())
+        .ok_or(Error::Contract("current clock unavailable"))
+}
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct Metadata {
@@ -79,7 +100,7 @@ struct CustomMetadata {
     document: model::CustomDocument,
     digest: String,
     semantic: bool,
-    time_sensitive: bool,
+    expirations: Vec<Timestamp>,
 }
 struct Entry {
     start: usize,
@@ -133,6 +154,33 @@ enum Prepared {
     Pattern(Arc<PikeVM>),
     Graphql(Arc<serde_json::Value>),
 }
+fn encode_custom(
+    encoding: &mut workspace::Encoding,
+    owner: usize,
+    mut custom: CustomRules,
+) -> Result<CustomMetadata, Error> {
+    encoding.patterns(std::mem::take(&mut custom.patterns))?;
+    let mut expirations = Vec::new();
+    for mut rule in std::mem::take(&mut custom.document.rules) {
+        if let Some(expiry) = &rule.expires_at {
+            expirations.push(canonic_registry_kit::timestamp::parse(expiry).ok_or(Error::Syntax)?);
+        }
+        encoding.detach(&mut rule.conditions)?;
+        if let Some(requirements) = &mut rule.requirements {
+            encoding.detach(requirements)?;
+        }
+        encoding.row(key(&rule, owner), &rule, owner)?;
+    }
+    expirations.sort_unstable();
+    expirations.dedup();
+    Ok(CustomMetadata {
+        document: custom.document,
+        digest: custom.digest,
+        semantic: custom.semantic,
+        expirations,
+    })
+}
+
 impl Plan {
     pub(crate) fn compile(
         packs: Vec<(Pack, Profile)>,
@@ -178,26 +226,8 @@ impl Plan {
                 origins: pack.origins,
             });
         }
-        if let Some(mut custom) = custom {
-            encoding.patterns(std::mem::take(&mut custom.patterns))?;
-            let time_sensitive = crate::policy::has_expiration(&custom);
-            for mut rule in std::mem::take(&mut custom.document.rules) {
-                encoding.detach(&mut rule.conditions)?;
-                if let Some(requirements) = &mut rule.requirements {
-                    encoding.detach(requirements)?;
-                }
-                encoding.row(
-                    key(&rule, metadata.packs.len()),
-                    &rule,
-                    metadata.packs.len(),
-                )?;
-            }
-            metadata.custom = Some(CustomMetadata {
-                document: custom.document,
-                digest: custom.digest,
-                semantic: custom.semantic,
-                time_sensitive,
-            });
+        if let Some(custom) = custom {
+            metadata.custom = Some(encode_custom(&mut encoding, metadata.packs.len(), custom)?);
         }
         encoding.finish_images()?;
         let encoded = encoding.metadata(&metadata)?;
@@ -397,7 +427,25 @@ impl Plan {
         self.metadata
             .custom
             .as_ref()
-            .is_some_and(|c| c.time_sensitive)
+            .is_some_and(|c| !c.expirations.is_empty())
+    }
+    pub(crate) fn expiration_window(&self) -> Result<Option<ExpirationWindow>, Error> {
+        let Some(custom) = self
+            .metadata
+            .custom
+            .as_ref()
+            .filter(|c| !c.expirations.is_empty())
+        else {
+            return Ok(None);
+        };
+        let now = policy_time()?;
+        let (past, future) = custom
+            .expirations
+            .split_at(custom.expirations.partition_point(|expiry| *expiry <= now));
+        Ok(Some(ExpirationWindow {
+            since: past.last().copied(),
+            until: future.first().copied(),
+        }))
     }
     pub(crate) fn semantic(&self) -> bool {
         self.metadata.packs.iter().any(|p| p.semantic)
@@ -461,6 +509,7 @@ impl Plan {
                     Pack {
                         comparison_source: None,
                         document: p.document.descriptor(|gate| gate.candidate(facts)),
+                        executable_path_variables: Vec::new(),
                         digest: p.digest.clone(),
                         semantic: p.semantic,
                         // These descriptors contain only query candidates; retain

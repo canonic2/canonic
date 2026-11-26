@@ -38,14 +38,14 @@ artifacts, pass the registry checkout's `public/` directory to the focused
 fixture. It reads pack files and previews policy decisions without running Docker.
 
 ```sh
-SHIELD_DOCKER_TEST_REGISTRY=/path/to/shield-registry/public cargo nextest run --locked --lib --run-ignored ignored-only published_docker_and_baseline_packs_preserve_container_policy
+SHIELD_DOCKER_TEST_REGISTRY=/path/to/shield-registry/public cargo nextest run --locked --lib --run-ignored only published_docker_and_baseline_packs_preserve_container_policy
 ```
 
 To check the in-place upgrade of a pre-continuity checkpoint written by a
 separately retained executable:
 
 ```sh
-SHIELD_PREVIOUS_BINARY=/path/to/previous/shield cargo nextest run --locked --test integration --run-ignored ignored-only previous_binary_unreceipted_checkpoint
+SHIELD_PREVIOUS_BINARY=/path/to/previous/shield cargo nextest run --locked --test integration --run-ignored only previous_binary_unreceipted_checkpoint
 ```
 
 This opt-in fixture initializes through that previous binary in an isolated
@@ -367,7 +367,7 @@ Its JavaScript receipt-validator interoperability check is opt-in and requires
 Node 24+:
 
 ```sh
-cargo nextest run --locked --lib --run-ignored ignored-only historical_interceptor_receipts_pass_legacy_js_validator
+cargo nextest run --locked --lib --run-ignored only historical_interceptor_receipts_pass_legacy_js_validator
 ```
 
 ## Checks
@@ -419,6 +419,19 @@ insta filters are available when context-dependent output is implemented.
 Human-output fixtures drive the shared TUI in an owned terminal and snapshot
 settled reviews, choices and results. Separate terminal tests verify live regions,
 input safety and mode restoration.
+
+To exercise Shield setup and Hub publication together on macOS, build Hub with
+`cargo build --locked` from `packages/hub`, then run this focused fixture from
+`packages/shield`:
+
+```sh
+cargo nextest run --locked --test integration --run-ignored only combined_setup_uses_scoped_reviews
+```
+
+The fixture uses the companion `packages/hub/target/debug/hub` by default.
+Set `SHIELD_TEST_HUB_BINARY` to an absolute build path for a different target
+directory. It uses the Python PTY harness, private temporary homes, and
+the two CLI binaries and their MCP connections.
 
 `cargo llvm-cov nextest --locked --html` writes a browsable report under
 target/llvm-cov/html/. Generated API documentation is written to target/doc/. Reports and generated
@@ -592,12 +605,28 @@ unfinished drain. Native callbacks retain fixed hook-stage events without
 creating request spans or waiting for an exit drain; recent events may be lost
 at process exit. Disabled logging does not construct event fields.
 
-The apply trace covers validation, policy preparation, writer-lock wait, file
-writes, connection publication and durable sync operations. Legacy form continuations retain their request link and measure
-the input or approval wait. Host permission obtained before Shield receives an
-MCP call is outside this measurement. The handler boundary also excludes MCP
-scheduler queueing, schema validation and final wire encoding; round-trip tests
-measure transport overhead separately. Modern form retries have separate traces.
+The apply trace covers validation, policy preparation, writer-lock wait and hold,
+checkpoint encoding, file writes, connection publication and durable sync
+operations. `cache.load` measures persisted plan loading and integrity checks.
+`cache.plan_bytes_read` counts bytes from those reads. Lock hold can overlap
+other spans recorded while the writer owns the lock.
+
+For stdio, join a handler `trace_id` to `(connection, request)` through
+`request_transport`. Match the `start` and `end` records in `mcp_transport` by
+that pair, stage and assignment. These records cover decode, input validation
+and routing, queueing, result checks, encoding and publication. Requests that
+end before handler dispatch have transport records only. Transport offsets use
+the same monotonic origin as handler spans. Frame summaries use the
+`mcp_input` and `mcp_output` events. A bounded queue delivers them to an
+off-thread parser. A separate bounded queue delivers transport timings. Both
+feed the same private diagnostic file and report dropped records. Shutdown
+reports an unfinished timing drain if the diagnostic writer is still busy.
+
+Legacy form continuations retain their request trace and measure the input or
+approval wait. Host permission obtained before Shield receives an MCP call is
+outside this measurement. A validated modern retry or an owned preparation
+worker gets its own trace, linked to the originating trace by `request_related`.
+Explicit checked runs also record child process start and wait spans.
 Proposal spans distinguish base capture, edits, next capture, comparison, plan
 preparation, handle reservation and presentation. `policy.source_captures` counts
 source validation independently of compiled-plan preparation, so re-parsing packs

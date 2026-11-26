@@ -116,7 +116,7 @@ old metadata means availability is unknown. Inspection retains observation times
 and distinguishes stale evidence from fresh releases. Dependency-only selections
 do not produce notices. An empty scope reports “No direct pack selections to check.”
 
-Interactive status/list and completed pack changes may also print a short notice
+Interactive pack lists and completed pack changes may also print a short notice
 on stderr. Notices are limited to once per project per day; the same installed
 and advertised version pair is suppressed for seven days. JSON and piped
 commands receive no unsolicited notice. `--json status`, `--json pack list` and
@@ -384,16 +384,28 @@ Pack review runs no installers or pack code.
 ## Pack variables and rule overrides
 
 Packs can discover installed executable paths during add, update and configure.
-For example, a Rust pack with executable discovery checks `CARGO_HOME/bin` and
-`~/.cargo/bin`. The review names the exact paths and saves them locally. Existing
-bindings are preserved, and discovery never executes a tool. Discovery skips
-executables in the project, approved write folders and system temporary folders,
-including symlinks into them. Through MCP, call
+A pack can declare locations under a developer's home, locations based on
+environment settings such as `CARGO_HOME`, or an executable name to look for in
+the Shield process's `PATH`. A pack with an executable path list can collect
+several installations for one tool. The review names the exact paths and saves
+them locally. Existing bindings are preserved, and discovery observes files
+without executing them. Discovery skips executables in the project, approved
+write folders and system temporary folders, including symlinks into them. Through MCP, call
 `pack_configure` with the installed reference and no edits to review missing
 discovered bindings; use `variables` when you want to edit particular settings.
 
+For an installation outside the pack's discovery locations, set its executable
+variable explicitly. When the pack declares a list, supply all paths you want to
+use for the tool. This setting belongs in `.shield/config.local.yml`, which is
+ignored by default.
+The pack's argument rules and profile apply to each exact path.
+
+```sh
+shield pack configure acme/build --local --set 'tool_executable=["/opt/acme/bin/tool","/opt/acme-dev/bin/tool"]'
+```
+
 When a single command using an absolute executable path matches no rule,
-`suggestion_list` can point to an unset setting in an installed pack. For example,
+`suggestion_list` can point to a missing path in an installed pack. For example,
 it can recommend binding `cargo_executable` locally when the selected Rust
 profile covers that Cargo command and the exact path matches a declared
 discovery candidate outside writable folders. The next action prepares a `pack_configure`

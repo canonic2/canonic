@@ -319,15 +319,8 @@ fn pack_forms_cancellation_disconnect_and_busy_slot_create_no_proposals() {
 }
 
 #[test]
-fn pack_forms_human_wait_outlives_execution_budget_and_still_requires_approval() {
-    let mut options = test_options();
-    options.timeout = Duration::from_secs(1);
-    let (transport, project) = prepared_with_options(
-        "claude",
-        &json!({"elicitation":{"form":{}}}),
-        options,
-        VERSION,
-    );
+fn pack_forms_remain_answerable_and_still_require_approval() {
+    let (transport, project) = prepared("claude", &json!({"elicitation":{"form":{}}}));
     let count = proposals(&project);
     let before = project.revision();
     let form = transport.call(json!(10), "pack_configure", &args());

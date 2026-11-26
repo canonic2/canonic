@@ -642,6 +642,43 @@ fn approved_native_retry_history_keeps_policy_and_records_the_actual_allowance()
 }
 
 #[test]
+fn stale_native_handoff_preserves_an_approved_grant() {
+    use crate::enforcement::protocol::{NativeBoundaryPoint, at_native_boundary};
+
+    let (_folder, context) = policy_fixture();
+    let root = Path::new(&context.project_root);
+    let command = "acme config set value";
+    let request = offered_id(&shell(root, "codex", command)).unwrap();
+    assert_eq!(
+        request_approve(root, "codex", &request, true)["data"]["status"],
+        "approved"
+    );
+
+    // Change the policy once the retry has a source guard but before exact
+    // approval checks its grant under the writer lock.
+    let path = root.join(".shield/rules.yml");
+    let original = fs::read_to_string(&path).unwrap();
+    let changed = format!("# Acme policy edit\n{original}");
+    let changed_path = path.clone();
+    let _boundary = at_native_boundary(NativeBoundaryPoint::BeforeDisposition, move || {
+        fs::write(changed_path, changed).unwrap();
+    });
+    let stale = shell(root, "codex", command);
+    assert_eq!(
+        stale["hookSpecificOutput"]["permissionDecision"], "deny",
+        "{stale}"
+    );
+    assert!(agent_context(&stale).contains("policy changed"), "{stale}");
+
+    fs::write(path, original).unwrap();
+    let current = shell(root, "codex", command);
+    assert!(
+        agent_context(&current).contains("allowed once"),
+        "{current}"
+    );
+}
+
+#[test]
 fn codex_settings_change_recovers_in_the_session_once() {
     let (_root, context) = fixture();
     let root = Path::new(&context.project_root);

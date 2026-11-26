@@ -73,6 +73,8 @@ pub(crate) enum Error {
     UnsupportedReleases(String),
     #[error("invalid review input or state: {0}")]
     Invalid(&'static str),
+    #[error("{0}")]
+    HookOwnership(&'static str),
     #[error(
         "policy artifact {pack}@{version} from {source_identity} is known revoked; remove or update the affected pack"
     )]
@@ -230,6 +232,7 @@ impl Error {
             Self::Dependency(_)
             | Self::Policy(_)
             | Self::Invalid(_)
+            | Self::HookOwnership(_)
             | Self::StateFormat { .. }
             | Self::StateCorrupt { .. }
             | Self::Ambiguous { .. }
@@ -321,6 +324,7 @@ pub(crate) fn candidate_identity(candidate: &Value) -> String {
 
 /// The identity of a set of captured candidates.
 pub(crate) fn map_digest(candidates: &BTreeMap<String, Value>) -> String {
+    crate::diagnostics::trace::count("source.map_identity_encodings", 1);
     crate::json::fingerprint(candidates).expect("candidate JSON serializes")
 }
 
@@ -382,8 +386,7 @@ pub(crate) fn retire_user_records() {
     storage::retired::retire_user_records();
 }
 
-fn open_checkpoint(project: &Path) -> Result<(Context, model::State), Error> {
-    let store = Store::open(project)?;
+fn open_checkpoint(store: &Store) -> Result<(Context, model::State), Error> {
     let state = store.read_checkpoint()?;
     let context = Context::new(state.project_id.clone(), state.project_root.clone(), "cli");
     Ok((context, state))
@@ -391,11 +394,11 @@ fn open_checkpoint(project: &Path) -> Result<(Context, model::State), Error> {
 
 /// Current checkout identity for recovery and exact approval bookkeeping.
 pub(crate) fn open_authorization(project: &Path) -> Result<Context, Error> {
-    open_checkpoint(project).map(|(context, _)| context)
+    open_checkpoint(&Store::open(project)?).map(|(context, _)| context)
 }
 
 pub(crate) fn open(project: &Path) -> Result<Context, Error> {
-    let (context, state) = open_checkpoint(project)?;
+    let (context, state) = open_checkpoint(&Store::open(project)?)?;
     integrations::rebind_launchers(&context, &state);
     Ok(context)
 }
@@ -457,9 +460,20 @@ pub(crate) fn update_operator_fixture(
 
 /// Derive caller context and pause guards from one validated checkpoint.
 /// Later authority handoff still performs its locked freshness check.
-pub(crate) fn open_native(project: &Path) -> Result<(Context, Option<mode::Paused>), Error> {
-    let (context, state) = open_checkpoint(project)?;
-    integrations::rebind_launchers(&context, &state);
+pub(crate) fn open_native(
+    project: &Path,
+    maintain_launchers: bool,
+) -> Result<(Context, Option<mode::Paused>), Error> {
+    let store = if maintain_launchers {
+        Store::open(project)?
+    } else {
+        Store::open_observations(project)?
+    };
+    let (context, state) = open_checkpoint(&store)?;
+    drop(store);
+    if maintain_launchers {
+        integrations::rebind_launchers(&context, &state);
+    }
     Ok((context, mode::paused(&state)))
 }
 

@@ -2,7 +2,7 @@
 use super::{Server, response, rpc};
 use crate::review::{
     self,
-    preparation_tasks::{Record, Store},
+    preparation_tasks::{Observation, Record},
 };
 use canonic_mcp_kit::{
     RpcError, ToolCall,
@@ -12,7 +12,7 @@ use canonic_mcp_kit::{
     },
 };
 use serde_json::Value;
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
 pub(super) fn policy() -> TaskOptions {
     TaskOptions {
@@ -20,37 +20,40 @@ pub(super) fn policy() -> TaskOptions {
         max_bytes: 640 * 1024 * 1024,
         max_running: 2,
         max_input_rounds: 1,
-        execution_timeout: Duration::from_mins(1),
+        execution_timeout: None,
     }
 }
 
 fn failure(error: &review::Error) -> RpcError {
-    if matches!(error, review::Error::Missing) {
-        task::not_found()
-    } else {
-        RpcError::new(
+    match error {
+        review::Error::Missing => task::not_found(),
+        review::Error::Policy(crate::policy::Error::Interrupted) => {
+            RpcError::new(rpc::REQUEST_CANCELLED, "Request cancelled")
+        }
+        _ => RpcError::new(
             rpc::INTERNAL_ERROR,
             "Preparation task storage or execution is unavailable; ordinary policy tools remain usable",
-        )
+        ),
     }
 }
 
 fn metadata(record: &Record) -> Result<Metadata, RpcError> {
     let invalid = |_| RpcError::new(rpc::INTERNAL_ERROR, "Invalid retained preparation metadata");
+    let ttl_ms = record
+        .ttl_ms
+        .saturating_add(record.updated - record.created);
     Metadata::new(
         TaskId::new(record.id.clone()).map_err(invalid)?,
         Timestamp::from_unix_millis(record.created).map_err(invalid)?,
-        record.ttl_ms,
+        ttl_ms,
     )
-    .and_then(|metadata| {
-        metadata.updated(Timestamp::from_unix_millis(record.updated)?, record.ttl_ms)
-    })
+    .and_then(|metadata| metadata.updated(Timestamp::from_unix_millis(record.updated)?, ttl_ms))
     .and_then(|metadata| metadata.with_message(record.message.clone()))
     .and_then(|metadata| metadata.with_poll_interval(250))
     .map_err(invalid)
 }
 
-fn snapshot(store: &Store, record: &Record) -> Result<Snapshot, RpcError> {
+fn snapshot(Observation { record, result }: Observation) -> Result<Snapshot, RpcError> {
     let state = match record.status.as_str() {
         "working" => State::Working,
         "cancelled" => State::Cancelled,
@@ -59,9 +62,11 @@ fn snapshot(store: &Store, record: &Record) -> Result<Snapshot, RpcError> {
                 .with_data(serde_json::json!({"code":"preparation_failed","policy_changed":false})),
         ),
         "completed" => State::Completed(
-            serde_json::from_value(store.result(record).map_err(|e| failure(&e))?).map_err(
-                |_| RpcError::new(rpc::INTERNAL_ERROR, "Invalid retained preparation result"),
-            )?,
+            result
+                .and_then(|value| serde_json::from_value(value).ok())
+                .ok_or_else(|| {
+                    RpcError::new(rpc::INTERNAL_ERROR, "Invalid retained preparation result")
+                })?,
         ),
         _ => {
             return Err(RpcError::new(
@@ -70,7 +75,7 @@ fn snapshot(store: &Store, record: &Record) -> Result<Snapshot, RpcError> {
             ));
         }
     };
-    Snapshot::new(metadata(record)?, state)
+    Snapshot::new(metadata(&record)?, state)
         .map_err(|_| RpcError::new(rpc::INTERNAL_ERROR, "Preparation snapshot exceeds bounds"))
 }
 
@@ -145,45 +150,56 @@ pub(super) fn create(
             serde_json::to_value(result).map_err(|_| review::Error::Invalid("task result encoding"))
         },
     );
-    match server.preparations.start(
-        review,
-        &call.arguments,
-        &|| {
-            context
-                .check()
-                .map_err(|_| crate::policy::Error::Interrupted)
-        },
-        publish,
-    ) {
+    let checkpoint = || {
+        context
+            .check()
+            .map_err(|_| crate::policy::Error::Interrupted)
+    };
+    match server
+        .preparations
+        .start(review, &call.arguments, &checkpoint, publish)
+    {
         Ok(None) => None,
-        Ok(Some(record)) => Some(Outcome::Task(
-            server
-                .preparations
-                .store()
-                .map_err(|error| failure(&error))
-                .and_then(|store| snapshot(&store, &record))
-                .map(TaskResult::Created),
-        )),
+        Ok(Some(record)) => {
+            let observed = if record.status == "completed" {
+                server
+                    .preparations
+                    .observation_store()
+                    .observe(&record.id, true, &checkpoint)
+            } else {
+                Ok(Observation {
+                    record,
+                    result: None,
+                })
+            };
+            Some(Outcome::Task(
+                observed
+                    .map_err(|e| failure(&e))
+                    .and_then(snapshot)
+                    .map(TaskResult::Created),
+            ))
+        }
         Err(error) => Some(Outcome::Task(Err(failure(&error)))),
     }
 }
 
 pub(super) fn manage(server: &Server, request: &TaskRequest, context: &Context) -> Outcome {
     let result = (|| {
-        context
-            .check()
-            .map_err(|_| RpcError::new(rpc::REQUEST_CANCELLED, "Request cancelled"))?;
-        let store = if matches!(request, TaskRequest::Cancel { .. }) {
-            server.preparations.store()
-        } else {
-            server.preparations.observation_store()
-        }
-        .map_err(|error| failure(&error))?;
+        let checkpoint = || {
+            context
+                .check()
+                .map_err(|_| crate::policy::Error::Interrupted)
+        };
+        checkpoint().map_err(|error| failure(&error.into()))?;
         let id = request.id().as_str();
-        let record = store.observe(id).map_err(|error| failure(&error))?;
+        let jobs = &server.preparations;
         match request {
             TaskRequest::Get { .. } => {
-                let snapshot = snapshot(&store, &record)?;
+                let observed = jobs
+                    .observation_store()
+                    .observe(id, true, &checkpoint)
+                    .map_err(|error| failure(&error))?;
+                let snapshot = snapshot(observed)?;
                 schema(server)?.validate_snapshot(&snapshot).map_err(|_| {
                     RpcError::new(
                         rpc::INTERNAL_ERROR,
@@ -193,10 +209,17 @@ pub(super) fn manage(server: &Server, request: &TaskRequest, context: &Context) 
                 Ok(TaskResult::Snapshot(snapshot))
             }
             TaskRequest::Cancel { .. } => {
-                store.cancel(id).map_err(|error| failure(&error))?;
+                jobs.store_controlled(&checkpoint)
+                    .and_then(|store| store.cancel(id, &checkpoint))
+                    .map_err(|error| failure(&error))?;
                 Ok(TaskResult::Cancelled)
             }
-            TaskRequest::Update { .. } => Ok(TaskResult::Updated),
+            TaskRequest::Update { .. } => {
+                jobs.observation_store()
+                    .observe(id, false, &checkpoint)
+                    .map_err(|error| failure(&error))?;
+                Ok(TaskResult::Updated)
+            }
         }
     })();
     Outcome::Task(result)

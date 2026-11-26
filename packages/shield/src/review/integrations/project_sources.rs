@@ -164,6 +164,15 @@ impl Sources {
 /// each file's bytes as read, with every artifact either layer names. Only the
 /// configuration is parsed, to find those artifacts.
 pub(in crate::review) fn read(config: &Path) -> Result<Sources, Error> {
+    read_with(config, false)
+}
+
+pub(in crate::review) fn read_retaining(config: &Path) -> Result<Sources, Error> {
+    read_with(config, true)
+}
+
+fn read_with(config: &Path, retain: bool) -> Result<Sources, Error> {
+    crate::diagnostics::trace::count("policy.file_source_reads", 1);
     let path = regular_file(config)?;
     let root = path.parent().ok_or(Error::Context)?;
     let shared = application::read(&path)?;
@@ -180,7 +189,7 @@ pub(in crate::review) fn read(config: &Path) -> Result<Sources, Error> {
     }
     let read = |paths: &mut dyn Iterator<Item = &str>| {
         paths
-            .map(|path| read_artifact(root, path))
+            .map(|path| read_artifact(root, path, retain))
             .collect::<Result<Vec<_>, _>>()
     };
     let lock = |name: &str| -> Result<Option<String>, Error> {
@@ -210,12 +219,7 @@ pub(in crate::review) fn from_texts(
     shield: &Path,
     text: &dyn Fn(&str) -> Option<String>,
 ) -> Result<Sources, Error> {
-    let missing = || -> Error {
-        crate::policy::Error::Contract(
-            "a pack named in the policy files is missing from this machine; the status tool or shield status fetches it",
-        )
-        .into()
-    };
+    let missing = || -> Error { crate::policy::Error::Contract(MISSING_PACK).into() };
     let shared = text("config.yml").ok_or(crate::policy::Error::Contract(
         "project configuration missing",
     ))?;
@@ -411,7 +415,10 @@ fn git_conflict_line(text: &str) -> Option<usize> {
 /// comes from the per-user artifact store or this folder's earlier retained
 /// sources, checked against that digest; one read from the project is added to
 /// the store for other checkouts.
-fn read_artifact(root: &Path, path: &str) -> Result<String, Error> {
+pub(in crate::review) const MISSING_PACK: &str =
+    "a locked pack is missing from this machine; use shield pack restore or pack_restore";
+
+fn read_artifact(root: &Path, path: &str, retain: bool) -> Result<String, Error> {
     let digest = Path::new(path)
         .file_stem()
         .and_then(|stem| stem.to_str())
@@ -419,7 +426,7 @@ fn read_artifact(root: &Path, path: &str) -> Result<String, Error> {
     let Some(digest) = digest else {
         return read_project_artifact(root, path);
     };
-    if root.join(path).exists() {
+    let text = if root.join(path).exists() {
         let text = read_project_artifact(root, path)?;
         // A pack named by its digest must have exactly those bytes.
         if crate::policy::fingerprint(text.as_bytes()) != digest {
@@ -428,15 +435,14 @@ fn read_artifact(root: &Path, path: &str) -> Result<String, Error> {
             )
             .into());
         }
+        text
+    } else {
+        stored_artifact(root, path).ok_or(crate::policy::Error::Contract(MISSING_PACK))?
+    };
+    if retain {
         store_artifact(digest, &text);
-        return Ok(text);
     }
-    stored_artifact(root, path).ok_or_else(|| {
-        crate::policy::Error::Contract(
-            "a pack named in the policy files is missing from this machine; the status tool or shield status fetches it",
-        )
-        .into()
-    })
+    Ok(text)
 }
 
 /// A digest-named pack artifact that is not in the configuration directory
@@ -457,13 +463,11 @@ pub(in crate::review) fn stored_artifact(shield: &Path, path: &str) -> Option<St
         Some(shield.join("state/sources").join(&blob)),
         Some(shield.join("review/sources").join(&blob)),
     ];
-    let text = candidates.into_iter().flatten().find_map(|candidate| {
+    candidates.into_iter().flatten().find_map(|candidate| {
         std::fs::read_to_string(candidate)
             .ok()
             .filter(|text| crate::policy::fingerprint(text.as_bytes()) == digest)
-    })?;
-    store_artifact(digest, &text);
-    Some(text)
+    })
 }
 
 fn store_artifact(digest: &str, text: &str) {
@@ -488,7 +492,7 @@ fn read_project_artifact(root: &Path, path: &str) -> Result<String, Error> {
     application::read(&resolved)
 }
 
-fn regular_file(path: &Path) -> Result<PathBuf, Error> {
+pub(in crate::review) fn regular_file(path: &Path) -> Result<PathBuf, Error> {
     let resolved = path.canonicalize()?;
     if !resolved.is_file() {
         return Err(
@@ -573,21 +577,37 @@ mod tests {
         let shield = shield.path().canonicalize().expect("canonical");
 
         assert!(
-            read_artifact(&shield, &path).is_err(),
+            read_artifact(&shield, &path, false).is_err(),
             "nothing holds it yet"
         );
         let sources = shield.join("review/sources");
         std::fs::create_dir_all(&sources).expect("sources");
         std::fs::write(sources.join(format!("{digest}.blob")), "tampered").expect("tampered");
         assert!(
-            read_artifact(&shield, &path).is_err(),
+            read_artifact(&shield, &path, false).is_err(),
             "bytes must match the digest"
         );
 
         std::fs::write(sources.join(format!("{digest}.blob")), &text).expect("blob");
-        assert_eq!(read_artifact(&shield, &path).expect("from sources"), text);
+        assert_eq!(
+            read_artifact(&shield, &path, false).expect("from sources"),
+            text
+        );
+        assert!(
+            !crate::review::files::artifact_store()
+                .unwrap()
+                .join(format!("{digest}.yml"))
+                .exists()
+        );
+        assert_eq!(
+            read_artifact(&shield, &path, true).expect("retain from sources"),
+            text
+        );
         std::fs::remove_dir_all(&sources).expect("forget sources");
-        assert_eq!(read_artifact(&shield, &path).expect("from store"), text);
+        assert_eq!(
+            read_artifact(&shield, &path, false).expect("from store"),
+            text
+        );
     }
 
     #[test]
@@ -602,7 +622,7 @@ mod tests {
             .join(".shield")
             .canonicalize()
             .expect("canonical");
-        let error = read_artifact(&shield, &format!("cache/{digest}.yml")).unwrap_err();
+        let error = read_artifact(&shield, &format!("cache/{digest}.yml"), false).unwrap_err();
         assert!(
             error.to_string().contains("digest in its file name"),
             "{error}"

@@ -181,7 +181,7 @@ fn owned_group_index(groups: &[Value], previous: Option<&Value>) -> Result<Optio
     if recognized.next().is_some()
         || previous.is_none_or(|previous| !hook_group_matches(group, previous))
     {
-        return Err(Error::Invalid(
+        return Err(Error::HookOwnership(
             "Shield hook group is unowned or manually changed",
         ));
     }

@@ -112,50 +112,6 @@ fn generation(name: &str) -> Option<&str> {
     .then_some(generation)
 }
 
-/// Failure reporting can run after lock acquisition failed. It may inspect
-/// capacity but must never reclaim files without the history mutex.
-pub(super) fn failure_fits(store: &Store) -> Result<bool, Error> {
-    let mut bytes = reader_bytes(store)?
-        .checked_add(64)
-        .ok_or(Error::Invalid("history byte limit"))?;
-    if bytes > STORE_LIMIT as u64 {
-        return Ok(false);
-    }
-    for (index, entry) in fs::read_dir(&store.directory)?.enumerate() {
-        crate::diagnostics::trace::count("history.directory_entries", 1);
-        if index >= DIRECTORY_LIMIT {
-            return Ok(false);
-        }
-        let entry = entry?;
-        let name = entry.file_name();
-        let Some(name) = name.to_str() else { continue };
-        if let Some(charge) = super::inline::charge(store, &entry.path(), name)? {
-            bytes = bytes
-                .checked_add(charge)
-                .ok_or(Error::Invalid("history byte limit"))?;
-            if bytes > STORE_LIMIT as u64 {
-                return Ok(false);
-            }
-            continue;
-        }
-        if generation(name).is_none()
-            && !super::inline::receipt(name)
-            && !(name.starts_with(".history-")
-                && Path::new(&name).extension().is_some_and(|ext| ext == "tmp"))
-        {
-            continue;
-        }
-        regular(&entry.path())?;
-        bytes = bytes
-            .checked_add(fs::symlink_metadata(entry.path())?.len())
-            .ok_or(Error::Invalid("history byte limit"))?;
-        if bytes > STORE_LIMIT as u64 {
-            return Ok(false);
-        }
-    }
-    Ok(true)
-}
-
 /// Called at segment/control boundaries, reserving the whole next segment so
 /// ordinary appends need no aggregate scan. Known corruption and reader pins
 /// are preserved; exhaustion drops optional evidence rather than widening policy.
@@ -340,7 +296,9 @@ mod tests {
         assert!(prepare_readers(&store).is_err());
         assert!(reader(&store).is_err());
         assert!(admit(&store, &state, 1).is_err());
-        assert!(!failure_fits(&store).unwrap());
+        super::super::mark_failure(&store, &state);
+        let marker = super::super::error_path(&store, &state).unwrap();
+        assert_eq!(fs::metadata(marker).unwrap().len(), 0);
         assert_eq!(fs::metadata(&path).unwrap().len(), STORE_LIMIT as u64);
         fs::remove_file(&path).unwrap();
         prepare_readers(&store).unwrap();
@@ -359,7 +317,6 @@ mod tests {
             .join(format!("upgrade-{}.json", "b".repeat(64)));
         sized(&path, STORE_LIMIT as u64);
         assert!(admit(&store, &state, 1).is_err());
-        assert!(!failure_fits(&store).unwrap());
         assert!(
             path.exists(),
             "history admission cannot prune recovery evidence"

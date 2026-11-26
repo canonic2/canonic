@@ -636,7 +636,7 @@ fn a_pack_proposal_applies_from_the_per_user_store_after_the_folder_cache_is_gon
 }
 
 #[test]
-fn status_fetches_a_locked_pack_this_machine_lacks() {
+fn pack_restore_recovers_locked_artifacts_after_readonly_diagnostics() {
     let (root, context, connection) = fixture();
     let _source = dependency_registry(&root, &context, &json!([]), false);
     commit_pack_change(
@@ -657,13 +657,25 @@ fn status_fetches_a_locked_pack_this_machine_lacks() {
     for name in &artifacts {
         let _ = std::fs::remove_file(store.join(name));
     }
-    let status = review::project::status(&context).unwrap();
+    for name in ["status", "doctor"] {
+        let report = invoke(&context, &connection, name, json!({}));
+        let data = &report["data"];
+        assert_eq!(data["policy_files"]["code"], "missing_pack", "{report}");
+        assert_eq!(data["next"]["tool"], "pack_restore");
+        assert_eq!(data["next"]["arguments"], json!({}));
+        assert_eq!(data["next"]["project"], json!(context.project_root));
+        assert!(artifacts.iter().all(|name| !store.join(name).exists()));
+    }
+    let restored = invoke(&context, &connection, "pack_restore", json!({}));
     assert_eq!(
-        status["policy_files"]["fetched"],
+        restored["data"]["fetched"],
         json!(["acme/child@1.0.0"]),
-        "{status}"
+        "{restored}"
     );
-    assert!(status["policy_files"]["digest"].is_string(), "{status}");
+    assert!(
+        restored["data"]["policy_files"]["digest"].is_string(),
+        "{restored}"
+    );
     for name in &artifacts {
         assert!(store.join(name).exists(), "{name:?}");
     }
@@ -691,24 +703,22 @@ fn lost_child(
 }
 
 #[test]
-fn one_unfetchable_release_does_not_stop_the_others() {
+fn pack_restore_keeps_going_after_one_unfetchable_release() {
     let (root, context, connection) = fixture();
     let _source = dependency_registry(&root, &context, &json!([]), false);
     lost_child(&root, &context, &connection);
     let lock = root.path().join(".shield/shield.lock");
     let mut locked: Value = serde_json::from_str(&std::fs::read_to_string(&lock).unwrap()).unwrap();
-    locked["packs"].as_array_mut().unwrap().insert(
-        0,
-        json!({"id":"acme/ghost","version":"1.0.0","digest":"a".repeat(64),"source_identity":"acme-unconfigured"}),
-    );
+    let rows = locked["packs"].as_array_mut().unwrap();
+    let unavailable = json!({"id":"acme/ghost","version":"1.0.0","digest":"a".repeat(64),"source_identity":"acme-unconfigured"});
+    rows.insert(0, unavailable.clone());
+    rows.push(unavailable);
     std::fs::write(&lock, locked.to_string()).unwrap();
-    let status = review::project::status(&context).unwrap();
-    assert_eq!(
-        status["policy_files"]["fetched"],
-        json!(["acme/child@1.0.0"]),
-        "{status}"
-    );
-    let failures = &status["policy_files"]["fetch_failures"];
+    let result = invoke(&context, &connection, "pack_restore", json!({}));
+    let status = &result["data"];
+    assert_eq!(status["fetched"], json!(["acme/child@1.0.0"]), "{status}");
+    let failures = &status["fetch_failures"];
+    assert_eq!(failures.as_array().unwrap().len(), 1, "{status}");
     assert_eq!(failures[0]["release"], "acme/ghost@1.0.0", "{status}");
     assert!(
         failures[0]["error"]
@@ -720,7 +730,39 @@ fn one_unfetchable_release_does_not_stop_the_others() {
 }
 
 #[test]
-fn a_fetched_release_whose_bytes_differ_from_the_lock_is_refused() {
+fn pack_restore_retries_the_same_digest_from_another_locked_registry() {
+    let (root, context, connection) = fixture();
+    let _source = dependency_registry(&root, &context, &json!([]), false);
+    let empty = assert_fs::TempDir::new().unwrap();
+    let unavailable =
+        canonic_registry_kit::source::Source::local(&empty.path().canonicalize().unwrap()).unwrap();
+    let identity = unavailable.identity().to_owned();
+    review::settings::registries_fixture(&context, |registries| {
+        registries.sources.insert("empty".into(), unavailable);
+    });
+    let store = lost_child(&root, &context, &connection);
+    let lock = root.path().join(".shield/shield.lock");
+    let mut locked: Value = serde_json::from_slice(&std::fs::read(&lock).unwrap()).unwrap();
+    let rows = locked["packs"].as_array_mut().unwrap();
+    let mut first = rows[0].clone();
+    let digest = first["digest"].as_str().unwrap().to_owned();
+    first["source_identity"] = json!(identity);
+    rows.insert(0, first);
+    std::fs::write(&lock, locked.to_string()).unwrap();
+
+    let restored = invoke(&context, &connection, "pack_restore", json!({}));
+    assert_eq!(
+        restored["data"]["fetched"],
+        json!(["acme/child@1.0.0"]),
+        "{restored}"
+    );
+    assert_eq!(restored["data"]["fetch_failures"], json!([]), "{restored}");
+    let bytes = std::fs::read(store.join(format!("{digest}.yml"))).unwrap();
+    assert_eq!(crate::policy::fingerprint(&bytes), digest);
+}
+
+#[test]
+fn pack_restore_refuses_a_release_whose_bytes_differ_from_the_lock() {
     let (root, context, connection) = fixture();
     let source = dependency_registry(&root, &context, &json!([]), false);
     let store = lost_child(&root, &context, &connection);
@@ -735,8 +777,9 @@ fn a_fetched_release_whose_bytes_differ_from_the_lock_is_refused() {
         serde_json::from_slice(&std::fs::read(&catalog_path).unwrap()).unwrap();
     catalog["packs"][1]["sha256"] = json!(crate::policy::fingerprint(bytes.as_bytes()));
     std::fs::write(&catalog_path, catalog.to_string()).unwrap();
-    let status = review::project::status(&context).unwrap();
-    let failures = &status["policy_files"]["fetch_failures"];
+    let result = invoke(&context, &connection, "pack_restore", json!({}));
+    let status = &result["data"];
+    let failures = &status["fetch_failures"];
     assert_eq!(failures[0]["release"], "acme/child@1.0.0", "{status}");
     assert!(
         failures[0]["error"]
@@ -1452,6 +1495,7 @@ fn inventory_has_only_canonical_tools_and_no_operator_or_completion_authority() 
             "doctor",
             "pack_list",
             "pack_show",
+            "pack_restore",
             "registry_list",
             "pack_search",
             "pack_info",

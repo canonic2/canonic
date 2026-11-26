@@ -594,16 +594,41 @@ fn rebuilt_selections(
                 str::to_owned,
             );
         let mut selection = json!({"id":row["id"],"registry_identity":row["source_identity"],"version":row["version"],"profile":row["profile"],"path":path});
-        let binding = binding(row, earlier, artifact)?;
+        let mut binding = binding(row, earlier, artifact)?;
+        let local = local_selection(row, previous);
+        let mut overlay = if local {
+            None
+        } else {
+            overlay(row, earlier, artifact)?
+        };
+        if !local
+            && let (Some(earlier), Some(artifact)) = (earlier, artifact)
+            && earlier["version"] != row["version"]
+            && row.get("variables").is_none()
+            && !binding.variables.is_empty()
+        {
+            // A pack can replace a scalar setting with a local path list.
+            // Move carried-forward values in the same reviewed pack update.
+            for (name, declaration) in policy::declarations(artifact)? {
+                if declaration.executable_paths()
+                    && let Some(value) = binding.variables.remove(&name)
+                {
+                    let overlay = overlay.get_or_insert_with(Default::default);
+                    if !overlay.unset.contains(&name) {
+                        overlay.variables.entry(name).or_insert(value);
+                    }
+                }
+            }
+        }
         if !binding.variables.is_empty() {
             selection["variables"] = json!(binding.variables);
         }
         if !binding.overrides.is_empty() {
             selection["overrides"] = json!(binding.overrides);
         }
-        if local_selection(row, previous) {
+        if local {
             selection["layer"] = json!("local");
-        } else if let Some(overlay) = overlay(row, earlier, artifact)? {
+        } else if let Some(overlay) = overlay.filter(|overlay| !overlay.is_empty()) {
             selection["local"] = json!(overlay);
         }
         selections.push(selection);

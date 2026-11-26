@@ -557,9 +557,10 @@ pub(in crate::review) fn diagnose(
     binary: &Path,
     installation: &Installation,
     diagnostics: &mut Vec<&'static str>,
-) -> Result<(), Error> {
+) -> Result<bool, Error> {
     let adapter = lookup(agent)?;
     let mut changes = Vec::new();
+    let mut ownership_conflict = false;
     if let Err(error) = prepare_adapter(
         root,
         adapter,
@@ -570,6 +571,10 @@ pub(in crate::review) fn diagnose(
         false,
     ) {
         match error {
+            Error::HookOwnership(reason) => {
+                diagnostics.push(reason);
+                ownership_conflict = true;
+            }
             Error::Invalid(reason) => diagnostics.push(reason),
             other => return Err(other),
         }
@@ -607,7 +612,8 @@ pub(in crate::review) fn diagnose(
         &installation.groups,
         extra.as_deref(),
         diagnostics,
-    )
+    )?;
+    Ok(ownership_conflict)
 }
 
 /// Missing later advisory events do not invalidate an exact installed profile

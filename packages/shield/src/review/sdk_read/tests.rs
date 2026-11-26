@@ -130,7 +130,7 @@ fn sdk_admission_cancellation_releases_the_profile_lease() {
 }
 
 #[test]
-fn expired_contexts_and_missing_namespace_mutex_refuse_without_diagnostic_repair() {
+fn an_aged_context_stays_live_only_while_its_owner_holds_the_lease() {
     let (root, _) = enrolled();
     let fixture = testing::Fixture::new(root.path()).unwrap();
     fixture
@@ -143,10 +143,16 @@ fn expired_contexts_and_missing_namespace_mutex_refuse_without_diagnostic_repair
                 let mut index = files::contexts(&directory)?;
                 let row = index.contexts.get_mut(&issued.0.hash()).unwrap();
                 row.created_at_ms = 0;
-                row.expires_at_ms = CONTEXT_TTL_MS;
                 files::write(&directory, &index)?;
             }
-            assert!(RegisteredReadConsumer::admit_secret(root.path(), issued.0).is_err());
+            let retry = Secret::parse(issued.launch_value().into())?;
+            let consumer = RegisteredReadConsumer::admit_secret(root.path(), issued.0)?;
+            let state = current(root.path())?;
+            consumer.check_state(&state)?;
+            drop(issued.1);
+            assert!(consumer.check_state(&state).is_err());
+            drop(consumer);
+            assert!(RegisteredReadConsumer::admit_secret(root.path(), retry).is_err());
             let issued = mint(root.path(), mapping::digest())?;
             std::fs::remove_file(directory.join(".objects.lock"))?;
             assert!(RegisteredReadConsumer::admit_secret(root.path(), issued.0).is_err());
@@ -155,6 +161,49 @@ fn expired_contexts_and_missing_namespace_mutex_refuse_without_diagnostic_repair
                 std::fs::read(root.path().join(".shield/state/state.json"))?,
                 checkpoint
             );
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[test]
+fn owner_shutdown_keeps_its_lease_while_waiting_to_claim_context() {
+    use std::{sync::mpsc, thread, time::Duration};
+
+    let (root, _) = enrolled();
+    let root = root.path();
+    let fixture = testing::Fixture::new(root).unwrap();
+    fixture
+        .scoped(|| {
+            let issued = mint(root, mapping::digest())?;
+            let key = issued.0.hash();
+            let directory = files::directory("sdk-read-contexts", false)?;
+            let writer = objects::Directory::enter(&directory)?;
+            let consumer_id = files::contexts(&directory)?.contexts[&key]
+                .consumer_id
+                .clone();
+            thread::scope(|scope| {
+                let (started, ready) = mpsc::channel();
+                let (reply, result) = mpsc::channel();
+                let fixture = &fixture;
+                scope.spawn(move || {
+                    started.send(()).unwrap();
+                    reply.send(fixture.scoped(|| issued.close(root))).unwrap();
+                });
+                ready.recv_timeout(Duration::from_secs(5)).unwrap();
+                assert!(matches!(
+                    result.recv_timeout(Duration::from_millis(100)),
+                    Err(mpsc::RecvTimeoutError::Timeout)
+                ));
+                // A factory inspecting the row while it owns the namespace can
+                // reclaim it only after the owner has stopped holding this lease.
+                assert!(files::context_alive(&directory, &consumer_id).unwrap());
+                drop(writer);
+                result.recv_timeout(Duration::from_secs(5)).unwrap()
+            })?;
+            let _next = mint(root, mapping::digest())?;
+            assert!(!files::contexts(&directory)?.contexts.contains_key(&key));
+            assert!(!files::context_alive(&directory, &consumer_id)?);
             Ok(())
         })
         .unwrap();
@@ -170,9 +219,13 @@ fn context_close_cannot_race_a_live_admission_and_closes_after_handoff() {
             let close = Secret::parse(issued.launch_value().into())?;
             let retry = Secret::parse(issued.launch_value().into())?;
             let consumer = RegisteredReadConsumer::admit_secret(root.path(), issued.0)?;
-            assert!(close_secret(root.path(), &close).is_err());
+            assert!(close_secret(root.path(), &close, None).is_err());
             drop(consumer);
-            close_secret(root.path(), &Secret::parse(retry.launch_value().into())?)?;
+            close_secret(
+                root.path(),
+                &Secret::parse(retry.launch_value().into())?,
+                None,
+            )?;
             assert!(RegisteredReadConsumer::admit_secret(root.path(), retry).is_err());
             Ok(())
         })
@@ -219,7 +272,7 @@ fn copied_checkout_reuses_profile_but_never_original_context_while_original_rema
             copy_tree(root.path(), &copied);
             assert!(RegisteredReadConsumer::admit_secret(&copied, probe).is_err());
             // The copy is the same project, but an SDK read context is a
-            // short-lived handle for the folder it was minted for.
+            // handle for the folder it was minted for.
             let moved = super::super::open(&copied)?;
             assert_eq!(moved.project_id, original.project_id);
             // The independently retained profile is already reviewed. A copy
@@ -241,30 +294,23 @@ fn copied_checkout_reuses_profile_but_never_original_context_while_original_rema
 }
 
 #[test]
-fn context_capacity_is_global_bounded_and_expired_rows_are_reclaimed_by_mint() {
+fn context_capacity_is_global_bounded_and_abandoned_rows_are_reclaimed_by_mint() {
     let (root, _) = enrolled();
     let fixture = testing::Fixture::new(root.path()).unwrap();
     fixture
         .scoped(|| {
-            for _ in 0..CONTEXT_LIMIT {
-                mint(root.path(), mapping::digest())?;
-            }
+            let mut owners = (0..CONTEXT_LIMIT)
+                .map(|_| mint(root.path(), mapping::digest()))
+                .collect::<Result<Vec<_>, _>>()?;
             assert!(matches!(
                 mint(root.path(), mapping::digest()),
                 Err(Error::Overloaded)
             ));
             let directory = files::directory("sdk-read-contexts", false)?;
-            {
-                let _lease = objects::Directory::enter(&directory)?;
-                let mut index = files::contexts(&directory)?;
-                for row in index.contexts.values_mut() {
-                    row.created_at_ms = 0;
-                    row.expires_at_ms = CONTEXT_TTL_MS;
-                }
-                files::write(&directory, &index)?;
-            }
-            mint(root.path(), mapping::digest())?;
-            assert_eq!(files::contexts(&directory)?.contexts.len(), 1);
+            owners.truncate(1);
+            let fresh = mint(root.path(), mapping::digest())?;
+            assert_eq!(files::contexts(&directory)?.contexts.len(), 2);
+            RegisteredReadConsumer::admit_secret(root.path(), fresh.0)?;
             Ok(())
         })
         .unwrap();

@@ -16,6 +16,7 @@ fn native_shell_at(context: &review::Context, cwd: &Path, agent: &str, command: 
         &json!({}),
         NativeContext {
             integration: agent,
+            event: Event::Before,
             approval: NativeApproval::Prompt,
             context_complete: true,
             working_files: None,
@@ -1006,6 +1007,7 @@ impl ScopedWorkingFiles {
             &json!({}),
             NativeContext {
                 integration: "claude",
+                event: Event::Before,
                 approval: NativeApproval::Prompt,
                 context_complete: true,
                 working_files: scoped.then_some(&self.scope),
@@ -1177,6 +1179,7 @@ fn working_files_relocated_configuration_remains_protected_inside_temporary_root
             skills: vec![],
             protected: vec![config.clone()],
             http_environment: false,
+            node_options: false,
             home: None,
             sole_operation: false,
             filesystem_unknown: false,
@@ -1193,6 +1196,7 @@ fn working_files_relocated_configuration_remains_protected_inside_temporary_root
                 &json!({}),
                 NativeContext {
                     integration: agent,
+                    event: Event::Before,
                     approval: NativeApproval::Prompt,
                     context_complete: true,
                     working_files: Some(&scope),

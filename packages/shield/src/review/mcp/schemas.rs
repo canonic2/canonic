@@ -140,8 +140,14 @@ fn rules_selection() -> Value {
     schema["then"] = object(json!({"rule_ref":rule_ref(),"candidate_id":id()}), &[]);
     schema
 }
-/// Shared by catalog annotations and pre-dispatch setup maintenance.
+/// Shared by catalog annotations and connection ownership.
 pub(super) fn mutates(name: &str) -> bool {
+    writes_review_state(name) || name == "pack_restore"
+}
+/// Mutating tools that use the project's review state, so they need its
+/// runtime and may resume confirmed setup. `pack_restore` writes only the
+/// local pack cache.
+pub(super) fn writes_review_state(name: &str) -> bool {
     super::super::admin::supports(name)
         || super::prepares_review(name)
         || [
@@ -219,7 +225,7 @@ pub(super) fn tools(agent: Option<&str>) -> Value {
                 result_schema["properties"]["data"]=nullable(json!({"type":"object","properties":properties}));
             }
         }
-        json!({"name":name,"description":description,"inputSchema":schema,"outputSchema":result_schema,"annotations":{"readOnlyHint":!mutation,"destructiveHint":(["policy_withdraw","policy_apply","protection_set","disable","registry_remove","history_configure","policy_reject","mcp_setup"].contains(&name)),"idempotentHint":!["pack_configure","pack_add"].contains(&name),"openWorldHint":(["pack_search","pack_info","pack_add","pack_update","policy_propose","registry_add","registry_trust","mcp_setup"].contains(&name))}})
+        json!({"name":name,"description":description,"inputSchema":schema,"outputSchema":result_schema,"annotations":{"readOnlyHint":!mutation,"destructiveHint":(["policy_withdraw","policy_apply","protection_set","disable","registry_remove","history_configure","policy_reject","mcp_setup"].contains(&name)),"idempotentHint":!["pack_configure","pack_add"].contains(&name),"openWorldHint":(["pack_search","pack_info","pack_add","pack_update","pack_restore","policy_propose","registry_add","registry_trust","mcp_setup"].contains(&name))}})
     }).chain(super::documentation::tools().into_iter().map(|mut tool| {
         // The shared definitions carry their own schemas and annotations;
         // results arrive in Shield's envelope.
@@ -487,6 +493,11 @@ fn policy_inventory() -> Vec<Definition> {
             "pack_show",
             "Show one installed pack's selection, rules and source; accepts the pack:<uuid> selector returned by pack_list",
             || object(json!({"reference":string()}), &["reference"]),
+        ),
+        (
+            "pack_restore",
+            "Restore missing artifacts at the exact versions and digests in this project's pack locks. Writes only the local artifact store.",
+            || object(json!({}), &[]),
         ),
         (
             "registry_list",

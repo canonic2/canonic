@@ -336,12 +336,24 @@ fn access(out: &mut String, value: &Value) {
             let _ = writeln!(out, "Keep the host prompt for {ask}.");
         }
     } else {
-        for (key, message) in [
-            ("added", "Run without the host's tool prompt"),
-            ("removed", "Stop skipping the host's tool prompt"),
+        for (key, message, many) in [
+            (
+                "added",
+                "Run without the host's tool prompt",
+                "Skip the host's prompt for",
+            ),
+            (
+                "removed",
+                "Stop skipping the host's tool prompt",
+                "Stop skipping the host's prompt for",
+            ),
         ] {
-            let tools = names(&value["approval_changes"][key]);
-            if !tools.is_empty() {
+            let tools = &value["approval_changes"][key];
+            let count = rows(tools).count();
+            if count > 3 {
+                let _ = writeln!(out, "{many} {count} Shield tools.");
+            } else if count != 0 {
+                let tools = names(tools);
                 let _ = writeln!(out, "{message}: {tools}.");
             }
         }

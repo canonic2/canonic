@@ -15,9 +15,13 @@ use super::{
     model::State,
     storage::{Store, objects},
 };
-use model::{CONTEXT_LIMIT, CONTEXT_TTL_MS, ContextRecord, Profile};
+use model::{CONTEXT_LIMIT, ContextRecord, Profile};
 use proofs::Secret;
-use std::{fs::File, path::Path};
+use std::{
+    fs::File,
+    io::{self, Read as _, Write as _},
+    path::{Path, PathBuf},
+};
 
 pub(crate) use setup::Prepared;
 pub(crate) const TOKEN_ENV: &str = "SHIELD_SDK_READ_CONTEXT_TOKEN";
@@ -69,10 +73,15 @@ fn secret() -> Result<Secret, Error> {
 
 /// The only public token projection is the dedicated owned launch pipe.
 /// This type deliberately has no serde/Debug/display implementation.
-pub(crate) struct IssuedReadContext(Secret);
+struct IssuedReadContext(Secret, File);
 impl IssuedReadContext {
-    pub(crate) fn launch_value(&self) -> &str {
+    fn launch_value(&self) -> &str {
         self.0.launch_value()
+    }
+
+    fn close(self, project: &Path) -> Result<(), Error> {
+        let Self(secret, owner) = self;
+        close_secret(project, &secret, Some(owner))
     }
 }
 
@@ -82,11 +91,14 @@ pub(crate) struct RegisteredReadConsumer {
     context: Context,
     profile: Profile,
     record: ContextRecord,
+    context_directory: PathBuf,
     secret: Secret,
     binding: String,
     _profile_lease: File,
     _context_lease: File,
     _binary_lease: File,
+    #[cfg(test)]
+    _test_owner: Option<File>,
 }
 
 impl RegisteredReadConsumer {
@@ -134,10 +146,13 @@ impl RegisteredReadConsumer {
             profile,
             binding: record.binding()?,
             record,
+            context_directory,
             secret,
             _profile_lease: profile_lease,
             _context_lease: context_lease,
             _binary_lease: binary_lease,
+            #[cfg(test)]
+            _test_owner: None,
         };
         consumer.check_state(&state)?;
         Ok(consumer)
@@ -172,15 +187,14 @@ impl RegisteredReadConsumer {
     pub(in crate::review) fn check_state(&self, state: &State) -> Result<(), Error> {
         state.check(&self.context)?;
         state.check_operations()?;
-        let time = now()?;
         if state.project_id != self.record.project_id
             || state.project_root != self.record.project_root
             || state.policy_lineage() != self.profile.lineage
             || self.profile.mapping_digest != mapping::digest()
             || self.record.profile != self.profile.key()?
             || self.record.binary.digest() != self.profile.binary_digest
-            || time < self.record.created_at_ms
-            || time >= self.record.expires_at_ms
+            || self.record.expires_at_ms.is_some()
+            || !files::context_alive(&self.context_directory, &self.record.consumer_id)?
         {
             return Err(Error::Invalid("SDK read context is stale or unavailable"));
         }
@@ -189,7 +203,7 @@ impl RegisteredReadConsumer {
 }
 
 /// Actual factory startup may normalize this checkout; ordinary admit never does.
-pub(crate) fn mint(project: &Path, mapping_digest: &str) -> Result<IssuedReadContext, Error> {
+fn mint(project: &Path, mapping_digest: &str) -> Result<IssuedReadContext, Error> {
     ensure_supported()?;
     if mapping_digest != mapping::digest() {
         return Err(Error::Invalid(
@@ -219,10 +233,16 @@ pub(crate) fn mint(project: &Path, mapping_digest: &str) -> Result<IssuedReadCon
     let directory = files::directory("sdk-read-contexts", true)?;
     let _lease = objects::Directory::enter(&directory)?;
     let mut contexts = files::contexts(&directory)?;
-    let time = now()?;
-    contexts
-        .contexts
-        .retain(|_, row| row.expires_at_ms > time && row.created_at_ms <= time);
+    let mut abandoned = Vec::new();
+    for (key, row) in &contexts.contexts {
+        if row.expires_at_ms.is_some() || !files::context_alive(&directory, &row.consumer_id)? {
+            files::remove_owner(&directory, &row.consumer_id)?;
+            abandoned.push(key.clone());
+        }
+    }
+    for key in abandoned {
+        contexts.contexts.remove(&key);
+    }
     if contexts.contexts.len() >= CONTEXT_LIMIT {
         return Err(Error::Overloaded);
     }
@@ -233,10 +253,8 @@ pub(crate) fn mint(project: &Path, mapping_digest: &str) -> Result<IssuedReadCon
         incarnation: None,
         project_root: state.project_root.clone(),
         profile: profile_key,
-        created_at_ms: time,
-        expires_at_ms: time
-            .checked_add(CONTEXT_TTL_MS)
-            .ok_or(Error::Invalid("SDK read clock out of range"))?,
+        created_at_ms: now()?,
+        expires_at_ms: None,
         binary,
     };
     record.validate()?;
@@ -245,19 +263,42 @@ pub(crate) fn mint(project: &Path, mapping_digest: &str) -> Result<IssuedReadCon
     if after.project_id != state.project_id || after.policy_lineage() != state.policy_lineage() {
         return Err(Error::StaleSnapshot);
     }
+    let consumer = record.consumer_id.clone();
     contexts.contexts.insert(secret.hash(), record);
     files::write(&directory, &contexts)?;
-    Ok(IssuedReadContext(secret))
+    // Publish the row and acquire its owner while holding the namespace mutex.
+    // A crash before acquisition leaves an unowned row for the next mint.
+    Ok(IssuedReadContext(
+        secret,
+        files::own_context(&directory, &consumer)?,
+    ))
+}
+
+/// The owning application keeps stdin open after receiving the private token.
+pub(crate) fn serve_owner(project: &Path, mapping_digest: &str) -> Result<(), Error> {
+    let issued = mint(project, mapping_digest)?;
+    let served = (|| {
+        {
+            let mut output = io::stdout().lock();
+            writeln!(output, "{}", issued.launch_value())?;
+            output.flush()?;
+        }
+        if io::stdin().lock().read(&mut [0])? != 0 {
+            return Err(Error::Invalid("unexpected SDK owner input"));
+        }
+        Ok(())
+    })();
+    served.and(issued.close(project))
 }
 
 /// Closing a token never normalizes a checkout or authorizes another operation.
 pub(crate) fn close(project: &Path) -> Result<(), Error> {
     let proof = secret()?;
-    close_secret(project, &proof)
+    close_secret(project, &proof, None)
 }
 
 /// The closed context's unanswered reads go with it: no retry can reach them.
-fn close_secret(project: &Path, proof: &Secret) -> Result<(), Error> {
+fn close_secret(project: &Path, proof: &Secret, owner: Option<File>) -> Result<(), Error> {
     let binding = {
         let directory = files::directory("sdk-read-contexts", false)?;
         let _lease = objects::Directory::enter(&directory)?;
@@ -271,6 +312,10 @@ fn close_secret(project: &Path, proof: &Secret) -> Result<(), Error> {
         let Some(record) = contexts.contexts.remove(&key) else {
             return Ok(());
         };
+        // A factory can reclaim an unowned row. Release the owner only after
+        // claiming that row under the namespace lease.
+        drop(owner);
+        files::remove_owner(&directory, &record.consumer_id)?;
         files::write(&directory, &contexts)?;
         record.binding()?
     };

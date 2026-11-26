@@ -62,16 +62,21 @@ fn relocation_cli_copy_and_config_only_child_have_independent_runtime_state() {
         "schema_version: 1\npacks: []\n",
     )
     .unwrap();
-    // A folder with only policy files needs no step: its first use creates
-    // its own runtime state.
+    // Diagnostics inspect a files-only checkout without creating its state.
     let report = diagnostic(&child, "doctor");
     assert_eq!(report["project_root"], json!(child));
     assert!(report["policy_files"]["digest"].is_string(), "{report}");
-    assert!(child.join(".shield/state/state.json").is_file());
-    assert_ne!(report["project_id"], copy_report["project_id"]);
+    let checkpoint = child.join(".shield/state/state.json");
+    assert!(!checkpoint.exists());
+    assert!(report["project_id"].is_null());
+    assert_eq!(report["runtime_state"], "absent");
+    // Runtime use opens the independent project without enrollment.
+    let child_context = review::open(&child).unwrap();
+    assert!(checkpoint.is_file());
+    assert_ne!(json!(child_context.project_id), copy_report["project_id"]);
     assert_ne!(
         review::open(&original).unwrap().project_id,
-        report["project_id"]
+        child_context.project_id
     );
     #[cfg(unix)]
     {

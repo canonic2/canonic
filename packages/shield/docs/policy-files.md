@@ -14,15 +14,16 @@ by default. The table uses that location.
 | `.shield/config.yml` | Yes | Selected packs and profiles, pack settings, connections, shared settings |
 | `.shield/rules.yml` | Yes | Your project's custom rules |
 | `.shield/shield.lock` | Yes | The exact pack releases the configuration selects |
-| `.shield/config.local.yml` | No | Your own settings and pack values, layered over `config.yml` |
+| `.shield/config.local.yml` | Ignored by default | Your own settings and pack values, layered over `config.yml` |
 | `.shield/rules.local.yml` | No | Your own custom rules |
 | `.shield/shield.local.lock` | No | Releases your local layer selects |
 | `.shield/.gitignore` | Yes | Keeps the local files and `state/` out of Git |
 | `.shield/state/` | No | Runtime state: pending requests, grants, history and proposals |
 
-`shield init` writes these files. A copied, moved or cloned folder needs no
-follow-up command: its files are its policy, and a folder without runtime state
-gets it on first use.
+When `shield init` or first-run `shield setup` creates a policy bundle, it adds
+`config.local.yml` to that bundle's `.gitignore`. Remove that entry if you want
+to track the file. Later Shield operations preserve that choice. A copied, moved
+or cloned folder gets runtime state on first use.
 
 ## Where the configuration lives
 
@@ -48,7 +49,7 @@ local files:
   config.yml
   rules.yml
   shield.lock
-  config.local.yml   # not committed
+  config.local.yml   # ignored by default
   .gitignore
 .shield/
   .gitignore
@@ -100,8 +101,10 @@ A command writes on top of your edit rather
 than discarding it. If the files change between showing a change and your
 confirmation, Shield refuses and asks you to run the command again.
 
-Pack artifacts are fetched by digest from `shield.lock`. When a release is
-missing on this machine, `shield status` fetches it.
+`shield status` and `shield doctor` report missing locked packs without
+fetching them. Run `shield pack restore` or call MCP `pack_restore` to fetch
+the exact locked releases from their registered sources. Shield verifies each
+artifact against its lock digest before storing it on this machine.
 
 ## Settings
 

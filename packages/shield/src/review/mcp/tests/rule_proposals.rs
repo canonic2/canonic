@@ -113,6 +113,154 @@ fn optional_script_flag_rule_covers_base_and_forwarded_flag_without_other_suffix
     }
 }
 
+#[test]
+fn codex_prefix_proposal_publishes_exact_rule_after_host_approval() {
+    use crate::review::{integrations, project};
+
+    let rule = json!({
+        "id":"smoke-prefix",
+        "decision":"allow",
+        "reason":"Run the Acme smoke test with its local browser runtime.",
+        "conditions":{"domain":"argv","executable":"node",
+            "arguments":{"kind":"exact","values":["scripts/smoke.cjs"]},
+            "cwd":{"exact":{"root":"project"}}},
+        "agents":{"codex":{"prefixes":[["node","scripts/smoke.cjs"]]}}
+    });
+    for (tool, arguments) in [
+        (
+            "policy_propose",
+            json!({"change":{"kind":"rule_add","layer":"project","rule":rule}}),
+        ),
+        ("rule_add", json!({"layer":"project","rule":rule})),
+    ] {
+        let (root, mut context, _connection) = fixture();
+        context.agent = Some("codex".into());
+        let before = project::checkpoint(&context).unwrap();
+        let metadata = project::metadata(&before);
+        let plan = integrations::setup::prepare(
+            root.path(),
+            &metadata,
+            integrations::IntegrationChoice::agent("codex"),
+        )
+        .unwrap()
+        .unwrap();
+        integrations::apply(&context, &metadata, &plan).unwrap();
+
+        let transport = crate::mcp::tests::Transport::start(
+            crate::mcp::Server::for_review(context.clone()).unwrap(),
+        );
+        let [initialize, ready] = crate::mcp::tests::initialize(&json!({}), "codex");
+        assert!(transport.request(&initialize)["error"].is_null());
+        transport.send(&ready);
+        let reply = transport.call(json!(2), tool, &arguments);
+        let proposal = &reply["result"]["structuredContent"]["data"];
+        assert_eq!(proposal["status"], "pending", "{tool}: {reply}");
+        let apply = &proposal["apply_arguments"];
+        assert_eq!(
+            apply["change"],
+            "Grant Codex host access outside its sandbox."
+        );
+        assert_eq!(
+            apply["details"].as_str().unwrap().lines().next(),
+            Some(r#"["node", "scripts/smoke.cjs"]"#),
+        );
+        let prefix_file = root.path().join(".codex/rules/shield.rules");
+        assert!(!prefix_file.exists());
+        assert_eq!(
+            project::checkpoint(&context).unwrap().policy_revision,
+            before.policy_revision
+        );
+
+        let reply = transport.call(json!(3), "policy_apply", apply);
+        let applied = &reply["result"]["structuredContent"]["data"];
+        assert_eq!(applied["status"], "applied", "{tool}: {reply}");
+        assert_eq!(applied["operator"]["mechanism"], "host-tool-permission");
+        let published = std::fs::read_to_string(prefix_file).unwrap();
+        assert!(
+            published.contains(r#"pattern = ["node", "scripts/smoke.cjs"]"#),
+            "{published}"
+        );
+        transport.close().1.unwrap();
+    }
+}
+
+#[test]
+fn codex_prefix_proposal_preserves_argument_path_checks_and_review() {
+    let (root, mut context, connection) = fixture();
+    context.agent = Some("codex".into());
+    std::fs::write(root.path().join("Cargo.toml"), "[workspace]\n").unwrap();
+    let before = Store::open(root.path()).unwrap().read_checkpoint().unwrap();
+    let grammar = json!({"kind":"options","prefix":["nextest","run"],
+        "flags":["--locked"],"values":["--manifest-path","-E"],"operands":false});
+    let rule = json!({
+        "id":"nextest-prefix",
+        "decision":"allow",
+        "conditions":{"domain":"argv","executable":"cargo","arguments":grammar,
+            "cwd":{"within":{"root":"project"}}},
+        "requirements":{"argument_paths":{"grammar":grammar,"options":{
+            "--manifest-path":{"path":{"within":{"root":"project"}}}
+        }}},
+        "on_unmet":{"decision":"deny"},
+        "agents":{"codex":{"prefixes":[["cargo","nextest","run"]]}}
+    });
+    let change = json!({"change":{"kind":"rule_add","layer":"local","rule":rule}});
+    let schemas = tools();
+    for (name, args) in [
+        ("policy_propose", change.clone()),
+        ("rule_add", json!({"layer":"local","rule":rule})),
+        (
+            "rule_edit",
+            json!({"layer":"local","rule_id":"nextest-prefix","rule":rule}),
+        ),
+    ] {
+        let schema = &schemas["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|tool| tool["name"] == name)
+            .unwrap()["inputSchema"];
+        canonic_mcp_kit::schema::validate(schema, &args).unwrap();
+    }
+    let mut wider = change.clone();
+    wider["change"]["rule"]["agents"]["codex"]["prefixes"] = json!([["cargo", "nextest"]]);
+    let refused = invoke(&context, &connection, "policy_propose", wider);
+    assert!(!refused["error"].is_null(), "{refused}");
+
+    let proposed = invoke(&context, &connection, "policy_propose", change);
+    assert!(proposed["error"].is_null(), "{proposed}");
+    assert_eq!(proposed["data"]["status"], "pending");
+    let apply = &proposed["data"]["apply_arguments"];
+    assert!(
+        apply["change"]
+            .as_str()
+            .unwrap()
+            .contains("outside its sandbox"),
+        "{apply}"
+    );
+    let outside = root.path().join("../outside/Cargo.toml");
+    for (manifest, expected) in [("Cargo.toml", "allow"), (outside.to_str().unwrap(), "deny")] {
+        let query = json!({
+            "candidate_id":proposed["data"]["after_candidate_id"],
+            "input":{"kind":"argv","executable":"cargo",
+                "arguments":["nextest","run","--locked","--manifest-path",manifest,"-E","test(smoke)"],
+                "original_input":{}},
+            "context":{"cwd":context.project_root}
+        });
+        let preview = invoke(&context, &connection, "policy_evaluate", query);
+        assert_eq!(preview["data"]["decision"], expected, "{preview}");
+    }
+    let pending = Store::open(root.path()).unwrap().read_checkpoint().unwrap();
+    assert_eq!(pending.policy_revision, before.policy_revision);
+    assert_eq!(pending.proposals.len(), 1);
+    let revision = application::apply(&context, &connection, apply);
+    assert_ne!(revision["data"]["policy_revision"], before.policy_revision);
+    let snapshot = crate::runtime::Project::open(root.path())
+        .unwrap()
+        .snapshot()
+        .unwrap();
+    assert!(snapshot.codex_prefixes()[0].covers("cargo", &["nextest", "run", "-E", "test(smoke)"]));
+}
+
 fn development_pack() -> String {
     // Option grammars exercise the retained pack parsing used by development
     // packs without copying registry artifacts or relying on a local registry.

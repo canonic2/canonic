@@ -3,14 +3,13 @@ import assert from 'node:assert/strict';
 import { readFile, symlink, copyFile, rename } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
+import { setTimeout as wait } from 'node:timers/promises';
 import { createClaudeRuntimeReadOnlyClient } from './index.mjs';
+import { openOwner } from './owner.mjs';
 import { response } from '../runtime-response/index.mjs';
 import { transport } from '../process-transport/index.mjs';
 import { binary, enrolledRuntime, hostInput } from '../../../fixtures/runtime.mjs';
 
-const exec = promisify(execFile);
 const pre = client => client.hooks.PreToolUse[0].hooks[0];
 const post = client => client.hooks.PostToolUse[0].hooks[0];
 const decision = value => value.hookSpecificOutput.permissionDecision;
@@ -21,7 +20,7 @@ const binaryDigest = createHash('sha256').update(await readFile(binary)).digest(
 
 async function mapping() {
   const hash = createHash('sha256').update('shield-sdk-read-mapping-v1\0');
-  for (const path of ['claude-runtime-read-only/index.mjs', 'claude-runtime-read-only/binary.mjs', 'runtime-response/index.mjs',
+  for (const path of ['claude-runtime-read-only/index.mjs', 'claude-runtime-read-only/binary.mjs', 'claude-runtime-read-only/owner.mjs', 'runtime-response/index.mjs',
     'enforcement-response/json.mjs', 'process-transport/index.mjs']) {
     for (const bytes of [Buffer.from(path), await readFile(new URL(`../${path}`, import.meta.url))]) {
       const length = Buffer.alloc(8);
@@ -34,13 +33,12 @@ async function mapping() {
 
 async function ownedContext(t, fixture) {
   await fixture.operator(['sdk', 'setup', '--adapter', 'claude-read-only']);
-  const minted = await exec(binary, ['__internal', 'sdk-read-open', '--project', fixture.root, '--mapping-digest', await mapping()]);
-  assert.match(minted.stdout, /^[a-f0-9]{64}\n$/);
-  const env = { ...process.env, [TOKEN]: minted.stdout.trim() };
+  const owner = await openOwner(binary, ['__internal', 'sdk-read-open', '--project', fixture.root, '--mapping-digest', await mapping()], process.env, 60000);
+  const env = { ...process.env, [TOKEN]: owner.token };
   let closed = false;
   const close = async () => {
     if (closed) return;
-    await exec(binary, ['__internal', 'sdk-read-close', '--project', fixture.root], { env });
+    await owner.close();
     closed = true;
   };
   t.after(() => close().catch(() => {}));
@@ -87,20 +85,25 @@ test('general runtime evaluate inspects an approved private retry without consum
   assert.ok(replay.error !== null || replay.result.disposition === 'blocked');
   assert.equal((await fixture.events()).filter(event => event.kind === 'read_grant_consumed').length, 1);
   await invoke.close();
+  const afterClose = await invoke('runtime.evaluate', { input, context, provenance, retry_ref: null });
+  assert.ok(afterClose.error !== null || afterClose.result.disposition === 'blocked');
 });
 
 test('general runtime client approval stays in the original callback and completion retries retain evidence', { skip: !supported }, async t => {
   const fixture = await enrolledRuntime(t);
   await fixture.operator(['sdk', 'setup', '--adapter', 'claude-read-only']);
   let publicRequest;
-  const client = await createClaudeRuntimeReadOnlyClient({ binary, binaryDigest, project: fixture.root, timeoutMs: 60000,
+  const client = await createClaudeRuntimeReadOnlyClient({ binary, binaryDigest, project: fixture.root, timeoutMs: 3000,
     onApprovalRequired: async (request, context) => {
       assert.deepEqual(Object.keys(request), ['request_id']);
       assert.ok(context.signal instanceof AbortSignal);
       publicRequest = request.request_id;
+      await wait(3100);
+      assert.equal(context.signal.aborted, false);
       await fixture.operator(['request', 'approve', request.request_id]);
     } });
   t.after(() => client.close().catch(() => {}));
+  assert.equal(client.hooks.PreToolUse[0].timeout, undefined);
   const input = hostInput(fixture.root, 'Read', { file_path: fixture.asked, offset: 1, limit: 1 }, 'tool-runtime-owned');
   const result = await pre(client)(input);
   assert.equal(decision(result), 'allow');
@@ -164,10 +167,12 @@ test('general runtime client caps eight owned callbacks without queueing a ninth
   const client = await createClaudeRuntimeReadOnlyClient({ binary, binaryDigest, project: fixture.root, timeoutMs: 60000,
     onApprovalRequired: async () => { count++; arrived(); await wait; } });
   const calls = [];
+  const host = new AbortController();
   try {
     for (let index = 0; index < 8; index++) {
       const ready = new Promise(resolve => { arrived = resolve; });
-      calls.push(pre(client)(hostInput(fixture.root, 'Read', { file_path: fixture.asked }, `tool-bounded-${index}`)));
+      calls.push(pre(client)(hostInput(fixture.root, 'Read', { file_path: fixture.asked }, `tool-bounded-${index}`),
+        undefined, index === 0 ? { signal: host.signal } : {}));
       await Promise.race([ready, calls.at(-1).then(() => { throw Error('Owned callback failed before its approval wait'); })]);
     }
     const before = (await fixture.cli(['request', 'list'])).requests.map(row => row.request_id).sort();
@@ -177,6 +182,8 @@ test('general runtime client caps eight owned callbacks without queueing a ninth
     assert.deepEqual((await fixture.cli(['request', 'list'])).requests.map(row => row.request_id).sort(), before);
     const completion = await post(client)({ ...hostInput(fixture.root, 'Read', { file_path: fixture.allowed }, 'tool-bounded-post'), hook_event_name: 'PostToolUse' });
     assert.match(completion.systemMessage, /history unavailable/);
+    host.abort();
+    assert.equal(decision(await calls[0]), 'deny');
     await client.close();
     assert.ok((await Promise.all(calls)).every(value => decision(value) === 'deny'));
   } finally { release(); await client.close().catch(() => {}); await Promise.allSettled(calls); }

@@ -206,6 +206,7 @@ mod tests {
             home: None,
             protected: vec![config.clone()],
             http_environment: false,
+            node_options: false,
             sole_operation: false,
             filesystem_unknown: false,
         };
@@ -218,6 +219,7 @@ mod tests {
                 &json!({}),
                 protocol::NativeContext {
                     integration: "claude",
+                    event: crate::agents::Event::Before,
                     approval: protocol::NativeApproval::Prompt,
                     context_complete: true,
                     working_files: scoped.then_some(&scope),

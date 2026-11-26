@@ -42,7 +42,8 @@ async function fixture(t, decision = 'allow', options = {}) {
   await initialize(root, config);
   const transport = new StdioClientTransport({ command: binary,
     args: ['mcp', 'serve', '--project', root,
-      '--request-timeout-ms', String(options.deadline ?? 5000)], stderr: 'pipe' });
+      ...(options.legacyDeadline ? ['--request-timeout-ms', String(options.legacyDeadline)] : [])],
+    stderr: 'pipe' });
   t.after(() => client.close());
   await client.connect(transport, { timeout: 15000 });
   return { client, root, transport };
@@ -107,9 +108,11 @@ test('official SDK negotiates lifecycle and validates all decisions with strict 
   }
 });
 
-test('server deadline interrupts dense evaluation while the connection stays responsive', async t => {
-  const { client, root } = await fixture(t, 'allow', { dense: true, deadline: 1 });
-  await assert.rejects(client.callTool({ name: 'policy_evaluate', arguments: normalized(root, 'heavy', []) }, undefined, { timeout: 5000 }), error => error.code === -32001);
+test('dense evaluation completes with a legacy one-millisecond timeout argument', async t => {
+  const { client, root } = await fixture(t, 'allow', { dense: true, legacyDeadline: 1 });
+  const result = await client.callTool({ name: 'policy_evaluate', arguments: normalized(root, 'heavy', []) }, undefined, { timeout: 15000 });
+  assert.equal(result.isError, false);
+  assert.equal(data(result).decision, 'allow');
   await client.ping();
 });
 

@@ -23,6 +23,11 @@ const MAX_FILES: usize = MAX_SOURCES * 3 + 4;
 const MEMO_BYTES: usize = 64 * 1024 * 1024;
 const MEMO_ENTRIES: usize = 64;
 
+#[cfg(test)]
+thread_local! {
+    pub(in crate::review) static INITIAL_ADOPTION_STAGED: std::cell::RefCell<Option<Box<dyn FnOnce()>>> = const { std::cell::RefCell::new(None) };
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Head {
@@ -150,6 +155,41 @@ impl Namespace {
         self.initialize()?;
         objects::read_lease(&self.directory, None)
     }
+
+    /// Inspect staged adoption only after the active publisher has released
+    /// its lease. A marker that survives that wait needs exact recovery.
+    pub(in crate::review) fn guard_recovering(
+        &self,
+        sources: &BTreeSet<&str>,
+        checkpoint: super::Checkpoint<'_>,
+    ) -> Result<File, Error> {
+        loop {
+            let guard = self.guard(checkpoint)?;
+            let mut pending = Vec::new();
+            for &identity in sources {
+                if self
+                    .mode(identity)?
+                    .is_some_and(|mode| mode.approved_initial.is_some())
+                {
+                    pending.push(identity);
+                }
+            }
+            if pending.is_empty() {
+                return Ok(guard);
+            }
+
+            // Release the shared lease before queueing for exclusive access.
+            // Recovery reads the marker again under that lease, so it can
+            // never replay a transition another writer has already finished.
+            drop(guard);
+            let _writer = objects::write_lease(&self.directory, checkpoint)?;
+            for identity in pending {
+                checkpoint()?;
+                self.recover_locked(identity)?;
+            }
+        }
+    }
+
     pub(in crate::review) fn read(&self, identity: &str) -> Result<Option<Retained>, Error> {
         let _guard = self.try_guard()?;
         self.read_guarded(identity)
@@ -349,6 +389,10 @@ impl Namespace {
                 }),
                 HEAD_LIMIT,
             )?;
+            #[cfg(test)]
+            if let Some(staged) = INITIAL_ADOPTION_STAGED.with(|slot| slot.borrow_mut().take()) {
+                staged();
+            }
         }
         let written = private_files::write(
             &self

@@ -12,6 +12,10 @@ const FILES: &[(&str, &[u8])] = &[
         include_bytes!("../../../adapters/src/modules/claude-runtime-read-only/binary.mjs"),
     ),
     (
+        "claude-runtime-read-only/owner.mjs",
+        include_bytes!("../../../adapters/src/modules/claude-runtime-read-only/owner.mjs"),
+    ),
+    (
         "runtime-response/index.mjs",
         include_bytes!("../../../adapters/src/modules/runtime-response/index.mjs"),
     ),

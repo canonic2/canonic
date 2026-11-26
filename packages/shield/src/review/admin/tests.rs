@@ -740,7 +740,7 @@ fn administrative_review_operator_handoff_preserves_the_selected_repair() {
     let refusal = review::operator::administrative_review(&unsummarized, &context.project_root)
         .form()
         .unwrap_err();
-    let result = review::mcp::admin_form_error(&context, "mcp_setup", &args, &refusal);
+    let result = review::mcp::admin_form_error(&context, "mcp_setup", &args, &refusal.into());
     assert_eq!(
         result["error"]["code"],
         "confirmation_review_requires_details"

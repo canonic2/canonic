@@ -115,6 +115,12 @@ impl Evaluator {
         self.plan.time_sensitive()
     }
 
+    pub(crate) fn expiration_window(
+        &self,
+    ) -> Result<Option<policy::resolution::compiled::ExpirationWindow>, Error> {
+        self.plan.expiration_window()
+    }
+
     pub(crate) fn evaluate_resource(
         &self,
         request: &Request,
@@ -138,7 +144,7 @@ impl Evaluator {
         let bound = Self::mcp_input(input, resolved);
         let input = bound.as_ref();
         input.validate(context, &request.project)?;
-        let now = crate::evidence::now();
+        let now = crate::evidence::policy_now();
         let observer = crate::location::Observer::new(input, &request.project, &context.cwd, None)
             .with_access_paths(self.effective.access_paths())
             .with_working_files(context.working_files.as_ref());
@@ -672,7 +678,7 @@ impl Evaluator {
             environment: None,
             working_files: working_files.cloned(),
         };
-        let now = crate::evidence::now();
+        let now = crate::evidence::policy_now();
         let observer = crate::location::Observer::new(&input, &request.project, &request.cwd, None)
             .with_access_paths(self.effective.access_paths())
             .with_working_files(working_files);

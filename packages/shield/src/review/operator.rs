@@ -54,7 +54,12 @@ pub(crate) fn commit_proposal_fixture(context: &Context, id: &str) -> Result<Val
 }
 
 pub(crate) fn run(input: &Cli) -> ExitCode {
-    super::retire_user_records();
+    if !matches!(
+        input.command,
+        PublicCommand::Status(_) | PublicCommand::Doctor(_)
+    ) {
+        super::retire_user_records();
+    }
     match dispatch(input) {
         Ok(Output { mut value, context }) => {
             if matches!(input.command, PublicCommand::History(_)) {
@@ -208,6 +213,11 @@ fn dispatch(input: &Cli) -> Result<Output, Error> {
             return registries::mutate(None, &super::registries::fetcher(), registry, input.json)
                 .map(Output::independent);
         }
+        PublicCommand::Pack(pack) if matches!(pack.command, PackCommand::Restore) => {
+            let root = selected_root(&start)?;
+            return project::restore_packs(&root, &super::registries::fetcher(), &|| Ok(()))
+                .map(Output::independent);
+        }
         _ => {}
     }
     let context = if matches!(
@@ -216,9 +226,14 @@ fn dispatch(input: &Cli) -> Result<Output, Error> {
     ) {
         match project_with(&start, super::open_diagnostics) {
             Ok(context) => context,
-            // A folder with policy files and no review state, such as a new
-            // clone, worktree or copy, gets its runtime state on first use.
-            Err(error) => project(&start).map_err(|_| error)?,
+            Err(Error::Missing) => {
+                let root = selected_root(&start)?;
+                return Ok(Output::independent(project::source_status(
+                    &root,
+                    matches!(input.command, PublicCommand::Doctor(_)),
+                )));
+            }
+            Err(error) => return Err(error),
         }
     } else {
         project(&start)?
@@ -378,6 +393,9 @@ fn dispatch(input: &Cli) -> Result<Output, Error> {
                 super::mcp::operator_list(&context, "pack_list", &page.arguments())
             }
             PackCommand::Show { reference } => super::packs::show(&context, reference),
+            PackCommand::Restore => {
+                unreachable!("pack restore is dispatched without opening runtime state")
+            }
             PackCommand::Search { query, page } => {
                 let mut args = page.arguments();
                 args["query"] = json!(query);
@@ -519,8 +537,7 @@ fn finish_pack_updates(context: &Context, input: &Cli, value: &mut Value) {
 fn pack_update_notice(input: &Cli, value: &Value, context: &Context) {
     use crate::cli::public::PackCommand;
     use std::io::{IsTerminal as _, Write as _};
-    let eligible = matches!(&input.command, PublicCommand::Status(_))
-        || matches!(&input.command, PublicCommand::Pack(pack) if matches!(pack.command,
+    let eligible = matches!(&input.command, PublicCommand::Pack(pack) if matches!(pack.command,
             PackCommand::List { .. } | PackCommand::Add { .. } | PackCommand::Update { .. }
             | PackCommand::Remove { .. } | PackCommand::Configure { .. }));
     if !eligible
@@ -557,13 +574,15 @@ pub(super) fn project(start: &Path) -> Result<Context, Error> {
 }
 
 fn project_with(start: &Path, open: fn(&Path) -> Result<Context, Error>) -> Result<Context, Error> {
+    open(&selected_root(start)?)
+}
+
+fn selected_root(start: &Path) -> Result<std::path::PathBuf, Error> {
     let path = start.canonicalize()?;
-    for root in path.ancestors() {
-        if configured(root) {
-            return open(root);
-        }
-    }
-    Err(Error::Invalid("no enrolled project; run shield setup"))
+    path.ancestors()
+        .find(|root| configured(root))
+        .map(Path::to_path_buf)
+        .ok_or(Error::Invalid("no enrolled project; run shield setup"))
 }
 
 fn configured(root: &Path) -> bool {

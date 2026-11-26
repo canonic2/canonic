@@ -49,7 +49,7 @@ impl ReviewAdapter for super::Codex {
 }
 
 static GUIDANCE: Guidance = Guidance {
-    instructions: "Immediately copy apply_arguments unchanged to policy_apply for Codex approval. Connection changes require Shield's form. Closed attempts cannot resume. If approvals are disabled, ask the user to enable prompts with /permissions in this session, then prepare fresh. Never send the user to a terminal or change approval settings yourself. ",
+    instructions: "For native Codex approval, use policy_apply. If prompts are disabled, ask the user to enable prompts with /permissions in this session.",
     unavailable: "Codex approval is unavailable and this attempt is closed. Ask the user to enable confirmation prompts with /permissions in this session, then prepare fresh. Do not change approval settings yourself or send the user to a terminal.",
     required: "Approval required. Inspect the live proposal with policy_show, then copy apply_arguments unchanged into policy_apply. Closed attempts require fresh preparation. Do not change approval settings yourself.",
     proposed: "Inactive change prepared. Immediately copy apply_arguments unchanged to policy_apply for Codex approval. Wait for its outcome before preparing another change. Never finish with an undecided proposal; withdraw an abandoned attempt. Save intent with policy_defer only when the user explicitly requests deferral.",

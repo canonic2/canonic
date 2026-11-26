@@ -11,6 +11,7 @@ mod expansion;
 mod flow;
 mod history;
 mod native;
+mod node_tests;
 mod powershell;
 mod provenance;
 mod redirection;
@@ -180,15 +181,7 @@ pub(crate) fn analyze_versioned_report_with_working_files(
 ) -> Result<Report, Error> {
     checkpoint()?;
     validate_version(dialect_version)?;
-    if source.len() > 65_536 {
-        return Err(Error::Limit);
-    }
-    if source.contains('\0') {
-        return Err(Error::Contract("NUL in shell source"));
-    }
-    if source.trim().is_empty() {
-        return Err(Error::Contract("empty shell source"));
-    }
+    validate_source(source)?;
     let context = Request {
         executable: "shield-context-validation".into(),
         arguments: vec![],
@@ -196,18 +189,7 @@ pub(crate) fn analyze_versioned_report_with_working_files(
         project: project.into(),
     };
     context.validate()?;
-    let opaque = || Node::Opaque {
-        span: structure::Span {
-            start: 0,
-            end: source.len(),
-        },
-    };
-    let tree = match dialect {
-        Dialect::Posix | Dialect::Bash => structure::parse(source, dialect, checkpoint)?,
-        Dialect::Powershell => powershell::parse(source, checkpoint)?.unwrap_or_else(opaque),
-        Dialect::Cmd => cmd::parse(source, checkpoint)?.unwrap_or_else(opaque),
-        Dialect::Unsupported => opaque(),
-    };
+    let tree = parse_source(source, dialect, checkpoint)?;
     let native = matches!(dialect, Dialect::Powershell | Dialect::Cmd)
         && !matches!(tree, Node::Opaque { .. });
     // Missing inputs are inert only when nothing else in the request can
@@ -217,9 +199,15 @@ pub(crate) fn analyze_versioned_report_with_working_files(
         ..working_files.cloned().unwrap_or_default()
     });
     let working_files = sole.as_ref().or(working_files);
+    let direct_node_test = if working_files.is_some_and(|files| files.node_options) {
+        None
+    } else {
+        node_tests::direct(&tree, environment)
+    };
     let mut analysis = Analysis {
         evaluator,
         working_files,
+        direct_node_test,
         checkpoint,
         context,
         directories: crate::location::directory::Directories::new(),
@@ -267,6 +255,16 @@ pub(crate) fn analyze_versioned_report_with_working_files(
     state
         .variables
         .insert("IFS".into(), expansion::DEFAULT_IFS.into());
+    // A request can establish its shell's HOME independently of Shield's own
+    // process environment.
+    if matches!(dialect, Dialect::Posix | Dialect::Bash)
+        && let Some(home) = environment
+            .and_then(|environment| environment.get("HOME"))
+            .filter(|home| home.starts_with('/') && home.len() <= 4096 && !home.contains('\0'))
+    {
+        state.variables.insert("HOME".into(), home.clone().into());
+        state.exported.insert("HOME".into());
+    }
     let decision = analysis.visit(&tree, &mut state, 0)?;
     checkpoint()?;
     let result = Report::new(
@@ -284,6 +282,38 @@ pub(crate) fn analyze_versioned_report_with_working_files(
     )?;
     budget::measure(&result, budget::MAX_EVIDENCE_BYTES, checkpoint)?;
     Ok(result)
+}
+
+fn validate_source(source: &str) -> Result<(), Error> {
+    if source.len() > 65_536 {
+        return Err(Error::Limit);
+    }
+    if source.contains('\0') {
+        return Err(Error::Contract("NUL in shell source"));
+    }
+    if source.trim().is_empty() {
+        return Err(Error::Contract("empty shell source"));
+    }
+    Ok(())
+}
+
+fn parse_source(
+    source: &str,
+    dialect: Dialect,
+    checkpoint: &dyn Fn() -> Result<(), Error>,
+) -> Result<Node, Error> {
+    let opaque = || Node::Opaque {
+        span: structure::Span {
+            start: 0,
+            end: source.len(),
+        },
+    };
+    Ok(match dialect {
+        Dialect::Posix | Dialect::Bash => structure::parse(source, dialect, checkpoint)?,
+        Dialect::Powershell => powershell::parse(source, checkpoint)?.unwrap_or_else(opaque),
+        Dialect::Cmd => cmd::parse(source, checkpoint)?.unwrap_or_else(opaque),
+        Dialect::Unsupported => opaque(),
+    })
 }
 
 pub(crate) fn validate_version(version: Option<&str>) -> Result<(), Error> {
@@ -322,6 +352,7 @@ pub(crate) fn opaque_native(analysis: &Value) -> bool {
 struct Analysis<'a> {
     evaluator: &'a Evaluator,
     working_files: Option<&'a crate::location::WorkingFiles>,
+    direct_node_test: Option<structure::Span>,
     checkpoint: &'a dyn Fn() -> Result<(), Error>,
     context: Request,
     directories: crate::location::directory::Directories,
@@ -1016,7 +1047,13 @@ impl Analysis<'_> {
         // unresolved operands have their own coverage checks.
         let unknown_context = state.cwd_unknown;
         let (evaluation, policy_request) = self.contextual_evaluation(&request, state)?;
-        let interpreter_needs_review = opaque
+        let trusted_node_test = self.direct_node_test == Some(span)
+            && opaque
+            && !unknown_context
+            && !state.environment_unknown
+            && node_tests::allowed(&request, &evaluation, self.evaluator.codex_prefixes());
+        let needs_review = opaque && !trusted_node_test;
+        let interpreter_needs_review = needs_review
             && evaluation.decision == Decision::Allow
             && bindings::script_interpreter(executable_name);
         let indirect = self.tool_nested(effects.as_ref(), span, state, depth, Some(&evaluation))?;
@@ -1034,7 +1071,7 @@ impl Analysis<'_> {
         if (same_directory || resolved_directory) && evaluation.fallback_only_ask() {
             decision = Decision::Allow;
         }
-        if opaque || unknown_context {
+        if needs_review || unknown_context {
             self.complete = false;
             decision = decision.max(Decision::Ask);
         }
@@ -1051,7 +1088,7 @@ impl Analysis<'_> {
                     Coverage::ObservedWorkingDirectoryChange
                 } else if loop_transfer && decision == Decision::Allow {
                     Coverage::ResolvedControlTransfer
-                } else if opaque || unknown_context {
+                } else if needs_review || unknown_context {
                     Coverage::Partial
                 } else {
                     Coverage::LiteralArgv

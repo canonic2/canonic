@@ -145,6 +145,7 @@ impl OwnedChild {
     }
 
     fn from_command(command: Command) -> Result<Self, Error> {
+        let _trace = crate::diagnostics::trace::span("child.spawn");
         let console = ConsoleModes::capture()?;
         let mut limits = win32job::ExtendedLimitInfo::new();
         limits.limit_kill_on_job_close();
@@ -227,6 +228,7 @@ impl OwnedChild {
         started: Instant,
         timeout: u64,
     ) -> Result<Outcome, Error> {
+        let _trace = crate::diagnostics::trace::span("child.wait");
         loop {
             if let Some(status) = self.child.inner_mut().try_wait()? {
                 return self.finish(

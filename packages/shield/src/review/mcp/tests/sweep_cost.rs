@@ -369,7 +369,8 @@ fn ordinary_request_sweep_tracks_fresh_and_aged_work() {
                         && record["fields"]["stage"] == "cache.load"
                 })
                 .count();
-            assert_eq!(loads, 0, "{age} {tool}: active plan load budget");
+            // Coverage uses the warm plan. Status publishes a lazy inspection handle.
+            assert_eq!(loads, 1, "{age} {tool}: plan loads");
         }
         if matches!(
             tool,
@@ -426,14 +427,19 @@ fn ordinary_request_sweep_tracks_fresh_and_aged_work() {
         // Status reads the files' already compiled plan. A proposal is its file
         // texts: preparing it rebuilds both sides from them, and showing one
         // proposal rebuilds them again; neither depends on other proposals.
-        // Following the files into review state adds three source captures,
-        // only on the request that follows them first in this process.
+        // First follow validates the read used for the content key and
+        // reconciles the named files. Deriving the revision uses the second
+        // validation's snapshot directly.
+        let count = |name: &str| end["fields"]["counts"][name].as_u64().unwrap_or(0);
+        if tool == "policy_propose" && age != "registered" {
+            assert_eq!(count("projection.lock_sets_rendered"), 1, "{age}: {end}");
+            assert_eq!(count("source.map_identity_encodings"), 0, "{age}: {end}");
+        }
         let sources = match tool {
             "policy_propose" => 4,
             "selected" => 2,
             _ => 0,
-        } + 3 * captures;
-        let count = |name: &str| end["fields"]["counts"][name].as_u64().unwrap_or(0);
+        } + 2 * captures;
         assert_eq!(
             count("policy.source_captures") + count("policy.source_capture_reuses"),
             sources,

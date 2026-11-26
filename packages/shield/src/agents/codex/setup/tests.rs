@@ -120,6 +120,7 @@ fn prefix_rules_list_each_pattern_once_with_its_sources() {
     let prefix = |rule: &str, pattern: Vec<Vec<&str>>| CodexPrefix {
         owner: "acme/tools".into(),
         rule: rule.into(),
+        trust_project_node_tests: false,
         pattern: pattern
             .into_iter()
             .map(|p| p.into_iter().map(str::to_owned).collect())

@@ -9,7 +9,6 @@ use std::{
     path::{Path, PathBuf},
     process::ExitCode,
     sync::Arc,
-    time::Duration,
 };
 
 #[cfg(test)]
@@ -28,10 +27,9 @@ pub(crate) fn run(
     input: &McpServe,
     log: &Arc<crate::diagnostics::Log>,
 ) -> ExitCode {
-    let options = mcp::options(
-        Duration::from_millis(input.request_timeout_ms),
-        Some(log.clone()),
-    );
+    let lifecycle = mcp::lifecycle::Log::start(log);
+    let mut options = mcp::options(Some(log.clone()));
+    options.observations = lifecycle.as_ref().map(mcp::lifecycle::Log::sender);
     if input.skills_only {
         return match mcp::serve_static(process_input(), io::stdout().lock(), &options) {
             Ok(()) => ExitCode::SUCCESS,
@@ -72,7 +70,10 @@ pub(crate) fn run(
             }
         };
     }
-    log.event("mcp_start", || serde_json::json!({"session_id":context.session_id,"agent":context.agent,"request_timeout_ms":input.request_timeout_ms}));
+    log.event(
+        "mcp_start",
+        || serde_json::json!({"session_id":context.session_id,"agent":context.agent}),
+    );
     let context = match review_context(&context) {
         Ok(context) => context,
         Err(error) => {

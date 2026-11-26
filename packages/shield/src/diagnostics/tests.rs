@@ -188,33 +188,54 @@ fn oversized_diagnostic_records_are_counted_without_entering_the_queue() {
 }
 
 #[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one transport lifetime checks trace ordering, publication and redaction together"
+)]
 fn real_mcp_dispatch_logs_request_and_response_without_retaining_results() {
+    use crate::mcp::{self, tests::Transport};
+
     let root = assert_fs::TempDir::new().unwrap();
     let log = std::sync::Arc::new(Log::create(root.path()).unwrap());
-    let (server, _project) = crate::mcp::tests::fixture(None);
-    let [initialize, initialized] = crate::mcp::tests::initialize(&json!({}), "secret-client");
-    let input = format!(
-        "{initialize}\n{initialized}\n{}\n",
-        json!({"jsonrpc":"2.0","id":33,"method":"tools/call","params":{"name":"status","arguments":{}}})
+    let (server, project) = mcp::tests::fixture(None);
+    let disabled = std::sync::Arc::new(Log::disabled());
+    assert!(mcp::lifecycle::Log::start(&disabled).is_none());
+    let baseline = mcp::Server::for_review((*project.review).clone()).unwrap();
+    let lifecycle = mcp::lifecycle::Log::start(&log).unwrap();
+    let mut options = mcp::options(Some(log.clone()));
+    options.observations = Some(lifecycle.sender());
+    let transports = [
+        Transport::with_options(baseline.with_log(disabled), mcp::options(None)),
+        Transport::with_options(server.with_log(log.clone()), options),
+    ];
+    for transport in &transports {
+        for message in mcp::tests::initialize(&json!({}), "secret-client") {
+            transport.send(&message);
+        }
+        assert!(transport.receive()["result"].is_object());
+    }
+    let mut timings = [Vec::new(), Vec::new()];
+    for id in 32..42 {
+        let first = id % 2;
+        let mut responses = [Value::Null, Value::Null];
+        for index in [first, 1 - first] {
+            let started = Instant::now();
+            responses[index] = transports[index].call(json!(id), "pack_list", &json!({}));
+            if id > 32 {
+                timings[index].push(started.elapsed().as_micros());
+            }
+        }
+        assert_eq!(responses[0]["id"], id);
+        assert_eq!(responses[0]["result"]["isError"], false);
+        assert_eq!(responses[0], responses[1]);
+    }
+    for samples in &mut timings {
+        samples.sort_unstable();
+    }
+    eprintln!(
+        "warm in-memory stdio median: disabled {} us, enabled {} us",
+        timings[0][4], timings[1][4]
     );
-    let mut output = Vec::new();
-    crate::mcp::serve(
-        server,
-        std::io::Cursor::new(input.into_bytes()),
-        &mut output,
-        &crate::mcp::options(std::time::Duration::from_secs(5), Some(log.clone())),
-    )
-    .unwrap();
-    let response: Value = serde_json::from_slice(
-        String::from_utf8_lossy(&output)
-            .lines()
-            .last()
-            .unwrap()
-            .as_bytes(),
-    )
-    .unwrap();
-    assert_eq!(response["id"], 33);
-    assert_eq!(response["result"]["isError"], false);
     let deadline = Instant::now() + std::time::Duration::from_secs(1);
     let (text, records) = loop {
         let text = std::fs::read_to_string(log.path().unwrap()).unwrap();
@@ -226,6 +247,8 @@ fn real_mcp_dispatch_logs_request_and_response_without_retaining_results() {
             records
                 .iter()
                 .any(|record| record["event"] == *event && record["fields"]["id"] == 33)
+        }) && records.iter().any(|record| {
+            record["event"] == "mcp_transport" && record["fields"]["stage"] == "Publication"
         }) {
             break (text, records);
         }
@@ -237,10 +260,47 @@ fn real_mcp_dispatch_logs_request_and_response_without_retaining_results() {
     };
     assert!(records.iter().any(|record| record["event"] == "mcp_input"
         && record["fields"]["id"] == 33
-        && record["fields"]["tool"] == "status"));
+        && record["fields"]["tool"] == "pack_list"));
     assert!(records.iter().any(|record| record["event"] == "mcp_output"
         && record["fields"]["id"] == 33
         && record["fields"]["bytes"].as_u64().unwrap() > 0));
+    let start = records
+        .iter()
+        .find(|record| record["event"] == "request_start" && record["fields"]["request_id"] == 33)
+        .unwrap();
+    let link = &records
+        .iter()
+        .find(|record| {
+            record["event"] == "request_transport"
+                && record["fields"]["trace_id"] == start["fields"]["trace_id"]
+        })
+        .unwrap()["fields"];
+    for (stage, parent) in [
+        ("Decode", None),
+        ("Validation", Some("Decode")),
+        ("Queue", None),
+        ("Encode", None),
+        ("Publication", None),
+    ] {
+        for transition in ["start", "end"] {
+            assert!(
+                records.iter().any(|record| {
+                    let fields = &record["fields"];
+                    record["event"] == "mcp_transport"
+                        && fields["connection"] == link["connection"]
+                        && fields["request"] == link["request"]
+                        && fields["stage"] == stage
+                        && fields["transition"] == transition
+                        && parent.is_none_or(|parent| fields["parent_stage"] == parent)
+                }),
+                "missing {stage} {transition} for {link}"
+            );
+        }
+    }
     assert!(!text.contains("secret-client"));
     assert!(!text.contains("structuredContent"));
+    for transport in transports {
+        assert!(transport.close().1.is_ok());
+    }
+    drop(lifecycle);
 }

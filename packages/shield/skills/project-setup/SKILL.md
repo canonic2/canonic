@@ -16,9 +16,14 @@ existing policy, packs, settings and agent selections.
    discovery is ambiguous. The baseline defaults to Recommended on first use.
    Let the user confirm material changes. If the host cannot show the review,
    ask the user to run the returned operator command.
-2. Follow the returned `next` action. For a Hub project, call Hub's `setup` for
-   the named project and preserve its saved agent selection. Hub publishes the
-   Shield definition and hooks. An interrupted Shield publication resumes when
+2. Follow the returned `next` action and its arguments. For a Hub project, call
+   Hub's `setup` with the returned project and preserve its saved agent selection.
+   Hub's own review confirms publication of the Shield definition and hooks.
+   Use Hub's setup preview when the user wants to inspect that plan first. If the
+   host cannot show Hub's review, follow Hub's scoped operator action. If Hub
+   reports missing owned hooks, use its `error.context.next` for the adoption
+   review.
+   An interrupted Shield publication resumes when
    `setup` is called again without arguments.
 3. If enforcement is disabled and setup was requested, call `enable` for the
    user's in-session confirmation. Protected-file guards working while disabled
@@ -99,9 +104,27 @@ is set up differently; judge the code, not the name.
 4. Follow any returned `review_action` and wait for the human confirmation
    outcome. The host prompt supplies the decision.
 
-Skip this step when no pack is missing.
+Skip installation when no pack is missing.
 
-## 5. Add project rules
+## 5. Configure local tool paths
+
+1. Check installed packs for declared executable discovery. For a pack already
+   installed, call `pack_configure` with its reference and no edits to discover
+   missing settings. Pack add already discovers paths for new selections. Use
+   the returned review action if there is a proposal.
+2. For custom installations outside the pack's discovery locations, use the
+   exact executable paths from the development commands or the user's tool
+   configuration. Check the pack's variable declarations. Where a pack accepts
+   a list, collect distinct paths for each tool and retain its existing paths.
+   Prepare one `pack_configure` change per affected selection with `set` and
+   `layer: local`. Follow the ordinary policy review before saving the paths to
+   `.shield/config.local.yml`, which is ignored by default.
+3. Re-evaluate the commands using their absolute paths. When the corresponding
+   command with a standard executable spelling also asks or denies, the
+   existing operation rules still apply. Keep those decisions when configuring
+   an executable path.
+
+## 6. Add project rules
 
 1. Check each kept command with `policy_evaluate`, as agents would run it.
    Drop those already allowed.
@@ -131,7 +154,7 @@ Skip this step when no pack is missing.
 7. Call `policy_review` with the `proposal_id`. For hosts with native tool
    approval, use the unchanged `apply_arguments` with `policy_apply`.
 
-## 6. Finish
+## 7. Finish
 
 - On decline or cancellation, stop that step; do not retry or broaden it. If
   the user declines packs, do not replace them with custom rules for the same

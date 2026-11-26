@@ -2,6 +2,10 @@
 use std::path::PathBuf;
 
 #[derive(Clone, Debug, Default)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent file and client observations can occur together"
+)]
 pub(crate) struct WorkingFiles {
     pub read: Vec<PathBuf>,
     pub write: Vec<PathBuf>,
@@ -14,6 +18,8 @@ pub(crate) struct WorkingFiles {
     pub home: Option<PathBuf>,
     /// Native HTTP configuration/proxy environment may change a literal fetch.
     pub http_environment: bool,
+    /// A native hook inherited Node options that can change test execution.
+    pub node_options: bool,
     /// The shell analyzer found one plain text-filter invocation, so no other
     /// operation in the request can create an input first.
     pub sole_operation: bool,

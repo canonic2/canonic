@@ -8,6 +8,71 @@ fn operation() -> Value {
 }
 
 #[test]
+fn private_mcp_completion_uses_project_keyed_operation_and_delivery_digests() {
+    let (root, mut context) = review::tests::enrolled();
+    context.surface = "hook".into();
+    context.agent = Some("claude".into());
+    context.session_id = Some("acme-session".into());
+    context.tool_use_id = Some("acme-call".into());
+    context.cwd = Some(context.project_root.clone());
+    context.host_event_name = Some("PreToolUse".into());
+    let operation = json!({"kind":"mcp","alias":"acme","tool":"execute_sql",
+        "arguments":{"query":"SELECT 1"}});
+    let before = decision(
+        &context,
+        json!({"operation":operation,"host_decision":"allow"}),
+    )
+    .unwrap();
+    context.host_event_name = Some("PostToolUse".into());
+    let input = EventInput {
+        delivery_id: "acme-sql".into(),
+        request_id: None,
+        status: "completed".into(),
+    };
+    let after = native_mcp_completion(&context, &input, &operation).unwrap();
+    let mut events = Vec::new();
+    for entry in std::fs::read_dir(root.path().join(".shield/state")).unwrap() {
+        let path = entry.unwrap().path();
+        if path
+            .extension()
+            .is_some_and(|extension| extension == "jsonl")
+        {
+            let contents = std::fs::read_to_string(path).unwrap();
+            events.extend(contents.lines().filter_map(|line| {
+                serde_json::from_str::<Value>(line)
+                    .ok()?
+                    .get_mut("event")
+                    .map(Value::take)
+            }));
+        }
+    }
+    let raw = |receipt: &Value| {
+        events
+            .iter()
+            .find(|event| event["event_id"] == receipt["event_id"])
+            .unwrap()
+    };
+    let decision = raw(&before);
+    let completion = raw(&after);
+    let fingerprint = mcp_operation_digest(&operation).unwrap();
+    let delivery = crate::json::fingerprint(&(json!(input), operation)).unwrap();
+    assert_eq!(decision["details"]["operation"]["arguments"], "[REDACTED]");
+    assert_eq!(
+        completion["details"]["operation"]["arguments"],
+        "[REDACTED]"
+    );
+    assert_ne!(decision["details"]["mcp_operation_digest"], fingerprint);
+    assert_ne!(completion["details"]["input_digest"], delivery);
+    assert_eq!(
+        decision["details"]["mcp_operation_digest"],
+        completion["details"]["mcp_operation_digest"]
+    );
+    let projected = review::tests::history(&context, after["event_id"].as_str()).unwrap();
+    assert_eq!(projected["links"]["decision_event_id"], before["event_id"]);
+    assert!(projected["details"].get("input_digest").is_none());
+}
+
+#[test]
 fn optional_pack_omission_preserves_prior_diagnostic_counts_and_marks_only_actual_removals() {
     for with_packs in [false, true] {
         let (_root, context) = review::tests::enrolled();

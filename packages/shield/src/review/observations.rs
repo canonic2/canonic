@@ -10,7 +10,7 @@ use std::{ops::ControlFlow, path::Path};
 #[cfg(test)]
 mod tests;
 
-#[derive(serde::Deserialize)]
+#[derive(Clone, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Host {
     pub(crate) agent: String,
@@ -45,7 +45,7 @@ pub(crate) fn context(
     cwd: &str,
     host: &Host,
 ) -> Result<Context, Error> {
-    let mut context = super::open(root)?;
+    let (mut context, _) = super::open_checkpoint(&Store::open_observations(root)?)?;
     if context.project_id != project_id {
         return Err(Error::Invalid("observation project changed"));
     }
@@ -64,7 +64,11 @@ fn receipt(event: &Value, request: &Value) -> Value {
 }
 
 pub(crate) fn decision(context: &Context, mut details: Value) -> Result<Value, Error> {
-    if details.get_mut("operation").is_some_and(redact_mcp_sql) {
+    if details["operation"]["kind"] == "mcp" {
+        details["mcp_operation_digest"] = json!(mcp_operation_digest(&details["operation"])?);
+    }
+    let private_arguments = details.get_mut("operation").is_some_and(redact_mcp_sql);
+    if private_arguments {
         details["original_input"] = json!("[REDACTED]");
     }
     // Large selected-pack metadata is diagnostic evidence, not request history.
@@ -93,8 +97,16 @@ pub(crate) fn decision(context: &Context, mut details: Value) -> Result<Value, E
             }
         }
     }
-    let store = Store::open(Path::new(&context.project_root))?;
+    let store = Store::open_observations(Path::new(&context.project_root))?;
     store.observe(context, history::lock_optional, |state| {
+        if private_arguments {
+            history::protect_digests(
+                &store,
+                &state.project_id,
+                &mut details,
+                &["mcp_operation_digest"],
+            )?;
+        }
         let request = details["approval"]["request_id"]
             .as_str()
             .map(str::to_owned)
@@ -118,21 +130,58 @@ pub(crate) fn completion(
     input: &EventInput,
     operation: &Value,
 ) -> Result<Value, Error> {
+    host_completion(context, input, operation, false)
+}
+
+pub(crate) fn native_mcp_completion(
+    context: &Context,
+    input: &EventInput,
+    operation: &Value,
+) -> Result<Value, Error> {
+    host_completion(context, input, operation, true)
+}
+
+fn host_completion(
+    context: &Context,
+    input: &EventInput,
+    operation: &Value,
+    compact_mcp: bool,
+) -> Result<Value, Error> {
     input.validate()?;
-    let signature = crate::policy::fingerprint(
-        &serde_json::to_vec(&json!([input, operation]))
-            .map_err(|_| Error::Invalid("completion encoding"))?,
-    );
+    // A tuple encodes as the same JSON array without cloning the operation;
+    // the input stays a Value so its keys keep their sorted order.
+    let signature = serde_json::to_value(input)
+        .and_then(|input| crate::json::fingerprint(&(input, operation)))
+        .map_err(|_| Error::Invalid("completion encoding"))?;
     // The event records that the host ran the tool. Hosts report no exit
     // status, and their event says only whether the call failed, so only
     // that outcome is kept; a missing status never means success.
     let mut details = json!({"delivery_id":input.delivery_id,"input_digest":signature,
-        "operation":operation,"evidence":"host-reported","reported_request_id":input.request_id});
-    redact_mcp_sql(&mut details["operation"]);
+        "evidence":"host-reported","reported_request_id":input.request_id});
+    if operation["kind"] == "mcp" {
+        details["mcp_operation_digest"] = json!(mcp_operation_digest(operation)?);
+    }
+    details["operation"] = if compact_mcp {
+        // Live configuration cannot tell us what this earlier call was allowed
+        // to disclose. Readers recover retained arguments from its decision.
+        json!({"kind":"mcp","alias":operation["alias"],"tool":operation["tool"],"arguments":"[REDACTED]"})
+    } else {
+        let mut operation = operation.clone();
+        redact_mcp_sql(&mut operation);
+        operation
+    };
     if matches!(input.status.as_str(), "failed" | "cancelled") {
         details["status"] = json!(input.status);
     }
-    record_completion(context, || details)
+    let private_arguments = operation["kind"] == "mcp"
+        && operation["tool"]
+            .as_str()
+            .is_some_and(crate::evidence::private_mcp_arguments);
+    record_completion(context, details, private_arguments)
+}
+
+fn mcp_operation_digest(operation: &Value) -> Result<String, Error> {
+    crate::json::fingerprint(operation).map_err(|_| Error::Invalid("MCP observation encoding"))
 }
 
 fn redact_mcp_sql(operation: &mut Value) -> bool {
@@ -157,18 +206,32 @@ pub(crate) fn execution_completion(
     exit_code: Option<i32>,
     signal: Option<i32>,
 ) -> Result<Value, Error> {
-    record_completion(context, || {
+    record_completion(
+        context,
         json!({"operation":operation,"status":status,"exit_code":exit_code,"signal":signal,
-            "evidence":"owned-child","reported_request_id":request})
-    })
+            "evidence":"owned-child","reported_request_id":request}),
+        false,
+    )
 }
 
 /// Publish raw completion evidence. History readers derive links, duplicates
 /// and conflicts, so the receipt claims no correlation.
-fn record_completion(context: &Context, details: impl FnOnce() -> Value) -> Result<Value, Error> {
-    let store = Store::open(Path::new(&context.project_root))?;
+fn record_completion(
+    context: &Context,
+    mut details: Value,
+    private_arguments: bool,
+) -> Result<Value, Error> {
+    let store = Store::open_observations(Path::new(&context.project_root))?;
     store.observe(context, history::lock, |state| {
-        let mut event = state.event("completion", context, json!({}), json!({}), details());
+        if private_arguments {
+            history::protect_digests(
+                &store,
+                &state.project_id,
+                &mut details,
+                &["mcp_operation_digest", "input_digest"],
+            )?;
+        }
+        let mut event = state.event("completion", context, json!({}), json!({}), details);
         event["event_id"] = json!(history::identifier("event", &state.project_id)?);
         let result = receipt(&event, &Value::Null);
         state.record(event);
@@ -185,7 +248,7 @@ fn advisory(root: &Path) -> Option<State> {
 /// Newest-first retained events for hook reply text, from the checkpoint and the
 /// bounded history tail; the work does not grow with retained history.
 fn recent(root: &Path, visit: impl FnMut(&Value) -> ControlFlow<()>) -> Option<()> {
-    let store = Store::open(root).ok()?;
+    let store = Store::open_observations(root).ok()?;
     let state = store.read_checkpoint().ok()?;
     history::recent(&store, &state, visit).ok().map(|_| ())
 }

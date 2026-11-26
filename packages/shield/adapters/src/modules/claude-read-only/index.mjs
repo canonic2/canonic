@@ -11,6 +11,7 @@ const fields = (value, allowed) => object(value) && Object.keys(value).every(key
 const text = (value, max = 4096) => typeof value === 'string' && value.length > 0
   && Buffer.byteLength(value) <= max && !value.includes('\0');
 const integer = value => Number.isSafeInteger(value) && value > 0 && value <= 1_000_000;
+const APPROVAL_TOOLS = ['mcp__shield__request_show', 'mcp__shield__request_approve', 'mcp__shield__request_deny'];
 const deny = (code, request, detail, project, interactive) => ({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny',
   permissionDecisionReason: denialReason(code, request, detail, project, interactive) } });
 /** Registered Claude Agent SDK callback hooks. Only bounded plain .txt Read tools can proceed. */
@@ -64,7 +65,7 @@ export async function createClaudeReadOnlyHooks(options) {
       const identity = key(input);
       if (approvalSessionId !== undefined) {
         if (input.session_id !== approvalSessionId) return deny('invalid-host-session');
-        if (['mcp__shield__request_show', 'mcp__shield__request_approve', 'mcp__shield__request_deny'].includes(input.tool_name)) {
+        if (APPROVAL_TOOLS.includes(input.tool_name)) {
           const args = input.tool_input;
           const ids = fields(args, ['request_id']) && text(args.request_id, 128) ? [args.request_id]
             : input.tool_name === 'mcp__shield__request_approve' && fields(args, ['request_ids']) && Array.isArray(args.request_ids)
@@ -103,11 +104,15 @@ export async function createClaudeReadOnlyHooks(options) {
     try {
       if (!fields(input, [...commonFields, 'tool_response', 'error', 'is_interrupt', 'duration_ms'])
         || !['PostToolUse', 'PostToolUseFailure'].includes(input.hook_event_name)
-        || input.tool_name !== 'Read' || !validRead(input.tool_input)
+        || !text(input.tool_name, 128) || !object(input.tool_input)
         || !text(input.cwd) || !isAbsolute(input.cwd) || !text(input.tool_use_id, 128)
         || (input.session_id !== undefined && !text(input.session_id))
         || (toolUseId !== undefined && toolUseId !== input.tool_use_id)
         || (input.is_interrupt !== undefined && typeof input.is_interrupt !== 'boolean')) return warning();
+      // The MCP service owns the approval outcome and its history.
+      if (approvalSessionId !== undefined && input.session_id === approvalSessionId
+        && APPROVAL_TOOLS.includes(input.tool_name)) return {};
+      if (input.tool_name !== 'Read' || !validRead(input.tool_input)) return warning();
       const operation = readOperation(input.tool_input);
       const prior = pending.complete(key(input));
       const request = prior && prior.cwd === input.cwd && JSON.stringify(prior.operation) === JSON.stringify(operation)
@@ -138,7 +143,7 @@ export async function createClaudeReadOnlySession(options) {
   const hooks = await createClaudeReadOnlyHooks({ binary, project,
     ...(timeoutMs === undefined ? {} : { timeoutMs }), approvalSessionId: sessionId });
   return Object.freeze({ hooks, sessionId, settingSources: [], strictMcpConfig: true,
-    tools: ['Read'], allowedTools: ['Read', 'mcp__shield__request_show', 'mcp__shield__request_approve', 'mcp__shield__request_deny'],
+    tools: ['Read'], allowedTools: ['Read', ...APPROVAL_TOOLS],
     mcpServers: { shield: { command: binary, args: ['mcp', 'serve', '--project', project, '--agent', 'claude', '--session-id', sessionId] } },
     onElicitation: async (request, context) => request.serverName === 'shield' && (request.mode === 'form' || (request.mode === undefined && request.url === undefined))
       ? handler(request, context) : { action: 'decline' } });

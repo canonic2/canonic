@@ -146,14 +146,13 @@ fn registry_enrollment_full_review_capacity_refuses_before_source_discovery_unti
     let missing = json!({"name":"other","location":"missing-registry"});
     assert!(matches!(
         admin_confirmation(&context, &connection, "registry_add", &missing, &|| Ok(())),
-        Err(Error::Overloaded)
+        Err(refusal) if matches!(refusal.error.as_ref(), Error::Overloaded)
     ));
     let binding = *connection.admin.lock().unwrap().keys().next().unwrap();
     discard_admin(&connection, binding);
-    assert!(!matches!(
-        admin_confirmation(&context, &connection, "registry_add", &missing, &|| Ok(())),
-        Ok(_) | Err(Error::Overloaded)
-    ));
+    let refusal = admin_confirmation(&context, &connection, "registry_add", &missing, &|| Ok(()))
+        .unwrap_err();
+    assert!(!matches!(refusal.error.as_ref(), Error::Overloaded));
     admin_confirmation(&context, &connection, "registry_add", &args, &|| Ok(()))
         .unwrap()
         .unwrap();

@@ -5,6 +5,7 @@ use super::{Error, integrations::project_sources};
 use crate::configuration::Bundle;
 use crate::{application, configuration::Evaluator, policy};
 use std::{
+    collections::{HashMap, HashSet},
     fs,
     io::Write,
     path::{Path, PathBuf},
@@ -28,7 +29,8 @@ pub(in crate::review) fn load(root: &Path) -> Result<Policy, Error> {
 pub(in crate::review) fn load_in(root: &Path, cache: Option<&Path>) -> Result<Policy, Error> {
     let _trace = crate::diagnostics::trace::span("policy.files");
     let invalid = |cause| diagnose(root, error(cause));
-    let sources = project_sources::read(&crate::layout::config_file(root)).map_err(invalid)?;
+    let sources =
+        project_sources::read_retaining(&crate::layout::config_file(root)).map_err(invalid)?;
     let digest = key(&sources);
     // Without a cache folder every load compiles; the files still decide.
     let path = cache.map(|cache| plan_path(cache, &digest));
@@ -80,6 +82,12 @@ pub(in crate::review) fn digest(root: &Path) -> Result<String, Error> {
     Ok(bytes_key(&sources))
 }
 
+/// Compare the sources to the captured plan key without loading or compiling a plan.
+pub(in crate::review) fn plan_key(root: &Path) -> Result<String, Error> {
+    let sources = project_sources::read(&crate::layout::config_file(root)).map_err(error)?;
+    Ok(key(&sources))
+}
+
 /// Make the review state's copy of the policy follow the policy files, so CLI
 /// and MCP workflows read, compare and publish against the files as they are.
 /// Runs under the writer lock, or in memory for readers. Returns whether the
@@ -101,7 +109,9 @@ pub(in crate::review) fn sync(
     if selection.source == crate::layout::Source::Absent {
         return Ok(false);
     }
-    let digest = digest(root).map_err(invalid)?;
+    let sources = project_sources::read(&crate::layout::config_file(root))
+        .map_err(|cause| invalid(error(cause)))?;
+    let digest = bytes_key(&sources);
     if state.followed_files.as_deref() == Some(digest.as_str())
         && state.candidates.contains_key("project")
     {
@@ -127,9 +137,10 @@ pub(in crate::review) fn sync(
         revision,
         hashes,
     } = if let Some(capture) = remembered {
+        drop(sources);
         capture
     } else {
-        let capture = follow(context, state, root).map_err(invalid)?;
+        let capture = follow(context, state, sources).map_err(invalid)?;
         if let Some(key) = key {
             *LAST_CAPTURE
                 .lock()
@@ -182,20 +193,18 @@ static LAST_CAPTURE: std::sync::Mutex<Option<(CaptureKey, Captured)>> = std::syn
 fn follow(
     context: &super::Context,
     state: &mut super::model::State,
-    root: &Path,
+    sources: project_sources::Sources,
 ) -> Result<Captured, Error> {
     crate::diagnostics::trace::count("policy.captures", 1);
     if !state.candidates.contains_key("project") {
-        let fresh = project_sources::capture(&crate::layout::config_file(root)).map_err(error)?;
+        let fresh = sources.bundle().map_err(error)?;
         state
             .candidates
             .insert("project".into(), serde_json::json!(fresh));
     }
+    drop(sources);
     let capture = super::changes::project_files::capture(context, state)?;
-    let candidates =
-        std::collections::BTreeMap::from([("project".into(), capture.candidate.clone())]);
-    let revision = super::snapshots(&candidates)
-        .and_then(|snapshots| Evaluator::revision_of(&snapshots).map_err(Error::from))?;
+    let revision = Evaluator::revision_of(&[(policy::Scope::Project, capture.snapshot)])?;
     let hashes = capture
         .paths
         .into_iter()
@@ -222,26 +231,45 @@ pub(in crate::review) struct Fetched {
 pub(in crate::review) fn fetch_missing(
     root: &Path,
     settings: &crate::configuration::settings::Values,
+    client: &canonic_registry_kit::acquisition::Fetcher,
+    checkpoint: super::Checkpoint<'_>,
 ) -> Result<Fetched, Error> {
     let shield = crate::layout::bundle(root);
     let store = artifact_store()?;
-    let mut missing = Vec::new();
+    let mut missing: Vec<Vec<serde_json::Value>> = Vec::new();
+    let mut positions: HashMap<String, usize> = HashMap::new();
     for lock in ["shield.lock", "shield.local.lock"] {
-        let Ok(text) = fs::read_to_string(shield.join(lock)) else {
+        let path = shield.join(lock);
+        let path = match fs::symlink_metadata(&path) {
+            Ok(_) => project_sources::regular_file(&path).map_err(error)?,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(error.into()),
+        };
+        let text = application::read(&path).map_err(error)?;
+        let mut locked: serde_json::Value = serde_json::from_str(&text)
+            .map_err(|_| Error::Invalid("project lock file is not valid JSON"))?;
+        let Some(serde_json::Value::Array(rows)) =
+            locked.get_mut("packs").map(serde_json::Value::take)
+        else {
             continue;
         };
-        let locked: serde_json::Value = serde_json::from_str(&text)
-            .map_err(|_| Error::Invalid("project lock file is not valid JSON"))?;
-        for row in locked["packs"].as_array().into_iter().flatten() {
+        for row in rows {
             let Some(digest) = row["digest"]
                 .as_str()
                 .filter(|d| d.len() == 64 && d.bytes().all(|b| b.is_ascii_hexdigit()))
             else {
                 continue;
             };
-            let name = format!("{digest}.yml");
-            if !store.join(&name).exists() && !shield.join("cache").join(&name).exists() {
-                missing.push(row.clone());
+            if let Some(&index) = positions.get(digest) {
+                missing[index].push(row);
+            } else {
+                let name = format!("{digest}.yml");
+                if project_sources::stored_artifact(&shield, &name).is_none()
+                    && !shield.join("cache").join(&name).exists()
+                {
+                    positions.insert(digest.to_owned(), missing.len());
+                    missing.push(vec![row]);
+                }
             }
         }
     }
@@ -253,17 +281,30 @@ pub(in crate::review) fn fetch_missing(
         return Ok(outcome);
     }
     let sources = super::registries::effective_from(settings)?;
-    let client = super::registries::fetcher();
-    for row in missing {
-        let release = format!(
-            "{}@{}",
-            row["id"].as_str().unwrap_or("?"),
-            row["version"].as_str().unwrap_or("?")
-        );
-        match fetch_release(&row, &sources, &client, &store) {
-            Ok(()) => outcome.releases.push(release),
-            Err(error) => outcome.failures.push((release, error.to_string())),
+    for rows in missing {
+        let mut attempted = HashSet::new();
+        let mut failure = None;
+        for row in &rows {
+            let attempt = (
+                row["source_identity"].as_str(),
+                row["id"].as_str(),
+                row["version"].as_str(),
+            );
+            if !attempted.insert(attempt) {
+                continue;
+            }
+            checkpoint()?;
+            let release = format!("{}@{}", attempt.1.unwrap_or("?"), attempt.2.unwrap_or("?"));
+            match fetch_release(row, &sources, client, &store, checkpoint) {
+                Ok(()) => {
+                    outcome.releases.push(release);
+                    failure = None;
+                    break;
+                }
+                Err(error) => failure = Some((release, error.to_string())),
+            }
         }
+        outcome.failures.extend(failure);
     }
     Ok(outcome)
 }
@@ -273,6 +314,7 @@ fn fetch_release(
     sources: &canonic_registry_kit::registrations::Effective,
     fetcher: &canonic_registry_kit::acquisition::Fetcher,
     store: &Path,
+    checkpoint: super::Checkpoint<'_>,
 ) -> Result<(), Error> {
     let source = sources
         .iter()
@@ -299,6 +341,7 @@ fn fetch_release(
             "the registry's bytes differ from the lock's digest",
         ));
     }
+    checkpoint()?;
     write_private(&store.join(format!("{digest}.yml")), text.as_bytes())
 }
 
@@ -472,7 +515,9 @@ fn read_plan(path: &Path, key: &str) -> Option<Evaluator> {
     if !path.parent().is_some_and(private) || !private(path) {
         return None;
     }
+    let _trace = crate::diagnostics::trace::span("cache.load");
     let bytes = fs::read(path).ok()?;
+    crate::diagnostics::trace::count("cache.plan_bytes_read", bytes.len() as u64);
     let (recorded, rest) = bytes.split_at_checked(key.len())?;
     let (digest, plan) = rest.split_at_checked(32)?;
     if recorded != key.as_bytes()

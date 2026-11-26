@@ -146,9 +146,9 @@ pub struct McpServe {
     /// Host tool-call ID.
     #[arg(long)]
     pub tool_use_id: Option<String>,
-    /// Cooperative tool-call deadline from dispatch through encoding.
-    #[arg(long, default_value_t = 5000, value_parser = clap::value_parser!(u64).range(1..=60_000))]
-    pub request_timeout_ms: u64,
+    // Accept existing launch definitions that still pass this option.
+    #[arg(long = "request-timeout-ms", hide = true, value_parser = clap::value_parser!(u64).range(1..=60_000))]
+    _request_timeout_ms: Option<u64>,
 }
 
 /// Registry fixture inputs for one candidate pack.

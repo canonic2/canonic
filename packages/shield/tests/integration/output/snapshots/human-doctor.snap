@@ -4,10 +4,10 @@ expression: text
 ---
 $ shield doctor
 --- terminal
-Shield policy is active in [PROJECT], but no agent is connected. Connect one with shield mcp setup.
+No Shield agent integration is configured.
+Project [PROJECT]
 Policy: no packs · revision [SHORT-DIGEST]
 History: on, keeping up to 5000 entries; integrity unchecked
-Editable project files are unchecked; inspect them with shield policy review.
-Project policy file integrity was not inspected. Review edits with shield policy review.
 Limits: native hooks can be skipped or fail open on host timeout/startup failure; no same-user OS isolation.
+Use Shield setup to connect an agent.
 --- exit 0

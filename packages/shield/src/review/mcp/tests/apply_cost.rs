@@ -147,6 +147,24 @@ fn assert_apply_traces(records: &[Value], timings: &[u128]) {
             summary["fields"]["counts"]["policy.captures"], 1,
             "{summary}"
         );
+        let count = |name: &str| summary["fields"]["counts"][name].as_u64().unwrap_or(0);
+        // The selected proposal has two retained sides. Publication validates
+        // the written side once and uses its snapshot to derive the revision.
+        assert_eq!(
+            count("policy.source_captures") + count("policy.source_capture_reuses"),
+            3,
+            "{summary}"
+        );
+        for stage in ["authority.lock_wait", "authority.lock_hold", "state.encode"] {
+            assert!(
+                records.iter().any(|row| {
+                    row["event"] == "request_span"
+                        && row["fields"]["trace_id"] == summary["fields"]["trace_id"]
+                        && row["fields"]["stage"] == stage
+                }),
+                "missing {stage} for {summary}"
+            );
+        }
     }
     assert!(!records.iter().any(|v| {
         v["event"] == "request_span"

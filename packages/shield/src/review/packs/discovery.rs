@@ -6,7 +6,12 @@ use crate::{
 };
 use policy::model::variables::{Declaration, executables::Candidate};
 use serde_json::{Value, json};
-use std::path::{Path, PathBuf};
+use std::{
+    collections::BTreeSet,
+    path::{Path, PathBuf},
+};
+
+const MAX_PATH_DIRECTORIES: usize = 128;
 
 pub(in crate::review) struct Scope {
     writable: Vec<PathBuf>,
@@ -73,16 +78,29 @@ fn find(
     env: &dyn Fn(&str) -> Option<PathBuf>,
     scope: &Scope,
 ) -> Option<Value> {
-    paths(declaration, home, env).find_map(|path| {
+    let mut candidates = paths(declaration, home, env).filter_map(|path| {
         if !scope.permits(&path) || !executable(&path) {
             return None;
         }
         // Preserve a rustup proxy's spelling: resolving its symlink would bind
         // rustup instead of cargo/rustc/rustfmt and change argument semantics.
-        let value = json!(path.to_str()?);
-        declaration.check(&value).ok()?;
-        Some(value)
-    })
+        Some(json!(path.to_str()?))
+    });
+    if !declaration.executable_paths() {
+        return candidates.find(|value| declaration.check(value).is_ok());
+    }
+    let mut seen = BTreeSet::new();
+    let values = candidates
+        .filter(|value| {
+            declaration.check_list_item(value).is_ok()
+                && !crate::evidence::redact(&mut value.clone())
+                && seen.insert(value.as_str().unwrap_or_default().to_owned())
+        })
+        .take(declaration.max_items())
+        .collect::<Vec<_>>();
+    let value = Value::Array(values);
+    declaration.check(&value).ok()?;
+    Some(value)
 }
 
 fn paths<'a>(
@@ -94,9 +112,25 @@ fn paths<'a>(
         .discover
         .iter()
         .flatten()
-        .filter_map(move |candidate| match candidate {
-            Candidate::Home { home: suffix } => Some(home?.join(suffix)),
-            Candidate::Environment { env: name, path } => Some(env(name)?.join(path)),
+        .flat_map(move |candidate| match candidate {
+            Candidate::Home { home: suffix } => {
+                home.map(|root| root.join(suffix)).into_iter().collect()
+            }
+            Candidate::Environment { env: name, path } => {
+                env(name).map(|root| root.join(path)).into_iter().collect()
+            }
+            Candidate::PathSearch { path_search } => env("PATH").map_or_else(Vec::new, |path| {
+                let name = if cfg!(windows) && !path_search.to_ascii_lowercase().ends_with(".exe") {
+                    format!("{path_search}.exe")
+                } else {
+                    path_search.clone()
+                };
+                std::env::split_paths(path.as_os_str())
+                    .take(MAX_PATH_DIRECTORIES)
+                    .filter(|directory| directory.is_absolute())
+                    .map(|directory| directory.join(&name))
+                    .collect()
+            }),
         })
 }
 
@@ -272,6 +306,56 @@ mod tests {
             .unset
             .push("cargo_executable".into());
         assert!(!bind(&artifact(), &mut opted_out, Some(&home), &env).unwrap());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn executable_discovery_collects_all_distinct_paths_from_home_and_path() {
+        let fixture = assert_fs::TempDir::new().unwrap();
+        let home = fixture.path().canonicalize().unwrap();
+        let first = home.join(".cargo/bin");
+        let second = home.join("other/bin");
+        let writable = home.join("project/bin");
+        let link = home.join("link/bin");
+        for directory in [&first, &second, &writable] {
+            proxy(&directory.join("cargo"));
+        }
+        std::fs::create_dir_all(&link).unwrap();
+        std::os::unix::fs::symlink(writable.join("cargo"), link.join("cargo")).unwrap();
+        let path =
+            std::env::join_paths([Path::new("relative/bin"), &first, &second, &link, &writable])
+                .unwrap();
+        let env = |name: &str| (name == "PATH").then(|| PathBuf::from(&path));
+        let scope = Scope {
+            writable: vec![home.join("project")],
+        };
+        let mut source: Value = policy::parse(&artifact()).unwrap();
+        source["capabilities"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!("executable-path-lists-v1"));
+        source["variables"]["cargo_executable"] = json!({
+            "type":"list","description":"Acme cargo","layer":"local",
+            "items":{"type":"string"},"max_items":4,
+            "discover":[{"home":".cargo/bin/cargo"},{"path_search":"cargo"}]
+        });
+        let source = source.to_string();
+        let mut settings = empty();
+        assert!(super::bind(&source, &mut settings, Some(&home), &scope, &env).unwrap());
+        assert!(settings.shared.variables.is_empty());
+        assert_eq!(
+            settings.effective().variables["cargo_executable"],
+            json!([first.join("cargo"), second.join("cargo")])
+        );
+        assert!(!super::bind(&source, &mut settings, Some(&home), &scope, &env).unwrap());
+        let mut explicit = empty();
+        explicit
+            .local
+            .as_mut()
+            .unwrap()
+            .variables
+            .insert("cargo_executable".into(), json!(second.join("cargo")));
+        assert!(!super::bind(&source, &mut explicit, Some(&home), &scope, &env).unwrap());
     }
 
     #[test]

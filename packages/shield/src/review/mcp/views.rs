@@ -205,15 +205,24 @@ impl Views {
     }
 
     pub(super) fn active(&mut self, context: &Context) -> Result<String, Error> {
-        self.active_with(context, false)
+        self.active_with(context, false, true)
     }
     pub(super) fn active_readonly(&mut self, context: &Context) -> Result<String, Error> {
-        self.active_with(context, true)
+        self.active_with(context, true, true)
+    }
+    /// Status exposes an exact reference without loading a second plan.
+    pub(super) fn active_reference(&mut self, context: &Context) -> Result<String, Error> {
+        self.active_with(context, true, false)
     }
     /// The handle of the policy the files hold now, which is the policy
     /// requests are decided by. A read-only view reuses a cached plan but never
     /// compiles one; evaluation prepares it on demand.
-    fn active_with(&mut self, context: &Context, readonly: bool) -> Result<String, Error> {
+    fn active_with(
+        &mut self,
+        context: &Context,
+        readonly: bool,
+        prepare: bool,
+    ) -> Result<String, Error> {
         let root = Path::new(&context.project_root);
         let state = if readonly {
             Store::inspect(root)?.read_inspection_following_files()?
@@ -226,7 +235,9 @@ impl Views {
             .get("project")
             .ok_or(Error::Invalid("project has no policy"))?;
         let cache = crate::review::files::cache_for(&state.operator).ok();
-        let plan = if readonly {
+        let plan = if !prepare {
+            None
+        } else if readonly {
             cache.and_then(|cache| crate::review::files::cached_in(root, &cache))
         } else {
             Some(crate::review::files::load_in(root, cache.as_deref())?.evaluator)

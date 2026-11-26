@@ -51,6 +51,7 @@ pub const MAX_DOCUMENT_BYTES: usize = 256 * 1024 * 1024;
 /// Every capability this engine implements. A document declaring any other
 /// was written for a different Shield version.
 pub(crate) const CAPABILITIES: &[&str] = &[
+    "project-node-tests-v1",
     "structured-rules-v1",
     "url-subdomains-v1",
     "local-http-requests-v1",
@@ -78,6 +79,7 @@ pub(crate) const CAPABILITIES: &[&str] = &[
     "command-sets-v1",
     "variables-v1",
     "executable-discovery-v1",
+    "executable-path-lists-v1",
     "variable-parts-v1",
     "variable-prefixes-v1",
     "variable-list-branches-v1",
@@ -326,6 +328,7 @@ fn mcp_defaults_message(integration: &str, variables: &[String], reason: &str) -
 pub struct Pack {
     comparison_source: Option<feedback::SourceIdentity>,
     document: PackDocument,
+    executable_path_variables: Vec<String>,
     digest: String,
     index: index::Index,
     semantic: bool,
@@ -345,14 +348,6 @@ pub struct CustomRules {
     semantic: bool,
     historical_semantic: bool,
     patterns: std::sync::Arc<patterns::Store>,
-}
-
-pub(crate) fn has_expiration(rules: &CustomRules) -> bool {
-    rules
-        .document
-        .rules
-        .iter()
-        .any(|rule| rule.expires_at.is_some())
 }
 
 /// Literal argv and context supplied for evaluation. No shell interpretation occurs.
@@ -577,7 +572,13 @@ impl Pack {
             .saturating_add(std::mem::size_of::<Self>() + std::mem::size_of::<Binding>())
             .saturating_add(self.patterns.prepared_bytes());
         let data = crate::json::retained_len(
-            &(&self.document, &self.resolution, &self.origins, binding),
+            &(
+                &self.document,
+                &self.resolution,
+                &self.origins,
+                &self.executable_path_variables,
+                binding,
+            ),
             limit.checked_sub(base)?,
         )?;
         Some(base + data)
@@ -790,6 +791,12 @@ impl Pack {
             variables::validate_order(&document.variables, &variables::order::read(input)?)?;
         }
         let comparison_source = feedback::source_pack(&document);
+        let executable_path_variables = document
+            .variables
+            .iter()
+            .filter(|(_, declaration)| declaration.executable_paths())
+            .map(|(name, _)| name.clone())
+            .collect();
         let mut digest = fingerprint(input.as_bytes());
         let origins = provenance::capture(&document, &binding.overrides);
         let mut entries = Vec::new();
@@ -836,6 +843,7 @@ impl Pack {
         Ok(Self {
             comparison_source,
             document,
+            executable_path_variables,
             digest,
             index,
             semantic,
@@ -868,6 +876,27 @@ impl Pack {
 
     pub(crate) fn bind_identity(&mut self, identity: &str) {
         self.document.id = identity.into();
+    }
+
+    pub(crate) fn executable_path_variables(&self) -> &[String] {
+        &self.executable_path_variables
+    }
+
+    pub(crate) fn validate_project_variables(
+        &self,
+        variables: &BTreeMap<String, serde_json::Value>,
+    ) -> Result<(), Error> {
+        if let Some(name) = self
+            .executable_path_variables
+            .iter()
+            .find(|name| variables.contains_key(*name))
+        {
+            return Err(Error::binding(
+                name,
+                "executable paths must be set in the local layer",
+            ));
+        }
+        Ok(())
     }
 
     pub(crate) fn bind_override_layers(
@@ -1168,7 +1197,7 @@ impl CustomRules {
             working_files: None,
         };
         let observer = crate::location::Observer::new(&input, &request.project, &request.cwd, None);
-        let now = crate::evidence::now();
+        let now = crate::evidence::policy_now();
         let facts = rules::Facts {
             input: &input,
             context: &context,
@@ -1400,7 +1429,7 @@ fn evaluate_evidence(
         cwd: request.cwd.clone(),
         environment: None,
     };
-    let now = crate::evidence::now();
+    let now = crate::evidence::policy_now();
     let facts = rules::Facts {
         input: &input,
         context: &context,

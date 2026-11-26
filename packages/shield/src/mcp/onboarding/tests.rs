@@ -86,7 +86,8 @@ fn fresh_at(
         transport.request(&hello)["result"]["instructions"]
             .as_str()
             .expect("bootstrap instructions")
-            .contains("Call setup")
+            .split_whitespace()
+            .any(|word| word == "setup")
     );
     transport.send(&initialized);
     (root, transport)
@@ -147,6 +148,15 @@ fn project_setup_detects_hub_and_repeats_without_confirmation() {
     assert_eq!(result["next"]["tool"], "setup");
     let definition = root.path().join(".hub/mcp/shield.yml");
     let before = std::fs::read(&definition).unwrap();
+    let ignore = root.path().join(".shield/.gitignore");
+    let initial_ignore = std::fs::read_to_string(&ignore).unwrap();
+    assert!(
+        initial_ignore
+            .lines()
+            .any(|line| line == "config.local.yml")
+    );
+    let retained_ignore = initial_ignore.replace("config.local.yml\n", "");
+    std::fs::write(&ignore, &retained_ignore).unwrap();
     assert!(!root.path().join(".codex/hooks.json").exists());
     let repeated = transport.call(json!(3), "setup", &json!({}));
     assert_eq!(
@@ -156,6 +166,7 @@ fn project_setup_detects_hub_and_repeats_without_confirmation() {
     );
     assert_eq!(data(&repeated)["data"]["next"], result["next"]);
     assert_eq!(std::fs::read(definition).unwrap(), before);
+    assert_eq!(std::fs::read_to_string(ignore).unwrap(), retained_ignore);
     transport.close().1.unwrap();
 }
 

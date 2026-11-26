@@ -4,9 +4,7 @@ expression: text
 ---
 $ shield status
 --- terminal
-Shield policy is enabled in [PROJECT]; hooks are configured for Claude Code.
-Policy: no packs · revision [SHORT-DIGEST]
-History: on, keeping up to 1000 entries; integrity unchecked
-Editable project files are unchecked; inspect them with shield policy review.
-No direct pack selections to check.
+Shield policy is enabled and agent hooks are configured.
+Project [PROJECT]
+Host loading and interception are unverified.
 --- exit 0

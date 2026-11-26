@@ -355,7 +355,7 @@ pub(crate) struct Connection {
     admin_sequence: std::sync::atomic::AtomicU64,
 }
 pub(crate) fn needs_runtime(name: &str, args: &Value) -> bool {
-    schemas::mutates(name)
+    schemas::writes_review_state(name)
         || name == "policy_evaluate" && args.get("candidate_id").is_none_or(Value::is_null)
 }
 /// A connection's context for a call that uses the project's runtime: the
@@ -434,7 +434,7 @@ fn admin_key(name: &str, args: &Value) -> String {
 /// Mutating calls resume only a previously human-confirmed plan.
 /// Explicit conflict review/cancellation must inspect that plan before writes.
 pub(crate) fn resume_setup(context: &Context, name: &str, args: &Value) -> Result<bool, Error> {
-    if !schemas::mutates(name)
+    if !schemas::writes_review_state(name)
         || (name == super::setup::TOOL && !setup_resume_only(name, args))
         || (name == "mcp_setup"
             && (!args["pending"].is_null()
@@ -491,6 +491,21 @@ pub(crate) fn discard_admin(connection: &Connection, binding: u64) {
     }
 }
 
+#[derive(Debug)]
+pub(crate) struct AdminConfirmationError {
+    error: Box<Error>,
+    setup_action: Option<Value>,
+}
+
+impl From<Error> for AdminConfirmationError {
+    fn from(error: Error) -> Self {
+        Self {
+            error: Box::new(error),
+            setup_action: None,
+        }
+    }
+}
+
 /// Retain the exact administrative plan while the host obtains the person's answer.
 pub(crate) fn admin_confirmation(
     context: &Context,
@@ -498,7 +513,7 @@ pub(crate) fn admin_confirmation(
     name: &str,
     args: &Value,
     checkpoint: Checkpoint<'_>,
-) -> Result<Option<(String, u64)>, Error> {
+) -> Result<Option<(String, u64)>, AdminConfirmationError> {
     if !super::admin::supports(name) {
         return Ok(None);
     }
@@ -510,11 +525,11 @@ pub(crate) fn admin_confirmation(
     {
         return Ok(None);
     }
-    checkpoint()?;
+    checkpoint().map_err(Error::from)?;
     {
         let pending = connection.admin.lock().map_err(|_| Error::Locked)?;
         if pending.len() >= 8 {
-            return Err(Error::Overloaded);
+            return Err(Error::Overloaded.into());
         }
     }
     let prepared = super::admin::prepare(context, name, args, checkpoint)?;
@@ -523,16 +538,20 @@ pub(crate) fn admin_confirmation(
         String::new()
     } else {
         super::operator::administrative_review(prepared.review_ref(), &context.project_root)
-            .form()?
+            .form()
+            .map_err(|error| AdminConfirmationError {
+                error: Box::new(error),
+                setup_action: prepared.setup_operator_action(),
+            })?
     };
-    checkpoint()?;
+    checkpoint().map_err(Error::from)?;
     let key = admin_key(name, args);
     let mut pending = connection
         .admin
         .lock()
         .map_err(|_| Error::Invalid("administrative review state invalid"))?;
     if pending.len() >= 8 {
-        return Err(Error::Overloaded);
+        return Err(Error::Overloaded.into());
     }
     let id = connection
         .admin_sequence
@@ -786,6 +805,19 @@ fn result_envelope_data(context: &Context, name: &str, result: Result<ToolData, 
                     (value, Some(redacted))
                 }
             };
+            if name == "enable"
+                && data["enabled"] == true
+                && (data["restart_required"] == true || data["repair_needed"] == true)
+            {
+                data["next"] = json!({"server":"shield","tool":"doctor","arguments":{},
+                    "project":context.project_root,"command":"shield",
+                    "argv":["--project",context.project_root,"doctor"]});
+                data["next_action"] = json!(if data["restart_required"] == true {
+                    "Reload the affected agents, then use Shield doctor."
+                } else {
+                    "Use Shield doctor to check the affected integration."
+                });
+            }
             super::reports::attach(context, name, &mut data);
             // Bundled public docs contain no runtime input. Redacting example
             // flags would corrupt their syntax and Markdown line structure.
@@ -901,11 +933,15 @@ pub(crate) fn admin_form_error(
     context: &Context,
     name: &str,
     args: &Value,
-    error: &Error,
+    refusal: &AdminConfirmationError,
 ) -> Value {
+    let error = refusal.error.as_ref();
     let mut value = admin_error(context, name, error);
     if super::operator::administrative_form_refusal(error).is_some()
-        && let Some(action) = operator_action(context, name, args)
+        && let Some(action) = refusal
+            .setup_action
+            .clone()
+            .or_else(|| operator_action(context, name, args))
     {
         value["error"]["operator_route"] = json!(admin_route(name));
         value["error"]["operator_action"] = action;
@@ -915,12 +951,13 @@ pub(crate) fn admin_form_error(
 
 fn operator_action(context: &Context, name: &str, arguments: &Value) -> Option<Value> {
     use std::path::Path;
+    // Project setup must carry its resolved targets from the prepared plan.
+    if name == super::setup::TOOL {
+        return None;
+    }
     let root = arguments["project"]
         .as_str()
         .unwrap_or(&context.project_root);
-    if name == super::setup::TOOL {
-        return Some(super::setup::operator_action(Path::new(root), arguments));
-    }
     let mut argv = vec![json!("--project"), json!(root)];
     argv.extend(
         admin_route(name)?
@@ -1002,12 +1039,12 @@ pub(crate) fn admin_error(context: &Context, name: &str, error: &Error) -> Value
             && matches!(context.agent.as_deref(), Some("claude" | "codex"))
             && matches!(
                 error,
-                Error::Invalid(
-                    "Shield hook group is unowned or manually changed"
-                        | "unowned Codex Shield MCP table"
-                        | "Codex Shield MCP table was manually changed"
-                        | "shield MCP entry is unowned or manually changed; resolve the conflict before setup"
-                )
+                Error::HookOwnership(_)
+                    | Error::Invalid(
+                        "unowned Codex Shield MCP table"
+                            | "Codex Shield MCP table was manually changed"
+                            | "shield MCP entry is unowned or manually changed; resolve the conflict before setup"
+                    )
             )
         {
             value["error"]["operator_route"] = json!("mcp_setup");
@@ -1211,6 +1248,7 @@ fn capacity_message(kind: CapacityKind, pending: usize, retained: usize, limit: 
 /// Invalid-input messages; each names what to correct without submitted values.
 fn invalid_input_message(error: &Error) -> String {
     match error {
+        Error::HookOwnership(reason) => (*reason).to_owned(),
         Error::StateFormat { .. } | Error::StateCorrupt { .. } => error.to_string(),
         Error::Policy(error @ (crate::policy::Error::McpDefaults { .. } | crate::policy::Error::Resolution { .. })) => {
             format!("Invalid input: {error}")
@@ -1313,6 +1351,7 @@ fn status(context: &Context, views: &mut views::Views, doctor: bool) -> Result<V
     if doctor {
         let mut data = project::doctor(context)?;
         integration_recovery(context, &mut data);
+        project::describe(&mut data, true);
         return Ok(data);
     }
     let mut data = project::status(context)?;
@@ -1321,7 +1360,7 @@ fn status(context: &Context, views: &mut views::Views, doctor: bool) -> Result<V
         data["policy_candidate_id"] = Value::Null;
         return Ok(data);
     }
-    let id = match views.active_readonly(context) {
+    let id = match views.active_reference(context) {
         Ok(id) => id,
         Err(error) => {
             data["policy_candidate_id"] = Value::Null;
@@ -1345,12 +1384,7 @@ fn integration_recovery(context: &Context, data: &mut Value) {
     {
         return;
     }
-    let resume = data["coverage"]["diagnostics"]
-        .as_array()
-        .is_some_and(|rows| {
-            rows.iter()
-                .any(|row| row == "confirmed setup requires repair")
-        });
+    let resume = super::integrations::setup_pending(&data["coverage"]);
     let args = if resume {
         json!({"pending":"review"})
     } else {
@@ -1382,7 +1416,21 @@ fn integration_recovery(context: &Context, data: &mut Value) {
         if affected.is_empty() {
             return;
         }
-        json!({"agents":affected})
+        let conflict = data["coverage"]["hook_ownership_conflicts"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .any(|agent| affected.contains(agent));
+        if conflict
+            && affected
+                .iter()
+                .all(|agent| matches!(*agent, "claude" | "codex"))
+        {
+            json!({"agents":affected,"repair":true})
+        } else {
+            json!({"agents":affected})
+        }
     };
     data["repair_route"] = json!("mcp_setup");
     data["repair_arguments"] = args;
@@ -1465,11 +1513,6 @@ fn dispatch(
     }
 }
 
-/// Whether the tool changes state; others are reads (`readOnlyHint`).
-pub(crate) fn mutates(name: &str) -> bool {
-    schemas::mutates(name)
-}
-
 /// Whether the tool only prepares a review for the user to apply, saved under
 /// its arguments, so repeating an identical call returns that review.
 pub(crate) fn prepares_review(name: &str) -> bool {
@@ -1500,6 +1543,10 @@ fn review_tool(
 ) -> Result<Value, Error> {
     match name {
         "policy_apply" => apply::apply(context, args, checkpoint, confirmed, views),
+        "pack_restore" => {
+            fields(args, &[])?;
+            project::restore_packs(&project::root(context), &context.fetcher, checkpoint)
+        }
         "policy_propose" => propose(context, views, args, checkpoint),
         "pack_update" | "pack_remove" | "pack_configure" | "rule_add" | "rule_edit"
         | "rule_remove" => {

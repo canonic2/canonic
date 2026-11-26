@@ -5,6 +5,7 @@
 mod confirmation;
 mod elicitation;
 mod frame_log;
+pub(crate) mod lifecycle;
 mod messages;
 pub(crate) mod onboarding;
 mod progress;
@@ -25,7 +26,6 @@ use canonic_mcp_kit::{
 use std::{
     collections::BTreeMap,
     sync::{Arc, Mutex, RwLock},
-    time::Duration,
 };
 
 pub(crate) const MAX_MESSAGE: usize = 524_288;
@@ -377,45 +377,29 @@ impl Server {
                 )),
             };
         }
-        let trace = crate::diagnostics::trace::current();
-        let waiting = trace
-            .as_ref()
-            .map(|trace| trace.wait("approval.wait", "approval.wait_us"));
         let mut admin = AdminWait {
             connection: self.connection.clone(),
             binding: review_binding,
         };
-        Outcome::Confirm(Confirm::new(message, move |decision, context| {
+        traced_confirm(message, move |decision, context| {
             let review = progress::resume(review, context);
             if let Some(guard) = &mut guard {
                 guard.disarm();
             }
             let review_binding = admin.take();
-            let _scope = trace
-                .as_ref()
-                .map(crate::diagnostics::trace::Request::enter);
-            drop(waiting);
             let cancelled = if review_binding.is_none() && call.operation().name == "policy_apply" {
                 "approval_cancelled"
             } else {
                 "approval_declined"
             };
-            let result = reply(
+            Outcome::Tool(reply(
                 &review,
                 &admin.connection,
                 call.operation(),
                 context,
                 confirmation_answer(decision, review_binding, cancelled),
-            );
-            if let Some(trace) = &trace {
-                trace.finish(if result.is_error {
-                    "refused"
-                } else {
-                    "success"
-                });
-            }
-            Outcome::Tool(result)
-        }))
+            ))
+        })
     }
 
     /// In-session approval always asks the person with Shield's form, whatever
@@ -441,25 +425,6 @@ impl Server {
                 Answer::None,
             )),
         }
-    }
-
-    fn request_trace(
-        &self,
-        request: &Request,
-        context: &stdio::Context,
-    ) -> Option<crate::diagnostics::trace::Request> {
-        let log = self.log.as_ref()?;
-        log.path()?;
-        let operation = match request {
-            Request::Tool(call) => crate::diagnostics::trace::operation(&call.name),
-            _ => "protocol",
-        };
-        log.request(
-            "mcp",
-            operation,
-            context.request_id(),
-            self.review().connection_id.as_deref(),
-        )
     }
 
     fn policy_apply(
@@ -725,19 +690,6 @@ impl stdio::Handler for Server {
         }
     }
 
-    fn deadline_messages(&self, request: &Request) -> stdio::DeadlineMessages {
-        let Request::Tool(call) = request else {
-            return stdio::DeadlineMessages::default();
-        };
-        stdio::DeadlineMessages {
-            queued: None,
-            running: Some(
-                messages::deadline(&call.name, needs_input_form(call), requests_review(call))
-                    .to_owned(),
-            ),
-        }
-    }
-
     fn initialize(&self, client: &Client) -> Result<ServerInfo, RpcError> {
         let mut review = self
             .review
@@ -753,30 +705,16 @@ impl stdio::Handler for Server {
     }
 
     fn call(&self, request: Request, context: &stdio::Context) -> Outcome {
-        let trace = self.request_trace(&request, context);
-        let _trace_scope = trace
-            .as_ref()
-            .map(crate::diagnostics::trace::Request::enter);
-        let outcome = (|| {
-            let Request::Tool(call) = request else {
-                return self.non_tool(&request, context);
-            };
-            self.call_tool(call, context)
-        })();
-        if let Some(trace) = &trace {
-            match &outcome {
-                Outcome::Confirm(_) | Outcome::Elicit(_) => {}
-                Outcome::Tool(result) => trace.finish(if result.is_error {
-                    "refused"
-                } else {
-                    "success"
-                }),
-                Outcome::InputRequired(_) => trace.finish("input_required"),
-                Outcome::Task(Err(_)) => trace.finish("refused"),
-                _ => trace.finish("protocol_result"),
-            }
-        }
-        outcome
+        traced_call(
+            self.log.as_ref(),
+            request,
+            context,
+            || Some(self.review()),
+            |request| match request {
+                Request::Tool(call) => self.call_tool(call, context),
+                _ => self.non_tool(&request, context),
+            },
+        )
     }
 
     fn invalid_arguments(&self, call: &ToolCall, error: &ArgumentError) -> ToolResult {
@@ -785,6 +723,67 @@ impl stdio::Handler for Server {
             crate::review::mcp::invalid_arguments(&review, &call.name, &error.path, &error.message);
         response::tool_result(&call.name, review.agent.as_deref(), value, true, &|| Ok(()))
     }
+}
+
+fn traced_call(
+    log: Option<&Arc<crate::diagnostics::Log>>,
+    request: Request,
+    context: &stdio::Context,
+    review: impl FnOnce() -> Option<Arc<crate::review::Context>>,
+    dispatch: impl FnOnce(Request) -> Outcome,
+) -> Outcome {
+    let trace = log.filter(|log| log.path().is_some()).and_then(|log| {
+        let operation = match &request {
+            Request::Tool(call) => crate::diagnostics::trace::operation(&call.name),
+            _ => "protocol",
+        };
+        let review = review();
+        let connection = review
+            .as_ref()
+            .and_then(|review| review.connection_id.as_deref());
+        let trace = log.request("mcp", operation, context.request_id(), connection)?;
+        trace.transport(context.observation_ids());
+        Some(trace)
+    });
+    let _scope = trace
+        .as_ref()
+        .map(crate::diagnostics::trace::Request::enter);
+    let outcome = dispatch(request);
+    finish_trace(trace.as_ref(), &outcome);
+    outcome
+}
+
+/// A host confirmation whose wait and resumed call belong to the current trace.
+fn traced_confirm(
+    message: String,
+    resume: impl FnOnce(Decision, &stdio::Context) -> Outcome + Send + 'static,
+) -> Outcome {
+    let trace = crate::diagnostics::trace::current();
+    let waiting = trace
+        .as_ref()
+        .map(|trace| trace.wait("approval.wait", "approval.wait_us"));
+    Outcome::Confirm(Confirm::new(message, move |decision, context| {
+        let _scope = trace
+            .as_ref()
+            .map(crate::diagnostics::trace::Request::enter);
+        drop(waiting);
+        let outcome = resume(decision, context);
+        finish_trace(trace.as_ref(), &outcome);
+        outcome
+    }))
+}
+
+fn finish_trace(trace: Option<&crate::diagnostics::trace::Request>, outcome: &Outcome) {
+    let Some(trace) = trace else { return };
+    let result = match outcome {
+        Outcome::Confirm(_) | Outcome::Elicit(_) => return,
+        Outcome::Tool(result) if result.is_error => "refused",
+        Outcome::Tool(_) => "success",
+        Outcome::InputRequired(_) => "input_required",
+        Outcome::Task(Err(_)) | Outcome::Method(Err(_)) => "refused",
+        _ => "protocol_result",
+    };
+    trace.finish(result);
 }
 
 fn needs_input_form(call: &ToolCall) -> bool {
@@ -1102,24 +1101,17 @@ pub(crate) fn catalog(agent: Option<&str>) -> Result<Catalog, CatalogError> {
     Catalog::new(tools)
 }
 
-/// Shield's limits: one evaluator worker handles up to 64 outstanding calls in
-/// arrival order, each budget starting when its call runs, bounded frames and
-/// output, and a per-connection message count.
-pub(crate) fn options(
-    timeout: Duration,
-    log: Option<Arc<crate::diagnostics::Log>>,
-) -> stdio::Options {
+/// One evaluator handles up to 64 outstanding calls in arrival order.
+/// Requests are connection-owned, with bounded frames and a message count.
+pub(crate) fn options(log: Option<Arc<crate::diagnostics::Log>>) -> stdio::Options {
     stdio::Options {
         session: SessionOptions {
             max_message_bytes: MAX_MESSAGE,
             max_messages: Some(MAX_MESSAGES),
             ..SessionOptions::default()
         },
-        // FIFO: a call's budget covers its own work, never the wait behind
-        // earlier calls, so a slow call cannot time out the ones after it.
         lanes: vec![stdio::Lane::new("tools", 1, MAX_QUEUED_CALLS)],
-        timeout,
-        budget_start: stdio::BudgetStart::Dispatch,
+        budget_start: stdio::BudgetStart::Never,
         max_output_bytes: MAX_OUTPUT,
         observer: log.and_then(frame_log::observer),
         ..stdio::Options::default()

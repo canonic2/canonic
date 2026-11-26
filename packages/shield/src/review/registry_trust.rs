@@ -73,7 +73,7 @@ fn guard(metadata: &Value) -> Result<Guard, Error> {
             ))
         })
         .collect::<Result<Vec<_>, Error>>()?;
-    guard_rows(metadata, &rows, &|| Ok(()))
+    guard_rows(metadata, &rows, false, &|| Ok(()))
 }
 
 /// Runtime authority uses the exact compiled artifact lock even when an older
@@ -84,24 +84,27 @@ pub(in crate::review) fn guard_effective(
     effective: &crate::configuration::Effective,
     checkpoint: Checkpoint<'_>,
 ) -> Result<Guard, Error> {
-    guard_rows(metadata, &effective_rows(metadata, effective), checkpoint)
+    guard_rows(
+        metadata,
+        &effective_rows(metadata, effective),
+        false,
+        checkpoint,
+    )
 }
 
-/// Actual runtime use can finish an exact previously confirmed adoption before
-/// taking its final shared guard. Inspection and guard construction stay pure.
-pub(in crate::review) fn recover_effective(
+/// Actual runtime use may finish an exact previously confirmed adoption while
+/// loading the snapshot. Other guards only read trust.
+pub(in crate::review) fn guard_runtime(
     metadata: &Value,
     effective: &crate::configuration::Effective,
-) -> Result<(), Error> {
-    let namespace = Namespace::user()?;
-    let sources: BTreeSet<_> = effective_rows(metadata, effective)
-        .into_iter()
-        .map(|row| row.0)
-        .collect();
-    for source in sources {
-        namespace.recover(source)?;
-    }
-    Ok(())
+    checkpoint: Checkpoint<'_>,
+) -> Result<Guard, Error> {
+    guard_rows(
+        metadata,
+        &effective_rows(metadata, effective),
+        true,
+        checkpoint,
+    )
 }
 
 fn effective_rows<'a>(
@@ -134,6 +137,7 @@ fn effective_rows<'a>(
 fn guard_rows(
     metadata: &Value,
     rows: &[(&str, &str, &str, &str)],
+    recover_adoption: bool,
     checkpoint: Checkpoint<'_>,
 ) -> Result<Guard, Error> {
     let sources: BTreeSet<_> = rows.iter().map(|row| row.0).collect();
@@ -149,7 +153,11 @@ fn guard_rows(
     if !metadata["registry_trust"].is_null() && !metadata["registry_trust"].is_object() {
         return Err(Error::Invalid("invalid retained registry trust modes"));
     }
-    let lease = namespace.guard(checkpoint)?;
+    let lease = if recover_adoption {
+        namespace.guard_recovering(&sources, checkpoint)?
+    } else {
+        namespace.guard(checkpoint)?
+    };
     let mut revisions = BTreeMap::new();
     let mut bindings = BTreeMap::new();
     let mut retained = Vec::new();

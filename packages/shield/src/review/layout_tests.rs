@@ -54,9 +54,7 @@ fn a_grouped_bundle_is_enforced_and_changed_in_place() {
     assert!(!mode::current(root.path()).unwrap());
 
     let ignored = fs::read_to_string(root.path().join(".config/shield/.gitignore")).unwrap();
-    for name in crate::layout::LOCAL_FILES {
-        assert!(ignored.lines().any(|line| line == name), "{ignored}");
-    }
+    assert_eq!(ignored, "rules.local.yml\nshield.local.lock\n");
     let state_ignored = fs::read_to_string(root.path().join(".shield/.gitignore")).unwrap();
     assert!(
         state_ignored.lines().any(|line| line == "state/"),
@@ -115,7 +113,7 @@ fn earlier_state_is_converted_with_its_project_and_records() {
     // Its ignore file names only the earlier folder.
     fs::write(
         root.path().join(".shield/.gitignore"),
-        "review/\ncache/\nconfig.local.yml\nrules.local.yml\nshield.local.lock\n",
+        "review/\ncache/\nrules.local.yml\nshield.local.lock\n",
     )
     .unwrap();
     // A read-only open, as a hook's evaluation makes, converts it and keeps the
@@ -128,6 +126,7 @@ fn earlier_state_is_converted_with_its_project_and_records() {
     let ignored = fs::read_to_string(root.path().join(".shield/.gitignore")).unwrap();
     assert!(ignored.lines().any(|line| line == "state/"), "{ignored}");
     assert!(ignored.lines().any(|line| line == "review/"), "{ignored}");
+    assert!(!ignored.lines().any(|line| line == "config.local.yml"));
     assert!(!root.path().join(".shield/state/state.lock").exists());
     let reopened = open(root.path()).unwrap();
     assert_eq!(reopened.project_id, first.project_id);

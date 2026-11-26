@@ -1,8 +1,8 @@
 //! Final authenticated request validation, shared by atomic approval consumers.
-use super::{EvaluatedRequest, NativeSource, SnapshotIdentity};
+use super::{EvaluatedRequest, SnapshotIdentity};
 use crate::review::{Checkpoint, Context, Error, storage::Store};
 use serde_json::Value;
-use std::{path::Path, sync::Arc};
+use std::path::Path;
 
 /// Opaque shared source authority. Retain it through durable consumption and the
 /// final owned handoff; it grants no operation without exact request validation.
@@ -27,11 +27,7 @@ impl EvaluatedRequest {
         }
         let state = Store::open(Path::new(&context.project_root))?.read_checkpoint()?;
         state.check(context)?;
-        NativeSource {
-            identity: self.identity.clone(),
-            evaluator: Arc::clone(&self.evaluator),
-        }
-        .check(&state)?;
+        self.identity.check_project(&state)?;
         // Global trust precedes the consumer's project authority transaction.
         let registry = crate::review::registry_trust::guard_effective(
             &state.operator,
@@ -67,11 +63,7 @@ impl EvaluatedAuthority {
         {
             return Err(Error::StaleSnapshot);
         }
-        NativeSource {
-            identity: self.identity.clone(),
-            evaluator: Arc::clone(&evaluated.evaluator),
-        }
-        .check(state)?;
+        self.identity.check_project(state)?;
         if evaluated.evaluator.time_sensitive() {
             let current = if let Some(resource) = &evaluated.resource {
                 evaluated.evaluator.evaluate_resource_mcp(

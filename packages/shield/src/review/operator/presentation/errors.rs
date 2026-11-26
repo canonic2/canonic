@@ -118,7 +118,7 @@ fn classify(command: &PublicCommand, error: &Error) -> Report {
             &[],
         ),
         Error::Cancelled => Report::new("Cancelled", "The pending change was not confirmed.", &[]),
-        Error::Invalid(reason) => invalid(command, reason),
+        Error::Invalid(reason) | Error::HookOwnership(reason) => invalid(command, reason),
         Error::WebReviewOffered => Report::new(
             "Site save review already offered",
             "This domain's save review was already offered in this session.",

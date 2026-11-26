@@ -1,11 +1,10 @@
 //! Bounded execution owns a kernel lease; RPC contexts never enter workers.
 use super::{
-    CAPTURE_BYTES, Context, Directory, EXECUTION_MS, Error, MAX_RECORDS, Path, RESULT_BYTES,
-    Record, Runtime, Store, Value, clock, files, storage,
+    CAPTURE_BYTES, Context, Directory, Error, MAX_RECORDS, Path, RESULT_BYTES, Record, Runtime,
+    Store, Value, clock, files, storage,
 };
 use ring::rand::{SecureRandom as _, SystemRandom};
 use serde_json::json;
-use std::time::{Duration, Instant};
 
 type Publish = Box<dyn Fn(&Record, Value) -> Result<Value, Error> + Send + 'static>;
 
@@ -28,8 +27,10 @@ impl Runtime {
         publish: Publish,
     ) -> Result<Option<Record>, Error> {
         checkpoint()?;
-        let Ok(store) = self.store() else {
-            return Ok(None);
+        let store = match self.store_controlled(checkpoint) {
+            Ok(store) => store,
+            Err(error @ Error::Policy(crate::policy::Error::Interrupted)) => return Err(error),
+            Err(_) => return Ok(None),
         };
         let reservation = match store.reserve(arguments, checkpoint) {
             Ok(reservation) => reservation,
@@ -66,31 +67,49 @@ impl Runtime {
             let _ = status_store.stage(&status_id, stage.message());
         });
         let arguments = arguments.clone();
-        match std::thread::Builder::new()
+        let trace = crate::diagnostics::trace::child("preparation");
+        let worker_trace = trace.clone();
+        if let Ok(worker) = std::thread::Builder::new()
             .name("shield-preparation".into())
             .spawn(move || {
                 let _owner = owner;
-                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    worker_store.run(&id, &operation, &arguments, &publish);
+                let _scope = worker_trace
+                    .as_ref()
+                    .map(crate::diagnostics::trace::Request::enter);
+                let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    worker_store.run(&id, &operation, &arguments, &publish)
                 }));
-                if result.is_err() {
-                    let _ = worker_store.settle(
-                        &id,
-                        "failed",
-                        "Preparation worker stopped; the policy files were not changed",
-                        None,
-                    );
+                let outcome = outcome.unwrap_or_else(|_| {
+                    worker_store
+                        .settle(
+                            &id,
+                            "failed",
+                            "Preparation worker stopped; the policy files were not changed",
+                            None,
+                        )
+                        .unwrap_or("settlement_failed")
+                });
+                if let Some(trace) = worker_trace {
+                    trace.finish(outcome);
                 }
-            }) {
-            Ok(worker) => workers.push(worker),
-            Err(_) => {
-                store.settle(
-                    &record.id,
-                    "failed",
-                    "Preparation could not start; the policy files were not changed",
-                    None,
-                )?;
+            })
+        {
+            workers.push(worker);
+        } else {
+            let settlement = store.settle(
+                &record.id,
+                "failed",
+                "Preparation could not start; the policy files were not changed",
+                None,
+            );
+            if let Some(trace) = trace {
+                trace.finish(
+                    settlement
+                        .as_ref()
+                        .map_or("settlement_failed", |status| *status),
+                );
             }
+            settlement?;
         }
         Ok(Some(record))
     }
@@ -103,10 +122,6 @@ impl Store {
         checkpoint: super::super::Checkpoint<'_>,
     ) -> Result<Option<(Record, Option<Directory>)>, Error> {
         self.authority()?;
-        files::writer_directory(&self.root, true)?;
-        let _lock = Directory::enter(&self.root)?;
-        self.normalize_record_directories()?;
-        let now = clock::now_ms()?;
         let base = storage::Store::open(Path::new(&self.project_root))?.read_following_files()?;
         base.check(&Context::new(
             self.project.clone(),
@@ -116,14 +131,22 @@ impl Store {
         base.check_operations()?;
         let base_binding = super::super::changes::prepared_binding(&base);
         let request_digest = files::digest(arguments)?;
-        let key = files::digest(
-            &arguments
-                .get("idempotency_key")
-                .cloned()
-                .unwrap_or_else(|| {
-                    json!([request_digest, base_binding, env!("CARGO_PKG_VERSION")])
-                }),
-        )?;
+        let key = match arguments.get("idempotency_key") {
+            Some(key) => files::digest(key)?,
+            None => files::digest(&json!([
+                request_digest,
+                base_binding,
+                env!("CARGO_PKG_VERSION")
+            ]))?,
+        };
+        // Loading policy and preparing the binding must not hold up polls or
+        // terminal writes. The worker revalidates the captured base before work.
+        files::writer_directory(&self.root, true)?;
+        storage::objects::initialize_mutex(&self.root)?;
+        let _lock = storage::objects::write_lease(&self.root, checkpoint)?;
+        checkpoint()?;
+        self.normalize_record_directories()?;
+        let now = clock::now_ms()?;
         let mut retained = 0;
         let mut running = 0;
         for id in self.entries()? {
@@ -142,7 +165,8 @@ impl Store {
                 Err(Error::Locked) => None,
                 Err(error) => return Err(error),
             };
-            if !record.live(&self.project, now) && owner.is_some() {
+            let same_project = record.project == self.project;
+            if (!same_project || !record.retained(now)) && owner.is_some() {
                 files::remove(&self.directory(&id)?)?;
                 continue;
             }
@@ -163,7 +187,7 @@ impl Store {
                     self.save(&record)?;
                 }
             }
-            if record.live(&self.project, now) && record.key == key {
+            if same_project && record.key == key {
                 if record.request_digest != request_digest {
                     return Err(Error::Invalid(
                         "preparation idempotency key reused with changed input",
@@ -176,6 +200,27 @@ impl Store {
         if retained >= MAX_RECORDS || running >= 2 {
             return Ok(None);
         }
+        let (record, owner) = self.create_record(
+            arguments,
+            key,
+            request_digest,
+            base_binding,
+            now,
+            checkpoint,
+        )?;
+        Ok(Some((record, Some(owner))))
+    }
+
+    /// Publish initial task state while admission holds the namespace lease.
+    fn create_record(
+        &self,
+        arguments: &Value,
+        key: String,
+        request_digest: String,
+        base_binding: String,
+        now: u64,
+        checkpoint: super::super::Checkpoint<'_>,
+    ) -> Result<(Record, Directory), Error> {
         checkpoint()?;
         let mut random = [0_u8; 32];
         SystemRandom::new()
@@ -201,11 +246,12 @@ impl Store {
             files::remove(&directory)?;
             return Err(error);
         }
-        Ok(Some((record, Some(owner))))
+        Ok((record, owner))
     }
 
     fn stage(&self, id: &str, message: &str) -> Result<(), Error> {
-        let _lock = Directory::enter(&self.root)?;
+        let checkpoint = || self.check_working(id);
+        let _lock = storage::objects::write_lease(&self.root, &checkpoint)?;
         let mut record = self.get(id)?;
         if record.status == "working" && !record.cancel_requested && record.message != message {
             record.message = message.into();
@@ -215,19 +261,25 @@ impl Store {
         Ok(())
     }
 
-    fn run(&self, id: &str, context: &Context, arguments: &Value, publish: &Publish) {
-        let started = Instant::now();
-        let checkpoint = || {
-            let allowed = started.elapsed() < Duration::from_millis(EXECUTION_MS)
-                && self
-                    .control(id)
-                    .is_ok_and(|record| record.status == "working" && !record.cancel_requested);
-            if allowed {
-                Ok(())
-            } else {
-                Err(crate::policy::Error::Interrupted)
-            }
-        };
+    fn check_working(&self, id: &str) -> Result<(), crate::policy::Error> {
+        if self
+            .control(id)
+            .is_ok_and(|record| record.status == "working" && !record.cancel_requested)
+        {
+            Ok(())
+        } else {
+            Err(crate::policy::Error::Interrupted)
+        }
+    }
+
+    fn run(
+        &self,
+        id: &str,
+        context: &Context,
+        arguments: &Value,
+        publish: &Publish,
+    ) -> &'static str {
+        let checkpoint = || self.check_working(id);
         let result = (|| {
             let record = self.get(id)?;
             let base =
@@ -265,7 +317,7 @@ impl Store {
                 Some((files::digest(&capture)?, files::digest(&result)?)),
             )
         })();
-        if let Err(error) = result {
+        result.unwrap_or_else(|error| {
             let message = if matches!(error, Error::StaleSnapshot) {
                 "Policy base changed; request fresh preparation with a new idempotency_key if still needed"
             } else if matches!(error, Error::Policy(crate::policy::Error::Limit)) {
@@ -273,29 +325,32 @@ impl Store {
             } else {
                 "Preparation interrupted or failed; no proposal was applied. If still needed, prepare with a new idempotency_key"
             };
-            let _ = self.settle(id, "failed", message, None);
-        }
+            self.settle(id, "failed", message, None).unwrap_or("settlement_failed")
+        })
     }
 
     fn settle(
         &self,
         id: &str,
-        status: &str,
+        status: &'static str,
         message: &str,
         result: Option<(String, String)>,
-    ) -> Result<(), Error> {
+    ) -> Result<&'static str, Error> {
+        // Settlement outlives the creation RPC.
+        // Keep the worker's owner lease until its terminal record is durable.
+        files::directory(&self.root, false)?;
+        let _lock = storage::objects::write_lease(&self.root, &|| Ok(()))?;
         self.authority()?;
-        let _lock = Directory::enter(&self.root)?;
         let mut record = self.control(id)?;
         if record.status != "working" {
-            return Ok(());
+            return Ok("settled_elsewhere");
         }
-        record.status = if record.cancel_requested {
+        let outcome = if record.cancel_requested {
             "cancelled"
         } else {
             status
-        }
-        .into();
+        };
+        record.status = outcome.into();
         record.message = if record.cancel_requested {
             "Preparation cancelled; no proposal was applied"
         } else {
@@ -309,6 +364,7 @@ impl Store {
             record.capture_digest = Some(capture);
             record.result_digest = Some(result);
         }
-        self.save(&record)
+        self.save(&record)?;
+        Ok(outcome)
     }
 }

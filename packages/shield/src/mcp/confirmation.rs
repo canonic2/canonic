@@ -26,6 +26,7 @@ struct Pending {
     arguments: serde_json::Value,
     review_binding: Option<u64>,
     action: Option<ToolCall>,
+    trace: Option<crate::diagnostics::trace::Link>,
 }
 
 impl Confirmations {
@@ -79,6 +80,7 @@ impl Confirmations {
                 arguments: call.arguments.clone(),
                 review_binding,
                 action,
+                trace: crate::diagnostics::trace::current_link(),
             },
         );
         Ok(result)
@@ -121,6 +123,7 @@ impl Confirmations {
             return Err(invalid());
         }
         let decision = request.confirmation_decision()?.ok_or_else(invalid)?;
+        crate::diagnostics::trace::link_retry(pending.trace.as_ref());
         if let Some(guard) = &mut pending.guard {
             guard.disarm();
         }

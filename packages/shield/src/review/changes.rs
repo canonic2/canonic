@@ -472,7 +472,7 @@ pub(super) fn propose(
         state.check_operations()?;
         if state.policy_revision != before.policy_revision
             || state.operator != before.operator
-            || super::map_digest(&state.candidates) != super::map_digest(&before.candidates)
+            || state.candidates != before.candidates
         {
             return Err(Error::StaleSnapshot);
         }

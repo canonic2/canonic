@@ -5,7 +5,9 @@ use crate::review;
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
 mod doctor;
+mod outcome;
 pub(super) use doctor::report as doctor;
+pub(super) use outcome::describe;
 
 pub(super) fn metadata(state: &State) -> Value {
     state.operator.clone()
@@ -66,39 +68,78 @@ pub(super) fn status(context: &Context) -> Result<Value, Error> {
     let (state, pending) =
         Store::inspect(Path::new(&context.project_root))?.read_diagnostic_checkpoint()?;
     state.check_inspection(context)?;
-    let root = Path::new(&context.project_root);
     let mut value = status_from(context, &state);
     value["pack_updates"] = super::pack_updates::inspect(context, &state, None);
-    let cache = super::files::cache_for(&state.operator).ok();
-    let mut policy = super::files::check(root, cache.as_deref());
-    let mut policy_files = json!({});
-    // A merge conflict needs an operator edit. Fetching packs cannot resolve
-    // it, and parsing the conflicted lock again only duplicates the error.
-    if !matches!(policy, Err(Error::PolicyFileConflict(_))) {
-        match super::files::fetch_missing(root, &state.settings) {
-            Ok(fetched) => {
-                if !fetched.releases.is_empty() {
-                    policy = super::files::check(root, cache.as_deref());
-                    policy_files["fetched"] = json!(fetched.releases);
+    value["policy_files"] = policy_files(root(context).as_path(), &state.operator);
+    value["checkpoint_upgrade_pending"] = json!(pending);
+    describe(&mut value, false);
+    Ok(value)
+}
+
+fn policy_files(root: &Path, metadata: &Value) -> Value {
+    let cache = super::files::cache_for(metadata).ok();
+    match super::files::check(root, cache.as_deref()) {
+        Ok(digest) => json!({"digest":digest}),
+        Err(error) => {
+            let code = match &error {
+                Error::PolicyFileConflict(_) => "conflict",
+                Error::Policy(crate::policy::Error::Contract(message))
+                    if *message == integrations::project_sources::MISSING_PACK =>
+                {
+                    "missing_pack"
                 }
-                if !fetched.failures.is_empty() {
-                    policy_files["fetch_failures"] = fetched
-                        .failures
-                        .into_iter()
-                        .map(|(release, error)| json!({"release":release,"error":error}))
-                        .collect();
-                }
-            }
-            Err(error) => policy_files["fetch_error"] = json!(error.to_string()),
+                _ => "unreadable",
+            };
+            json!({"error":error.to_string(),"code":code})
         }
     }
-    match policy {
-        Ok(digest) => policy_files["digest"] = json!(digest),
-        Err(error) => policy_files["error"] = json!(error.to_string()),
+}
+
+pub(super) fn restore_packs(
+    root: &Path,
+    fetcher: &canonic_registry_kit::acquisition::Fetcher,
+    checkpoint: super::Checkpoint<'_>,
+) -> Result<Value, Error> {
+    let retained = Store::inspect(root).and_then(|store| store.read_diagnostic_checkpoint());
+    let (settings, metadata) = match retained {
+        Ok((state, _)) => (state.settings, state.operator),
+        Err(Error::Missing) => (
+            super::settings::current(root, &super::settings::Legacy::default()),
+            Value::Null,
+        ),
+        Err(error) => return Err(error),
+    };
+    // A plan recorded under the files' key proves they read cleanly, so the
+    // conflict check skips validation on the common, healthy path.
+    let cache = super::files::cache_for(&metadata).ok();
+    if let Err(error @ Error::PolicyFileConflict(_)) = super::files::check(root, cache.as_deref()) {
+        return Err(error);
     }
-    value["policy_files"] = policy_files;
-    value["checkpoint_upgrade_pending"] = json!(pending);
+    let restored = super::files::fetch_missing(root, &settings, fetcher, checkpoint)?;
+    let failures: Vec<_> = restored
+        .failures
+        .into_iter()
+        .map(|(release, error)| json!({"release":release,"error":error}))
+        .collect();
+    let mut value = json!({"project_root":root,"fetched":restored.releases,
+        "fetch_failures":failures,"policy_files":policy_files(root, &metadata)});
+    if value["policy_files"]["error"].is_string() {
+        value["next"] = outcome::shield_action(&value, "doctor", &json!({}), &["doctor"]);
+        value["next_action"] = json!("Run Shield doctor to inspect the remaining problems.");
+    }
     Ok(value)
+}
+
+/// A policy checkout can be inspected before it creates private runtime state.
+pub(super) fn source_status(root: &Path, doctor: bool) -> Value {
+    let settings = super::settings::current(root, &super::settings::Legacy::default());
+    let mut value = json!({"project_root":root,"configuration":configuration_selection(root),
+        "project_id":null,"runtime_state":"absent","enabled":settings.enabled(),"enforcement":"unchecked",
+        "coverage":{"live_host_verification":"unchecked","tool_interception":"unchecked"},
+        "history":{"available":false},"installed_packs":null,
+        "policy_files":policy_files(root, &Value::Null),"checks":[]});
+    describe(&mut value, doctor);
+    value
 }
 
 /// Render a checked history capture, also used by doctor's additional probes.
@@ -214,12 +255,7 @@ pub(crate) fn configuration_selection(root: &Path) -> Value {
 /// rules, a changed binary, version, MCP entry or hooks, needs the agent set
 /// up again, which also resynchronizes its prefix rules.
 fn integration_route(coverage: &Value) -> String {
-    let pending = coverage["diagnostics"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .any(|d| d == "confirmed setup requires repair");
-    if pending {
+    if super::integrations::setup_pending(coverage) {
         "shield mcp setup".into()
     } else {
         agent_setup_route(coverage)

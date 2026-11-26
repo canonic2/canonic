@@ -227,8 +227,22 @@ fn upgrade_historical_active_source_preserves_identity_decisions_and_evidence() 
 }
 
 #[test]
-fn upgrade_array_history_is_converted_to_a_journal() {
-    let (root, _, mut raw) = historical_fixture();
+fn upgrade_array_history_defers_once_then_converts_to_a_journal() {
+    use super::super::tests::{Stage, set_observer};
+
+    thread_local! {
+        static ATTEMPTED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    }
+    fn check_attempt(stage: Stage) {
+        if stage == Stage::UpgradePrepared {
+            assert!(
+                !ATTEMPTED.replace(true),
+                "one history access attempted legacy conversion twice"
+            );
+        }
+    }
+
+    let (root, context, mut raw) = historical_fixture();
     let store = Store::open(root.path()).unwrap();
     let events = json!([{"schema_version":1,"event_id":"old-array-observation","kind":"decision",
         "links":{"request_id":"old-array-request"},"details":{"decision":"allow"}}]);
@@ -240,7 +254,38 @@ fn upgrade_array_history_is_converted_to_a_journal() {
     private(&mut options);
     options.open(&path).unwrap().write_all(&bytes).unwrap();
     raw["history_generation"] = json!(digest);
-    save(root.path(), &raw);
+    raw["history_limit"] = json!(300);
+    let checkpoint = save(root.path(), &raw);
+    let settings_path = root.path().join(".shield/config.local.yml");
+    fs::create_dir(&settings_path).unwrap();
+
+    let unavailable = |error: Error| {
+        assert!(
+            error.to_string().contains("request history is unavailable"),
+            "{error}"
+        );
+        assert!(ATTEMPTED.replace(false));
+    };
+    set_observer(Some(check_attempt));
+    unavailable(
+        store
+            .read_history()
+            .err()
+            .expect("legacy history unavailable"),
+    );
+    unavailable(
+        store
+            .observe(&context, super::super::history::lock, |_| {
+                panic!("a deferred legacy journal cannot accept observations")
+            })
+            .unwrap_err(),
+    );
+    set_observer(None);
+    assert_eq!(store.checkpoint_bytes().unwrap(), checkpoint);
+    assert_eq!(fs::read(&path).unwrap(), bytes);
+    assert_eq!(store.read_checkpoint().unwrap().settings.history_limit, 300);
+
+    fs::remove_dir(settings_path).unwrap();
     let converted = store.read_history().unwrap();
     assert!(converted.history_available);
     assert!(converted.history_generation.starts_with("journal-"));

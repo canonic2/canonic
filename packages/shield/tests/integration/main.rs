@@ -33,7 +33,7 @@ fn isolated_home() -> bool {
         .to_owned();
     let output =
         std::process::Command::new(std::env::current_exe().expect("integration executable"))
-            .args(["--exact", &name, "--nocapture"])
+            .args(["--exact", &name, "--include-ignored", "--nocapture"])
             .env("SHIELD_INTEGRATION_HOME", home.path())
             .env("HOME", home.path())
             .env("USERPROFILE", home.path())
@@ -41,7 +41,7 @@ fn isolated_home() -> bool {
             .output()
             .expect("isolated integration subprocess");
     assert!(
-        output.status.success(),
+        output.status.success() && String::from_utf8_lossy(&output.stdout).contains("1 passed"),
         "{}\n{}",
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)

@@ -66,52 +66,28 @@ fn configuration_line(configuration: &Value, output: &mut String) {
     }
 }
 
-fn status_header(value: &Value, agents: &[String]) -> String {
-    let root = label(&value["project_root"]);
-    let error = &value["policy_files"]["error"];
-    if value["enabled"] == false {
-        format!(
-            "Shield policy is disabled in {root}; protected controls remain guarded. Other requests use the agent's permissions. Resume with shield enable.\n"
-        )
-    } else if error.is_string() {
-        format!("Shield policy is unavailable in {root}.\n")
-    } else if agents.is_empty() {
-        format!(
-            "Shield policy is active in {root}, but no agent is connected. Connect one with shield mcp setup.\n"
-        )
-    } else if matches!(
-        value["enforcement"].as_str(),
-        Some("defined-for-hub" | "defined-for-box")
-    ) {
-        format!(
-            "Shield is defined for {} in {root}; publish its native hooks through that manager's setup.\n",
-            agents.join(" and ")
-        )
-    } else if value["repair_needed"] == true {
-        format!("Shield policy is enabled in {root}; agent configuration needs attention.\n")
-    } else {
-        format!(
-            "Shield policy is enabled in {root}; hooks are configured for {}.\n",
-            agents.join(" and ")
-        )
-    }
-}
-
 pub(super) fn status(value: &Value, doctor: bool) -> String {
-    let agents = integrations(&value["coverage"]);
     let error = &value["policy_files"]["error"];
-    let mut output = status_header(value, &agents);
-    let packs = value["installed_packs"]["packs_total"]
-        .as_u64()
-        .and_then(|total| usize::try_from(total).ok())
-        .unwrap_or_else(|| {
-            value["installed_packs"]["packs"]
-                .as_array()
-                .map_or(0, Vec::len)
-        });
+    let mut output = format!(
+        "{}\nProject {}\n",
+        value["summary"]
+            .as_str()
+            .unwrap_or("Shield configuration inspected."),
+        label(&value["project_root"])
+    );
     if error.is_string() {
         let _ = writeln!(output, "Policy files: {}", label(error));
-    } else {
+    } else if doctor && value["installed_packs"].is_object() {
+        let packs = value["installed_packs"]["packs_total"]
+            .as_u64()
+            .map_or_else(
+                || {
+                    value["installed_packs"]["packs"]
+                        .as_array()
+                        .map_or(0, Vec::len)
+                },
+                |total| usize::try_from(total).unwrap_or(usize::MAX),
+            );
         let _ = writeln!(
             output,
             "Policy: {} · revision {}",
@@ -120,8 +96,9 @@ pub(super) fn status(value: &Value, doctor: bool) -> String {
         );
     }
     configuration_line(&value["configuration"], &mut output);
-    let history = &value["history"];
-    let _ = writeln!(output, "History: {}", history_status(history));
+    if doctor && value["history"].is_object() {
+        let _ = writeln!(output, "History: {}", history_status(&value["history"]));
+    }
     let access = &value["path_access"];
     let relaxed: Vec<_> = [
         ("agent_settings_read", "read agent settings without asking"),
@@ -154,29 +131,20 @@ pub(super) fn status(value: &Value, doctor: bool) -> String {
             )
         );
     }
-    if error.is_null() && value["project_file_inspection"] == "unchecked" {
-        output.push_str(
-            "Editable project files are unchecked; inspect them with shield policy review.\n",
-        );
-    }
-    if value["repair_needed"] == true {
-        let _ = writeln!(
-            output,
-            "{} need repair: {}.",
-            if value["coverage"]["repair_needed"] == true {
-                "Agent integrations"
-            } else {
-                "Project files"
-            },
-            if doctor {
-                format!("run {}", label(&value["repair_route"]))
-            } else {
-                "run shield doctor".into()
-            }
-        );
-    }
     if doctor {
+        let agents = integrations(&value["coverage"]);
+        if !agents.is_empty() {
+            let _ = writeln!(output, "Integrations: {}", agents.join(", "));
+        }
         output.push_str(&diagnostics(value, !agents.is_empty()));
+    }
+    if let Some(guidance) = value["next_action"]
+        .as_str()
+        .filter(|text| !text.is_empty())
+    {
+        let _ = writeln!(output, "{guidance}");
+    } else if !doctor && value["enforcement_evidence"]["published_hooks"] == "configured" {
+        output.push_str("Host loading and interception are unverified.\n");
     }
     output
 }
@@ -203,9 +171,6 @@ fn diagnostics(value: &Value, connected: bool) -> String {
     if connected && coverage["live_host_verification"] == "unchecked" {
         output.push_str("Hook activity was not inspected. Run shield history list for retained evidence; current host loading remains unverified.\n");
     }
-    if value["policy_files"]["error"].is_null() && value["project_file_inspection"] == "unchecked" {
-        output.push_str("Project policy file integrity was not inspected. Review edits with shield policy review.\n");
-    }
     if connected && coverage["live_host_verification"] == "unverified" {
         output.push_str("No retained hook activity found. This does not establish that hooks are inactive. Inspect shield history list; if checks are absent, restart the agent and review project trust and hooks.\n");
     }
@@ -228,12 +193,10 @@ fn diagnostics(value: &Value, connected: bool) -> String {
         if check["check"] == "policy" && value["policy_files"]["error"].is_string() {
             continue;
         }
-        let _ = writeln!(
-            output,
-            "Problem: {}; run {}.",
-            label(&check["detail"]),
-            label(&check["repair"])
-        );
+        let _ = writeln!(output, "Problem: {}", label(&check["detail"]));
+        if let Some(repair) = check["repair"].as_str() {
+            let _ = writeln!(output, "  {repair}");
+        }
     }
     if coverage["operator_protection"].is_string() {
         let _ = writeln!(
@@ -588,30 +551,32 @@ mod tests {
 
     #[test]
     fn status_leads_with_protection_and_names_missing_agents() {
-        let text = status(
-            &json!({"project_root":"/srv/acme","policy_files":{"digest":"0123456789abcdef"},
-                "installed_packs":{"packs":[{}]},"history":{"enabled":true,"limit":5000},"coverage":{"installed_integrations":[]}}),
-            false,
-        );
+        let mut report = json!({"project_root":"/srv/acme","enforcement":"not-installed",
+            "policy_files":{"digest":"0123456789abcdef"},"history":{"enabled":true,"limit":5000}});
+        crate::review::project::describe(&mut report, false);
+        let text = status(&report, false);
         assert_eq!(
             text,
-            "Shield policy is active in /srv/acme, but no agent is connected. Connect one with shield mcp setup.\nPolicy: 1 pack · revision 0123456789ab\nHistory: on, keeping up to 5000 entries\n"
+            "No Shield agent integration is configured.\nProject /srv/acme\nUse Shield setup to connect an agent.\n"
         );
     }
 
     #[test]
     fn doctor_distinguishes_integration_repair_from_project_file_review() {
         let mut value = json!({"project_root":"/srv/acme","repair_needed":true,
-            "repair_route":"shield mcp setup --agent box",
+            "repair_route":"shield mcp setup --agent box","enforcement":"degraded",
             "coverage":{"repair_needed":true,"installed_integrations":[]}});
+        crate::review::project::describe(&mut value, true);
         let text = status(&value, true);
-        assert!(text.contains("Agent integrations need repair: run shield mcp setup --agent box."));
-        assert!(!text.contains("Project files need repair"));
-        value["coverage"]["repair_needed"] = json!(false);
-        value["repair_route"] = json!("shield policy review");
-        assert!(
-            status(&value, true).contains("Project files need repair: run shield policy review.")
+        assert!(text.contains("Shield agent configuration needs attention."));
+        assert_eq!(
+            value["next"]["argv"],
+            json!(["--project", "/srv/acme", "mcp", "setup", "--agent", "box"])
         );
+        value["policy_files"] = json!({"error":"Git conflict","code":"conflict"});
+        crate::review::project::describe(&mut value, true);
+        assert!(status(&value, true).contains("Git conflict"));
+        assert_eq!(value["next"]["tool"], "doctor");
     }
 
     #[test]

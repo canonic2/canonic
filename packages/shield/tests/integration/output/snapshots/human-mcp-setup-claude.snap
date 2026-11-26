@@ -4,14 +4,14 @@ expression: text
 ---
 $ shield mcp setup --agent claude
 --- terminal
-Tool permissions → 53 of 54 marked
+Tool permissions → 54 of 55 marked
 Shield review for [PROJECT] (project scope)
 
 set up agent integrations.
 Claude Code — added · hooks PostToolUse, PostToolUseFailure, PreToolUse, SessionEnd, Stop
 Registered agents gain the adapter's scoped access to skill, temporary, and supported session files.
 Shield executable [SHIELD].
-53 Shield tools can start without a host tool prompt. Shield's separate confirmation checks still apply.
+54 Shield tools can start without a host tool prompt. Shield's separate confirmation checks still apply.
 Keep the host prompt for policy_apply.
 Create 2 configuration files.
 Review and confirm → Apply change

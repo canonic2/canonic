@@ -163,6 +163,52 @@ fn modern_apply(
 }
 
 #[test]
+fn modern_confirmation_trace_links_only_a_valid_retry() {
+    let directory = assert_fs::TempDir::new().unwrap();
+    let log = Arc::new(crate::diagnostics::Log::create(directory.path()).unwrap());
+    let (server, project) = fixture(Some("claude"));
+    let transport = Transport::start(server.with_log(log.clone()));
+    for message in initialize(&capabilities(FORM), "claude-code") {
+        transport.send(&message);
+    }
+    assert!(transport.receive()["result"].is_object());
+    let args = propose(&transport, json!(2), &rule("test-retry", "acme"));
+    let revision = project.revision();
+    let interim = transport.request(&modern_apply(10, &args, None, None, true));
+    let state = &interim["result"]["requestState"];
+    assert_eq!(interim["result"]["resultType"], "input_required");
+    let forged = modern_apply(
+        11,
+        &args,
+        Some(&json!("invalid-test-state")),
+        Some("accept"),
+        true,
+    );
+    assert_eq!(
+        transport.request(&forged)["error"]["code"],
+        canonic_mcp_kit::rpc::INVALID_PARAMS
+    );
+    let valid = modern_apply(12, &args, Some(state), Some("decline"), true);
+    assert_eq!(error_code(&transport.request(&valid)), "approval_declined");
+    assert_eq!(project.revision(), revision);
+
+    let records = log.records();
+    let trace = |id| {
+        &records
+            .iter()
+            .find(|row| row["event"] == "request_start" && row["fields"]["request_id"] == id)
+            .unwrap()["fields"]["trace_id"]
+    };
+    let links: Vec<_> = records
+        .iter()
+        .filter(|row| row["event"] == "request_related" && row["fields"]["relationship"] == "retry")
+        .collect();
+    assert_eq!(links.len(), 1);
+    assert_eq!(&links[0]["fields"]["origin_trace_id"], trace(10));
+    assert_eq!(&links[0]["fields"]["trace_id"], trace(12));
+}
+
+#[test]
 fn modern_confirmation_accept_decline_cancel_and_receipt_replay() {
     for action in ["accept", "decline", "cancel"] {
         let (transport, project, args) = prepared(Some("claude"), &capabilities(FORM));

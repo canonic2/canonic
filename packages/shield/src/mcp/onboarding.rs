@@ -7,7 +7,7 @@ use crate::{
 };
 use canonic_mcp_kit::{
     Annotations, Catalog, Client, Decision, RpcError, ServerInfo, Tool, ToolCall, ToolResult, rpc,
-    stdio::{self, Confirm, Handler, Outcome, Request},
+    stdio::{self, Handler, Outcome, Request},
 };
 use serde_json::{Value, json};
 use std::{
@@ -18,7 +18,7 @@ use std::{
     },
 };
 
-const INSTRUCTIONS: &str = "Call setup to initialize or repair Shield. It defaults to the Recommended baseline for a fresh project and detects a project publisher or agent. Pass agents only to choose a target explicitly. The user reviews changes in this session. Follow any returned publication or reload action, then inspect Shield status and doctor.";
+const INSTRUCTIONS: &str = "Use setup to connect Shield. The user reviews changes in this session. Follow the returned action.";
 
 struct Bootstrap {
     input: Arc<ReviewContext>,
@@ -249,7 +249,7 @@ impl Bootstrap {
         let input = self.input.clone();
         let active = self.active.clone();
         let log = self.log.clone();
-        Outcome::Confirm(Confirm::new(message, move |decision, context| {
+        super::traced_confirm(message, move |decision, context| {
             Outcome::Tool(finish(
                 plan,
                 decision,
@@ -263,7 +263,7 @@ impl Bootstrap {
                         .map_err(|_| crate::policy::Error::Interrupted)
                 },
             ))
-        }))
+        })
     }
 
     fn prepare_call(&self, call: &ToolCall) -> Result<(Onboarding, Vec<String>), review::Error> {
@@ -344,14 +344,6 @@ impl Handler for Bootstrap {
             .map_or_else(stdio::Admission::default, |server| server.admit(request))
     }
 
-    fn deadline_messages(&self, request: &Request) -> stdio::DeadlineMessages {
-        self.active
-            .get()
-            .map_or_else(stdio::DeadlineMessages::default, |server| {
-                server.deadline_messages(request)
-            })
-    }
-
     fn initialize(&self, client: &Client) -> Result<ServerInfo, RpcError> {
         if let Some(server) = self.active.get() {
             return server.initialize(client);
@@ -390,23 +382,29 @@ impl Handler for Bootstrap {
                 return server.call(request, context);
             }
         }
-        match request {
-            Request::Tool(call) if matches!(call.name.as_str(), "init" | setup::TOOL) => {
-                self.initialize_project(&call, context)
-            }
-            Request::Prompt(call) => super::prompts::render(&call),
-            Request::Tool(_) => Outcome::Tool(refusal(
-                "not_initialized",
-                "Shield is not initialized in this project. Call setup to review setup in this session.",
-            )),
-            Request::Method { method, params } if method == "resources/read" => {
-                Outcome::ResourceNotFound(params["uri"].as_str().unwrap_or_default().into())
-            }
-            _ => Outcome::Method(Err(RpcError::new(
-                rpc::METHOD_NOT_FOUND,
-                "Set up this project with setup before using project resources",
-            ))),
-        }
+        super::traced_call(
+            Some(&self.log),
+            request,
+            context,
+            || None,
+            |request| match request {
+                Request::Tool(call) if matches!(call.name.as_str(), "init" | setup::TOOL) => {
+                    self.initialize_project(&call, context)
+                }
+                Request::Prompt(call) => super::prompts::render(&call),
+                Request::Tool(_) => Outcome::Tool(refusal(
+                    "not_initialized",
+                    "Shield is not initialized in this project. Call setup to review setup in this session.",
+                )),
+                Request::Method { method, params } if method == "resources/read" => {
+                    Outcome::ResourceNotFound(params["uri"].as_str().unwrap_or_default().into())
+                }
+                _ => Outcome::Method(Err(RpcError::new(
+                    rpc::METHOD_NOT_FOUND,
+                    "Set up this project with setup before using project resources",
+                ))),
+            },
+        )
     }
 }
 

@@ -95,7 +95,7 @@ fn a_0_29_0_folder_converts_on_its_first_hook_and_keeps_its_records() {
         original
     );
     // The first hook converts, and its own decision then follows the files.
-    let (_, paused) = review::open_native(root.path()).unwrap();
+    let (_, paused) = review::open_native(root.path(), true).unwrap();
     assert!(
         paused.is_some(),
         "the release's paused mode stays in effect"
@@ -224,7 +224,7 @@ fn folders_from_earlier_releases_convert_and_enforce_their_files() {
             status["checkpoint_upgrade_pending"], true,
             "{version}: {status}"
         );
-        let (_, paused) = review::open_native(root.path()).unwrap();
+        let (_, paused) = review::open_native(root.path(), true).unwrap();
         assert_eq!(
             paused.is_some(),
             paused_by_release,

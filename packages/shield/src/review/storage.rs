@@ -40,6 +40,7 @@ pub(crate) struct Store {
 struct Writer<'a> {
     lock: Option<Lock>,
     owned: &'a Mutex<Option<std::thread::ThreadId>>,
+    _hold: Option<crate::diagnostics::trace::Wait>,
 }
 impl Drop for Writer<'_> {
     fn drop(&mut self) {
@@ -238,8 +239,21 @@ impl Store {
     /// by clone, worktree or copy gets empty runtime state on first use: the
     /// files are its policy, so no enrollment step stands in between.
     pub(crate) fn open(project: &Path) -> Result<Self, Error> {
+        Self::open_runtime(project, true)
+    }
+
+    /// Observations require an existing checkpoint. A late callback cannot
+    /// enroll a new checkout or read its policy to replace lost history.
+    pub(in crate::review) fn open_observations(project: &Path) -> Result<Self, Error> {
+        Self::open_runtime(project, false)
+    }
+
+    fn open_runtime(project: &Path, initialize: bool) -> Result<Self, Error> {
         let store = Self::location(project)?;
         if !store.checkpoint_present()? {
+            if !initialize {
+                return Err(Error::Missing);
+            }
             let selection = crate::layout::select(Path::new(&store.root))?;
             if selection.source != crate::layout::Source::Absent && selection.file.is_file() {
                 match Self::initialize_runtime(project) {
@@ -831,7 +845,17 @@ impl Store {
         lock: fn(&Self) -> Result<fs::File, Error>,
         operation: impl FnOnce(&mut State) -> Result<Value, Error>,
     ) -> Result<Value, Error> {
-        let (mut state, _guard) = self.observation_checkpoint(lock)?;
+        let (mut state, _guard) = self.observation_checkpoint(|store| {
+            lock(store).inspect_err(|_| {
+                // The failure marker is independent of the journal lock.
+                if let Ok((state, false)) = store.read_diagnostic_checkpoint()
+                    && state.check(context).is_ok()
+                    && state.settings.history_enabled
+                {
+                    history::mark_failure(store, &state);
+                }
+            })
+        })?;
         state.check(context)?;
         if !state.settings.history_enabled {
             return Ok(json!({"status":"disabled","request_id":null,"event_id":null}));
@@ -847,30 +871,33 @@ impl Store {
     /// needs authority -> history ordering, so release history before converting.
     fn observation_checkpoint(
         &self,
-        lock: fn(&Self) -> Result<fs::File, Error>,
+        lock: impl Fn(&Self) -> Result<fs::File, Error>,
     ) -> Result<(State, fs::File), Error> {
-        // One conversion attempt: a conversion that cannot write leaves the
-        // earlier checkpoint readable in memory.
-        let mut converted = false;
+        // A deferred conversion may leave the exact same bytes on disk,
+        // including a format only the legacy decoder can read.
+        let mut attempted_conversion = false;
         loop {
             let guard = lock(self)?;
             let _trace = crate::diagnostics::trace::span("state.checkpoint");
             crate::diagnostics::trace::count("state.checkpoint_reads", 1);
             let bytes = self.checkpoint_bytes()?;
-            if let Ok(state) = self.decode(&bytes) {
-                if !converted && self.convertible(&state) {
-                    converted = true;
-                    drop(guard);
-                    self.read_checkpoint()?;
-                    continue;
+            match self.decode(&bytes) {
+                Ok(state) if attempted_conversion || !self.convertible(&state) => {
+                    let mut state = admit(state);
+                    super::settings::load(Path::new(&self.root), &mut state);
+                    Self::validate_checkpoint(&state)?;
+                    super::proposal_lifecycle::refresh_inspection(&mut state);
+                    return Ok((state, guard));
                 }
-                let mut state = admit(state);
-                super::settings::load(Path::new(&self.root), &mut state);
-                Self::validate_checkpoint(&state)?;
-                super::proposal_lifecycle::refresh_inspection(&mut state);
-                return Ok((state, guard));
+                Err(_) if attempted_conversion => {
+                    return Err(Error::Invalid(
+                        "request history is unavailable until Shield can finish converting the legacy checkpoint. Restore access to the local Shield settings and retry",
+                    ));
+                }
+                _ => {}
             }
             drop(guard);
+            attempted_conversion = true;
             self.read_checkpoint()?;
         }
     }
@@ -884,8 +911,12 @@ impl Store {
         Ok(result)
     }
     fn lock(&self, checkpoint: Checkpoint<'_>) -> Result<Writer<'_>, Error> {
-        let _trace = crate::diagnostics::trace::span("authority.lock_wait");
-        let lock = locking::acquire(&self.directory, checkpoint)?;
+        let lock = {
+            let _trace = crate::diagnostics::trace::span("authority.lock_wait");
+            locking::acquire(&self.directory, checkpoint)?
+        };
+        let hold = crate::diagnostics::trace::current()
+            .map(|trace| trace.wait("authority.lock_hold", "authority.lock_hold_us"));
         *self
             .writer_owned
             .lock()
@@ -893,6 +924,7 @@ impl Store {
         Ok(Writer {
             lock: Some(lock),
             owned: &self.writer_owned,
+            _hold: hold,
         })
     }
     /// Rare legacy/relocation normalization must acquire the projection lease
@@ -1020,9 +1052,8 @@ impl Store {
         self.ignore_local_state();
         Ok(result)
     }
-    /// Keeps runtime state, the in-project cache and the selected bundle's
-    /// local files out of version control, so committing a bundle shares only
-    /// its policy files. Never replaces a file.
+    /// Keeps runtime state, the in-project cache, local rules and the local
+    /// lock out of version control. Never replaces a file.
     fn ignore_local_state(&self) {
         if let Some(shield) = self.directory.parent() {
             ignore_lines(&shield.join(".gitignore"), LOCAL_STATE_IGNORE);
@@ -1099,7 +1130,10 @@ impl Store {
         if upgrade_receipts > 1 || state.authorization_events.len() > 1024 + upgrade_receipts {
             return Err(crate::policy::Error::Limit.into());
         }
-        let bytes = history::encode(self, state, history_guard.is_some())?;
+        let bytes = {
+            let _trace = crate::diagnostics::trace::span("state.encode");
+            history::encode(self, state, history_guard.is_some())?
+        };
         if bytes.len() > MAX_STATE {
             return Err(crate::policy::Error::Limit.into());
         }
@@ -1153,14 +1187,13 @@ impl Store {
 
 pub(in crate::review) mod history;
 pub(in crate::review) mod objects;
-const LOCAL_STATE_IGNORE: &[u8] =
-    b"state/\ncache/\nconfig.local.yml\nrules.local.yml\nshield.local.lock\n";
-/// The local files of a bundle outside `.shield/`, such as `.config/shield/`.
-const BUNDLE_IGNORE: &[u8] = b"config.local.yml\nrules.local.yml\nshield.local.lock\n";
+const LOCAL_STATE_IGNORE: &[u8] = b"state/\ncache/\nrules.local.yml\nshield.local.lock\n";
+/// The local rules and lock of a bundle outside `.shield/`.
+const BUNDLE_IGNORE: &[u8] = b"rules.local.yml\nshield.local.lock\n";
 
 /// Create `path` with `lines`, or append the lines an existing regular file
 /// lacks. Links and other entries are left alone; failures are best effort.
-fn ignore_lines(path: &Path, lines: &[u8]) {
+pub(super) fn ignore_lines(path: &Path, lines: &[u8]) {
     match fs::symlink_metadata(path) {
         Err(_) => {
             let _ = fs::OpenOptions::new()

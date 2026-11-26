@@ -2,7 +2,7 @@
 mod execution;
 mod files;
 use super::{
-    Context, Error, clock,
+    Checkpoint, Context, Error, clock,
     storage::{self, objects::Directory},
 };
 pub(crate) use execution::eligible;
@@ -18,7 +18,6 @@ pub(crate) const MAX_RECORDS: usize = 32;
 pub(crate) const CAPTURE_BYTES: usize = 16 * 1024 * 1024;
 pub(crate) const RESULT_BYTES: usize = 1024 * 1024;
 pub(crate) const TTL_MS: u64 = 24 * 60 * 60 * 1000;
-pub(crate) const EXECUTION_MS: u64 = 60 * 1000;
 const META_BYTES: usize = 16 * 1024;
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -69,8 +68,8 @@ impl Record {
             result_digest: None,
         }
     }
-    fn live(&self, project: &str, now: u64) -> bool {
-        self.project == project && now < self.created.saturating_add(self.ttl_ms)
+    fn retained(&self, now: u64) -> bool {
+        now < self.updated.saturating_add(self.ttl_ms)
     }
 }
 
@@ -82,42 +81,46 @@ pub(crate) struct Store {
 }
 
 pub(crate) struct Runtime {
-    store: Mutex<RuntimeStore>,
+    store: Store,
+    recovered: Mutex<bool>,
     workers: Mutex<Vec<JoinHandle<()>>>,
 }
-struct RuntimeStore {
-    store: Store,
-    recovered: bool,
+
+pub(crate) struct Observation {
+    pub(crate) record: Record,
+    pub(crate) result: Option<Value>,
 }
 
 impl Runtime {
     pub(crate) fn new(context: &Context) -> Self {
-        let store = Store::new(context);
         Self {
-            store: Mutex::new(RuntimeStore {
-                store,
-                recovered: false,
-            }),
+            store: Store::new(context),
+            recovered: Mutex::new(false),
             workers: Mutex::new(Vec::new()),
         }
     }
+    #[cfg(test)]
     pub(crate) fn store(&self) -> Result<Store, Error> {
-        let mut current = self.store.lock().map_err(|_| Error::Locked)?;
-        if current.store.root.exists() {
-            current.store.authority()?;
-            files::writer_directory(&current.store.root, false)?;
-            if !current.recovered {
-                current.store.recover()?;
+        self.store_controlled(&|| Ok(()))
+    }
+    pub(crate) fn store_controlled(&self, checkpoint: Checkpoint<'_>) -> Result<Store, Error> {
+        let mut recovered = self.recovered.lock().map_err(|_| Error::Locked)?;
+        checkpoint()?;
+        if self.store.root.exists() {
+            self.store.authority()?;
+            files::writer_directory(&self.store.root, false)?;
+            storage::objects::initialize_mutex(&self.store.root)?;
+            if !*recovered {
+                self.store.recover(checkpoint)?;
             }
         }
-        current.recovered = true;
-        Ok(current.store.clone())
+        *recovered = true;
+        Ok(self.store.clone())
     }
     /// The store for inspecting recorded task results; it never recovers
     /// workers or creates storage.
-    pub(crate) fn observation_store(&self) -> Result<Store, Error> {
-        let current = self.store.lock().map_err(|_| Error::Locked)?;
-        Ok(current.store.clone())
+    pub(crate) fn observation_store(&self) -> &Store {
+        &self.store
     }
     #[cfg(test)]
     pub(crate) fn join(&self) {
@@ -213,7 +216,7 @@ impl Store {
         if now < record.created || now < record.updated {
             return Err(Error::Invalid("preparation clock regressed"));
         }
-        if !record.live(&self.project, now) {
+        if record.status != "working" && !record.retained(now) {
             return Err(Error::Missing);
         }
         Ok(record)
@@ -225,14 +228,7 @@ impl Store {
             META_BYTES,
         )
     }
-    pub(crate) fn result(&self, record: &Record) -> Result<Value, Error> {
-        self.observation_authority()?;
-        if record.project != self.project {
-            return Err(Error::Missing);
-        }
-        if !record.live(&self.project, clock::now_ms()?) {
-            return Err(Error::Missing);
-        }
+    fn read_result(&self, record: &Record) -> Result<Value, Error> {
         let value = files::read(
             &self.directory(&record.id)?.join("result.json"),
             RESULT_BYTES,
@@ -258,10 +254,16 @@ impl Store {
         }
         serde_json::from_value(value).map_err(|_| Error::Invalid("preparation capture invalid"))
     }
-    pub(crate) fn cancel(&self, id: &str) -> Result<(), Error> {
+    pub(crate) fn cancel(&self, id: &str, checkpoint: Checkpoint<'_>) -> Result<(), Error> {
+        self.directory(id)?;
+        let _lock = match storage::objects::write_lease(&self.root, checkpoint) {
+            Err(Error::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Err(Error::Missing);
+            }
+            result => result?,
+        };
+        checkpoint()?;
         self.authority()?;
-        self.control(id)?;
-        let _lock = Directory::enter(&self.root)?;
         let mut record = self.control(id)?;
         self.reconcile(&mut record)?;
         if record.status == "working" && !record.cancel_requested {
@@ -272,19 +274,42 @@ impl Store {
         }
         Ok(())
     }
-    pub(crate) fn observe(&self, id: &str) -> Result<Record, Error> {
-        self.observation_authority()?;
-        // The existing namespace mutex supplies a coherent view when present;
-        // absence is never repaired by observation.
-        let namespace = match Directory::inspect(&self.root) {
+    pub(crate) fn observe(
+        &self,
+        id: &str,
+        include_result: bool,
+        checkpoint: Checkpoint<'_>,
+    ) -> Result<Observation, Error> {
+        self.directory(id)?;
+        match files::directory(&self.root, false) {
+            Err(Error::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Err(Error::Missing);
+            }
+            result => result?,
+        }
+        let namespace = match storage::objects::read_lease(&self.root, Some(checkpoint)) {
             Ok(lock) => Some(lock),
             Err(Error::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => None,
             Err(error) => return Err(error),
         };
+        checkpoint()?;
+        self.observation_authority()?;
+        let record = self.observed_record(id, namespace.is_some())?;
+        let result = if include_result && record.status == "completed" {
+            Some(self.read_result(&record)?)
+        } else {
+            None
+        };
+        checkpoint()?;
+        Ok(Observation { record, result })
+    }
+    fn observed_record(&self, id: &str, check_owner: bool) -> Result<Record, Error> {
         let mut record = self.control(id)?;
         if record.status == "working" {
-            let owner = if namespace.is_some() {
-                match Directory::inspect(&self.directory(id)?) {
+            let owner = if check_owner {
+                // Execution holds an exclusive lease. Other polls can share
+                // this probe without looking like a running worker.
+                match storage::objects::read_lease(&self.directory(id)?, None) {
                     Ok(owner) => Some(owner),
                     Err(Error::Locked) => return Ok(record),
                     Err(Error::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => None,
@@ -405,10 +430,10 @@ impl Store {
         }
         Ok(())
     }
-    fn recover(&self) -> Result<(), Error> {
+    fn recover(&self, checkpoint: Checkpoint<'_>) -> Result<(), Error> {
+        let _lock = storage::objects::write_lease(&self.root, checkpoint)?;
+        checkpoint()?;
         self.authority()?;
-        files::writer_directory(&self.root, false)?;
-        let _lock = Directory::enter(&self.root)?;
         self.normalize_record_directories()?;
         for id in self.entries()? {
             let Some(mut record) = self.record_or_recover(&id)? else {

@@ -146,6 +146,32 @@ fn a_prepared_proposal_refuses_a_concurrently_activated_base() {
 }
 
 #[test]
+fn a_prepared_proposal_refuses_a_byte_change_with_the_same_policy_revision() {
+    let (root, context) = enrolled();
+    let local = root.child(".shield/config.local.yml");
+    let settings = "schema_version: 1\nenforcement: paused\n";
+    local.write_str(settings).unwrap();
+    let first = files::load(root.path()).unwrap();
+    let changed = format!("# Acme settings\n{settings}");
+    let result = changes::propose(
+        &context,
+        &input("prepared"),
+        &|| Ok(()),
+        &mut |_, _, _, _| {
+            local.write_str(&changed).unwrap();
+            Ok(())
+        },
+        &|row| Ok(row.public()),
+    );
+    assert!(matches!(result, Err(Error::StaleSnapshot)), "{result:?}");
+    let next = files::load(root.path()).unwrap();
+    assert_eq!(next.evaluator.revision(), first.evaluator.revision());
+    assert_eq!(std::fs::read_to_string(local.path()).unwrap(), changed);
+    let state = Store::open(root.path()).unwrap().read_checkpoint().unwrap();
+    assert!(state.proposals.is_empty());
+}
+
+#[test]
 fn stale_rejected_changed_retries_and_cross_project_context_do_not_apply() {
     let (_root, context) = enrolled();
     let first = propose(&context, &input("one"), &|| Ok(())).unwrap();

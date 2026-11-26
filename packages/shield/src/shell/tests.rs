@@ -746,6 +746,7 @@ fn curl_container_fetch_keeps_hostname_resolution_review() {
     let analysis = Analysis {
         evaluator: &evaluator,
         working_files: None,
+        direct_node_test: None,
         checkpoint: &|| Ok(()),
         context: request.clone(),
         directories: crate::location::directory::Directories::new(),
@@ -1330,6 +1331,96 @@ fn evaluator() -> Evaluator {
         candidate.capture(&[], Some(&custom)).unwrap(),
     )])
     .unwrap()
+}
+
+#[test]
+fn trusted_project_node_tests_require_the_matching_rule_and_literal_project_inputs() {
+    use crate::{configuration::Candidate, policy::Scope};
+
+    let temporary = assert_fs::TempDir::new().unwrap();
+    let root = temporary.path().join("project");
+    std::fs::create_dir(&root).unwrap();
+    std::fs::write(root.join("probe.test.mjs"), "").unwrap();
+    for path in ["@(probe).test.mjs", "!probe.test.mjs"] {
+        std::fs::write(root.join(path), "").unwrap();
+    }
+    std::fs::write(temporary.path().join("outside.test.mjs"), "").unwrap();
+    #[cfg(unix)]
+    std::os::unix::fs::symlink("../outside.test.mjs", root.join("escape.test.mjs")).unwrap();
+    let cwd = root.to_str().unwrap();
+    let document = json!({"schema_version":1,"kind":"custom",
+        "capabilities":["agent-outputs-v1","argument-rules-v1","project-node-tests-v1","structured-rules-v1"],
+        "rules":[{"id":"test-trust","decision":"allow",
+            "agents":{"codex":{"prefixes":[["node","--test"]],"trust_project_node_tests":true}},
+            "conditions":{"domain":"argv","executable":"node","arguments":{"kind":"prefix","values":["--test"]}}},
+        {"id":"explicit-deny","decision":"deny","conditions":{"domain":"argv","executable":"node",
+            "arguments":{"kind":"exact","values":["--test","--test-only","probe.test.mjs"]}}}]});
+    let custom = Candidate::from_yaml("schema_version: 1\npacks: []\nrules: rules.json\n").unwrap();
+    let evaluate = |document: &Value| {
+        Evaluator::new(vec![(
+            Scope::Project,
+            custom.capture(&[], Some(&document.to_string())).unwrap(),
+        )])
+        .unwrap()
+    };
+
+    let opted_in = evaluate(&document);
+    assert!(opted_in.codex_prefixes()[0].covers("node", &["--test", "probe.test.mjs"]));
+    for (source, expected) in [
+        ("node --test --test-concurrency=1 probe.test.mjs", "allow"),
+        ("node --test", "allow"),
+        ("node --test --test-only probe.test.mjs", "deny"),
+        ("node --test --import ./probe.test.mjs", "ask"),
+        ("node --test ./missing.test.mjs", "ask"),
+        ("node --test ../outside.test.mjs", "ask"),
+        ("node --test escape.test.mjs", "ask"),
+        ("node --test \"*.test.mjs\"", "ask"),
+        ("node --test '@(probe).test.mjs'", "ask"),
+        ("node --test '!probe.test.mjs'", "ask"),
+        ("node --test probe.test.mjs && node --test", "ask"),
+        ("node --test probe.test.mjs > output.txt", "ask"),
+        ("NODE_OPTIONS=--require=./probe.test.mjs node --test", "ask"),
+    ] {
+        let report = analyze(source, Dialect::Posix, cwd, cwd, &opted_in).unwrap();
+        assert_eq!(report["decision"], expected, "{source}: {report}");
+    }
+    let inherited_options = crate::location::WorkingFiles {
+        node_options: true,
+        ..Default::default()
+    };
+    let result = analyze_with_working_files(
+        "node --test probe.test.mjs",
+        Dialect::Posix,
+        cwd,
+        None,
+        cwd,
+        &opted_in,
+        &|| Ok(()),
+        Some(&inherited_options),
+    )
+    .unwrap();
+    assert_eq!(result["decision"], "ask", "{result}");
+    let mut old = document;
+    old["rules"][0]["agents"]["codex"]
+        .as_object_mut()
+        .unwrap()
+        .remove("trust_project_node_tests");
+    old["capabilities"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|value| value != "project-node-tests-v1");
+    let baseline = evaluate(&old);
+    assert_eq!(
+        analyze(
+            "node --test probe.test.mjs",
+            Dialect::Posix,
+            cwd,
+            cwd,
+            &baseline
+        )
+        .unwrap()["decision"],
+        "ask"
+    );
 }
 
 #[test]
@@ -2187,6 +2278,73 @@ fn explicit_ifs_splitting_and_home_tilde_values_preserve_exact_fields() {
         split_fields_test_interrupt(),
         Err(Error::Interrupted)
     ));
+}
+
+#[test]
+fn tilde_executable_uses_the_reported_shell_home_and_exact_argv_policy() {
+    use crate::{configuration::Candidate, policy::Scope};
+    let custom = json!({
+        "schema_version": 1,
+        "kind": "custom",
+        "capabilities": ["argument-rules-v1", "structured-rules-v1"],
+        "rules": [
+            {"id": "locked-nextest", "decision": "allow", "conditions": {
+                "domain": "argv", "executable": "/home/acme build/.cargo/bin/cargo",
+                "arguments": {"kind": "exact", "values": ["nextest", "run", "--locked"]}
+            }},
+            {"id": "other-cargo", "decision": "deny", "conditions": {
+                "domain": "argv", "executable": "/home/other/.cargo/bin/cargo",
+                "arguments": {"kind": "any"}
+            }}
+        ]
+    });
+    let candidate =
+        Candidate::from_yaml("schema_version: 1\npacks: []\nrules: rules.json\n").unwrap();
+    let evaluator = Evaluator::new(vec![(
+        Scope::Project,
+        candidate.capture(&[], Some(&custom.to_string())).unwrap(),
+    )])
+    .unwrap();
+    let command = "~/.cargo/bin/cargo nextest run --locked";
+    let home = Some("/home/acme build");
+    for dialect in [Dialect::Posix, Dialect::Bash] {
+        for (reported, source, expected) in [
+            (home, command, "allow"),
+            (home, "~/.cargo/bin/cargo nextest run", "ask"),
+            (Some("/home/other"), command, "deny"),
+            (
+                home,
+                "HOME=/home/other; ~/.cargo/bin/cargo nextest run --locked",
+                "deny",
+            ),
+            (
+                home,
+                "unset HOME; ~/.cargo/bin/cargo nextest run --locked",
+                "ask",
+            ),
+            (home, "'~/.cargo/bin/cargo' nextest run --locked", "ask"),
+            (home, "~other/.cargo/bin/cargo nextest run --locked", "ask"),
+            (Some(""), command, "ask"),
+            (Some("relative"), command, "ask"),
+            (None, command, "ask"),
+        ] {
+            let environment = reported.map(|home| BTreeMap::from([("HOME".into(), home.into())]));
+            let result = analyze_controlled(
+                source,
+                dialect,
+                "/repo",
+                environment.as_ref(),
+                "/repo",
+                &evaluator,
+                &|| Ok(()),
+            )
+            .unwrap();
+            assert_eq!(
+                result["decision"], expected,
+                "{reported:?} {source}: {result}"
+            );
+        }
+    }
 }
 
 fn split_fields_test_interrupt() -> Result<(), Error> {

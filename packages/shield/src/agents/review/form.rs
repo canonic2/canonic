@@ -10,7 +10,7 @@ impl ReviewAdapter for Form {
     }
 }
 static GUIDANCE: Guidance = Guidance {
-    instructions: "Copy apply_arguments unchanged to policy_apply immediately and wait for its MCP confirmation form. Ordinary tool permission does not change the policy. Unavailable forms close the attempt; report the in-session capability gap, never send the user to a terminal. ",
+    instructions: "Wait for Shield's MCP confirmation form for policy changes.",
     unavailable: "MCP confirmation form unavailable. This attempt is closed; report the missing in-session capability. Never send the user to a terminal.",
     required: "Approval required. Inspect the live proposal with policy_show, copy apply_arguments unchanged to policy_apply, and wait for its MCP confirmation form. Closed attempts require fresh preparation.",
     proposed: "Inactive change prepared. Immediately copy apply_arguments unchanged to policy_apply for MCP form confirmation. Decline, cancellation or unavailable confirmation closes the attempt. Never send the user to a terminal.",

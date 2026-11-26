@@ -34,6 +34,10 @@ fn pack(version: &str) -> String {
     }).to_string()
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "one session exercises discovery, decline, confirmation and the installed rule"
+)]
 fn exercise() {
     let (transport, project, source) = fresh(false, VERSION, &json!({"elicitation":{"form":{}}}));
     publish(&source, &[("pack.yml", pack("1.0.0"))]);
@@ -91,23 +95,59 @@ fn exercise() {
     // Supplied installation values take precedence over discovered candidates.
     let (transport, project, source) = fresh(false, VERSION, &json!({"elicitation":{"form":{}}}));
     publish(&source, &[("pack.yml", pack("1.0.0"))]);
-    let explicit = "/opt/acme/bin/cargo";
+    let explicit = crate::test_support::absolute("/opt/acme/bin/cargo");
     let supplied = transport.call(
         json!(8),
         "pack_add",
         &json!({"reference":"fixture/acme/settings","set":{"cargo_executable":explicit}}),
     );
     approve(&transport, 9, &supplied);
-    let shared = std::fs::read_to_string(
-        std::path::Path::new(&project.review.project_root).join(".shield/config.yml"),
-    )
-    .unwrap();
-    assert!(shared.contains(explicit));
-    let local = std::fs::read_to_string(
-        std::path::Path::new(&project.review.project_root).join(".shield/config.local.yml"),
-    )
-    .unwrap();
-    assert!(!local.contains(expected));
+    let root = std::path::Path::new(&project.review.project_root);
+    let shared_path = root.join(".shield/config.yml");
+    let local_path = root.join(".shield/config.local.yml");
+    let binding = |path: &std::path::Path| -> Value {
+        let source = std::fs::read_to_string(path).unwrap();
+        let config: Value = serde_saphyr::from_str(&source).unwrap();
+        config["packs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|pack| pack["id"] == "acme/settings")
+            .map_or(Value::Null, |pack| {
+                pack["variables"]["cargo_executable"].clone()
+            })
+    };
+    assert_eq!(binding(&shared_path), json!(explicit));
+    assert_eq!(binding(&local_path), Value::Null);
+
+    let mut list_pack: Value = serde_json::from_str(&pack("1.1.0")).unwrap();
+    list_pack["capabilities"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!("executable-path-lists-v1"));
+    list_pack["variables"]["cargo_executable"]["type"] = json!("list");
+    list_pack["variables"]["cargo_executable"]["items"] = json!({"type":"string"});
+    publish(
+        &source,
+        &[
+            ("pack.yml", pack("1.0.0")),
+            ("next.yml", list_pack.to_string()),
+        ],
+    );
+    let upgraded = transport.call(
+        json!(10),
+        "pack_update",
+        &json!({"reference":"fixture/acme/settings@1.1.0"}),
+    );
+    assert!(
+        data(&upgraded)["data"]["apply_arguments"].is_object(),
+        "{upgraded}"
+    );
+    assert_eq!(binding(&shared_path), json!(explicit));
+    assert_eq!(binding(&local_path), Value::Null);
+    approve(&transport, 11, &upgraded);
+    assert_eq!(binding(&shared_path), Value::Null);
+    assert_eq!(binding(&local_path), json!(explicit));
 }
 
 fn clear_bindings(path: &std::path::Path) {

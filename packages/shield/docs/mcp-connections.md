@@ -184,7 +184,7 @@ host loading and running-connector identity remain unverified.
 
 ## Use local overrides privately
 
-The `mcp` map in ignored `.shield/config.local.yml` replaces whole connections
+The `mcp` map in `.shield/config.local.yml` replaces whole connections
 by ID. Supply the complete effective connection, including its transport and
 bindings; empty `args`, `env`, `agents` or `packs` explicitly clear those parts.
 You can disable a shared connection or add a local-only one this way.

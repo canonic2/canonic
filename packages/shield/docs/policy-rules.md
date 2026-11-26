@@ -967,6 +967,18 @@ may add tokens after it. A rule matching `aws logs` can list
 `[aws, logs, tail]` but not `[aws]` or `[aws, s3]`. The rule's executable and
 argument prefix must be literals or a `one_of` of literals.
 
+Set `agents.codex.trust_project_node_tests: true` on an Allow rule that exports
+the `[node, --test]` prefix to trust literal Node test runs in the project.
+The Node pack exposes the same choice as `host_node_tests`. Enable it only
+when you trust the project's test code, its imports, and any subprocesses it
+starts outside the Codex sandbox. Shield checks explicit test paths against the
+project and requires a separate review when it sees a nonempty `NODE_OPTIONS`.
+
+Agents can include `agents.codex.prefixes`, `agents.codex.trust_project_node_tests`
+and `argument_paths` in a custom rule proposal through MCP. The review identifies
+the change to Codex's sandbox permissions and requires your confirmation before
+publishing the prefix.
+
 Shield's hooks still decide every command. When policy asks about a command
 whose every part matches one of these prefixes, such as
 `aws logs tail --follow`, the hook blocks it even under the Allow fallback,

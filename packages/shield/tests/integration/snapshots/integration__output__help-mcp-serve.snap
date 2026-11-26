@@ -7,27 +7,14 @@ Serve this project's Shield MCP tools on standard input and output
 Usage: shield mcp serve [OPTIONS]
 
 Options:
-      --project <PROJECT>
-          Select a project; otherwise discover the nearest enrolled ancestor
-      --skills-only
-          Serve bundled skills and resources without opening a project or exposing tools
-      --agent <AGENT>
-          Agent label, recorded as caller attribution
-      --json
-          Print one JSON result; commands that change policy refuse JSON mode
-      --debug-log-dir <DEBUG_LOG_DIR>
-          Write private per-process diagnostics in this directory (also `SHIELD_DEBUG_LOG_DIR`)
-      --session-id <SESSION_ID>
-          Host session ID supplied by the launcher
-      --no-debug-log
-          Disable diagnostic logging, including automatic debug-build logs
-      --tool-use-id <TOOL_USE_ID>
-          Host tool-call ID
-      --cache-dir <CACHE_DIR>
-          Folder for this project's compiled policy plans, chosen at init or MCP setup
-      --request-timeout-ms <REQUEST_TIMEOUT_MS>
-          Cooperative tool-call deadline from dispatch through encoding [default: 5000]
-      --config <PATH>
-          Shared configuration file; otherwise .shield/config.yml, then .config/shield/config.yml
-  -h, --help
-          Print help
+      --project <PROJECT>              Select a project; otherwise discover the nearest enrolled ancestor
+      --skills-only                    Serve bundled skills and resources without opening a project or exposing tools
+      --agent <AGENT>                  Agent label, recorded as caller attribution
+      --json                           Print one JSON result; commands that change policy refuse JSON mode
+      --debug-log-dir <DEBUG_LOG_DIR>  Write private per-process diagnostics in this directory (also `SHIELD_DEBUG_LOG_DIR`)
+      --session-id <SESSION_ID>        Host session ID supplied by the launcher
+      --no-debug-log                   Disable diagnostic logging, including automatic debug-build logs
+      --tool-use-id <TOOL_USE_ID>      Host tool-call ID
+      --cache-dir <CACHE_DIR>          Folder for this project's compiled policy plans, chosen at init or MCP setup
+      --config <PATH>                  Shared configuration file; otherwise .shield/config.yml, then .config/shield/config.yml
+  -h, --help                           Print help

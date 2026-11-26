@@ -169,6 +169,7 @@ fn a_busy_protection_check_reports_contention_instead_of_invalid_authorization()
             root,
             NativeContext {
                 integration: "codex",
+                event: crate::agents::Event::Before,
                 approval: NativeApproval::Fallback,
                 context_complete: true,
                 working_files: None,

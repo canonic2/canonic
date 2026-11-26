@@ -265,6 +265,8 @@ impl Drop for Shared {
 /// A request link is explicitly cloned into a worker or continuation, never inferred from a thread.
 #[derive(Clone)]
 pub(crate) struct Request(Arc<Shared>);
+/// A diagnostic reference that does not retain an earlier request or its sink.
+pub(crate) struct Link(String);
 #[derive(Clone)]
 struct Attached {
     request: Request,
@@ -282,6 +284,24 @@ impl Drop for Scope {
     }
 }
 impl Request {
+    pub(crate) fn transport(&self, ids: Option<(u64, u64)>) {
+        if let Some((connection, request)) = ids {
+            self.0.recorder.emit(
+                "request_transport",
+                json!({"trace_id":self.0.trace_id,
+                "connection":connection,"request":request}),
+            );
+        }
+    }
+
+    fn relate(&self, origin: &str, relationship: &'static str) {
+        self.0.recorder.emit(
+            "request_related",
+            json!({"trace_id":self.0.trace_id,
+            "origin_trace_id":origin,"relationship":relationship}),
+        );
+    }
+
     #[cfg(test)]
     pub(crate) fn recorded_count(&self, name: &str) -> u64 {
         self.0
@@ -293,7 +313,7 @@ impl Request {
             .copied()
             .unwrap_or(0)
     }
-    /// An interval may cross a continuation boundary without attaching thread state.
+    /// A guard or continuation may complete this interval without nesting in thread state.
     pub(crate) fn wait(&self, stage: &'static str, counter: &'static str) -> Wait {
         let mut request_state = self
             .0
@@ -360,6 +380,24 @@ impl Drop for Wait {
 pub(crate) fn current() -> Option<Request> {
     CURRENT.with_borrow(|current| current.as_ref().map(|c| c.request.clone()))
 }
+
+pub(crate) fn current_link() -> Option<Link> {
+    current().map(|request| Link(request.0.trace_id.clone()))
+}
+
+pub(crate) fn link_retry(origin: Option<&Link>) {
+    if let (Some(origin), Some(request)) = (origin, current()) {
+        request.relate(&origin.0, "retry");
+    }
+}
+
+pub(crate) fn child(operation: &'static str) -> Option<Request> {
+    let parent = current()?;
+    let child = parent.0.recorder.request("worker", operation, None, None);
+    child.relate(&parent.0.trace_id, "child");
+    Some(child)
+}
+
 pub(crate) fn operation(name: &str) -> &'static str {
     super::tool_names()
         .iter()

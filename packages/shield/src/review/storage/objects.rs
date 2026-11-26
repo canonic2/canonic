@@ -40,6 +40,17 @@ pub(in crate::review) fn read_file(path: &Path) -> Result<File, Error> {
     open(path, false, false)
 }
 
+/// Acquire a private owner lease while the caller holds the namespace writer.
+pub(in crate::review) fn own_file(path: &Path) -> Result<File, Error> {
+    let file = open(path, true, true)?;
+    match file.try_lock() {
+        Ok(()) => checked(path, &file)?,
+        Err(fs::TryLockError::WouldBlock) => return Err(Error::Locked),
+        Err(fs::TryLockError::Error(error)) => return Err(error.into()),
+    }
+    Ok(file)
+}
+
 pub(in crate::review) fn initialize_mutex(path: &Path) -> Result<(), Error> {
     open(&path.join(".objects.lock"), true, true)?;
     Ok(())
@@ -50,19 +61,39 @@ pub(in crate::review) fn read_lease(
     path: &Path,
     checkpoint: Option<Checkpoint<'_>>,
 ) -> Result<File, Error> {
+    lease(path, false, checkpoint)
+}
+
+/// Wait for exclusive ownership of an initialized mutex, with cancellation.
+pub(in crate::review) fn write_lease(
+    path: &Path,
+    checkpoint: Checkpoint<'_>,
+) -> Result<File, Error> {
+    lease(path, true, Some(checkpoint))
+}
+
+fn lease(path: &Path, exclusive: bool, checkpoint: Option<Checkpoint<'_>>) -> Result<File, Error> {
     let path = path.join(".objects.lock");
-    let file = read_file(&path)?;
+    let file = open(&path, exclusive, false)?;
     let mut backoff = Backoff::new();
     loop {
         if let Some(checkpoint) = checkpoint {
             checkpoint()?;
         }
-        match file.try_lock_shared() {
+        let locked = if exclusive {
+            file.try_lock()
+        } else {
+            file.try_lock_shared()
+        };
+        match locked {
             Ok(()) => {
                 checked(&path, &file)?;
                 return Ok(file);
             }
-            Err(fs::TryLockError::WouldBlock) if checkpoint.is_some() => backoff.wait(),
+            Err(fs::TryLockError::WouldBlock) if checkpoint.is_some() => {
+                crate::diagnostics::trace::count("state.object_lease_waits", 1);
+                backoff.wait();
+            }
             Err(fs::TryLockError::WouldBlock) => return Err(Error::Locked),
             Err(fs::TryLockError::Error(error)) => return Err(error.into()),
         }
@@ -143,24 +174,19 @@ impl Directory {
     /// Callers verify/create the private directory before entering. The stable
     /// mutex serializes its writers, never ordinary evaluation.
     pub(in crate::review) fn enter(path: &Path) -> Result<Self, Error> {
-        Self::enter_attempts(path, 20, true)
+        Self::enter_attempts(path, 20)
     }
 
     pub(in crate::review) fn try_enter(path: &Path) -> Result<Self, Error> {
-        Self::enter_attempts(path, 1, true)
+        Self::enter_attempts(path, 1)
     }
 
-    /// Inspection never creates a missing mutex or waits behind maintenance.
-    pub(in crate::review) fn inspect(path: &Path) -> Result<Self, Error> {
-        Self::enter_attempts(path, 1, false)
-    }
-
-    fn enter_attempts(path: &Path, attempts: usize, create: bool) -> Result<Self, Error> {
+    fn enter_attempts(path: &Path, attempts: usize) -> Result<Self, Error> {
         let metadata = fs::symlink_metadata(path)?;
         if !metadata.is_dir() || metadata.file_type().is_symlink() {
             return Err(Error::Invalid("object directory cannot be a link"));
         }
-        let guard = open(&path.join(".objects.lock"), create, create)?;
+        let guard = open(&path.join(".objects.lock"), true, true)?;
         let mut acquired = false;
         for _ in 0..attempts {
             match guard.try_lock() {
@@ -207,25 +233,33 @@ mod tests {
     }
 
     #[test]
-    fn shared_lease_checks_cancellation_while_publisher_holds_lock() {
+    fn waiting_leases_check_cancellation_while_publisher_holds_lock() {
         let root = assert_fs::TempDir::new().unwrap();
         super::super::private_directory(root.path()).unwrap();
         let writer = Directory::enter(root.path()).unwrap();
         assert!(matches!(read_lease(root.path(), None), Err(Error::Locked)));
-        let checks = std::cell::Cell::new(0);
-        let checkpoint = || {
-            checks.set(checks.get() + 1);
-            if checks.get() == 3 {
-                Err(crate::policy::Error::Interrupted)
+        for exclusive in [false, true] {
+            let checks = std::cell::Cell::new(0);
+            let checkpoint = || {
+                checks.set(checks.get() + 1);
+                if checks.get() == 3 {
+                    Err(crate::policy::Error::Interrupted)
+                } else {
+                    Ok(())
+                }
+            };
+            let result = if exclusive {
+                write_lease(root.path(), &checkpoint)
             } else {
-                Ok(())
-            }
-        };
-        assert!(matches!(
-            read_lease(root.path(), Some(&checkpoint)),
-            Err(Error::Policy(crate::policy::Error::Interrupted))
-        ));
+                read_lease(root.path(), Some(&checkpoint))
+            };
+            assert!(matches!(
+                result,
+                Err(Error::Policy(crate::policy::Error::Interrupted))
+            ));
+        }
         drop(writer);
         read_lease(root.path(), None).unwrap();
+        write_lease(root.path(), &|| Ok(())).unwrap();
     }
 }

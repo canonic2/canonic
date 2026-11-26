@@ -623,6 +623,10 @@ impl Candidate {
             // establishes pack trust separately using the strict current codec.
             let mut pack = parse_pack(&PARSED_PACKS, bytes, &selection.binding(), previous)
                 .map_err(|error| error.in_selection(&selection.id))?;
+            if selection.layer.is_none() {
+                pack.validate_project_variables(&selection.variables)
+                    .map_err(|error| error.in_selection(&selection.id))?;
+            }
             if selection.id != pack.id() || selection.version != pack.version() {
                 return Err(Error::ArtifactMismatch);
             }

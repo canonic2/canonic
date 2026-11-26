@@ -32,7 +32,7 @@ Options:
           Write private per-process diagnostics in this directory (also `SHIELD_DEBUG_LOG_DIR`)
 
       --local
-          Add the pack to your uncommitted local configuration only
+          Add the pack to this checkout's local configuration
 
       --no-debug-log
           Disable diagnostic logging, including automatic debug-build logs

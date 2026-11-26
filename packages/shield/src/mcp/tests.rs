@@ -9,6 +9,7 @@ use std::{
     io::{self, BufReader, Cursor, Read, Write},
     sync::mpsc,
     thread::{self, JoinHandle},
+    time::Duration,
 };
 #[cfg(any(target_os = "macos", target_os = "linux", windows))]
 mod action_requests;
@@ -31,9 +32,9 @@ mod tasks;
 #[test]
 fn doctor_nonblocking_storage_warnings_do_not_send_agents_to_repair() {
     let mut envelope = json!({"error":null,"data":{"repair_needed":false,"checks":[{"check":"object_storage","blocking":false}]}});
-    assert!(messages::summary("doctor", None, &envelope).contains("nonblocking warnings"));
+    assert!(messages::summary("doctor", None, &envelope).ends_with("1 warning."));
     envelope["data"]["checks"][0]["blocking"] = json!(true);
-    assert!(messages::summary("doctor", None, &envelope).contains("exact affected settings"));
+    assert!(messages::summary("doctor", None, &envelope).ends_with("1 check needs attention."));
 }
 
 /// A fixture project. The temporary root lives as long as this value.
@@ -124,7 +125,7 @@ fn lines(output: &[u8]) -> Vec<Value> {
 }
 
 pub(crate) fn test_options() -> stdio::Options {
-    options(Duration::from_secs(5), None)
+    options(None)
 }
 
 /// Serves complete input, then returns every output frame. Only read-only
@@ -306,6 +307,7 @@ fn catalog_publishes_every_tool_and_marks_all_state_changes_as_mutations() {
             "pack_add",
             "pack_configure",
             "pack_remove",
+            "pack_restore",
             "pack_update",
             "policy_apply",
             "policy_defer",
@@ -610,7 +612,7 @@ fn guidance_uses_the_enrolled_agent_never_client_metadata() {
         (
             Some("claude"),
             "codex",
-            "Wait for its MCP confirmation form",
+            "Wait for Shield's MCP confirmation form",
             "for Codex tool approval",
         ),
         (
@@ -644,40 +646,18 @@ fn guidance_uses_the_enrolled_agent_never_client_metadata() {
             !instructions.contains("shield policy review"),
             "{instructions}"
         );
-        let catalog = catalog(agent).unwrap();
-        for name in instructions
-            .split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
-            .filter(|word| word.starts_with("shield_"))
-        {
-            assert!(catalog.get(name).is_some(), "{name}");
+        let tools = crate::review::mcp::tools_for(agent);
+        let names = tools["tools"].as_array().unwrap();
+        for word in instructions.split(|c: char| !c.is_ascii_lowercase() && c != '_') {
+            if word.contains('_') || matches!(word, "setup" | "status" | "doctor") {
+                assert!(names.iter().any(|tool| tool["name"] == word), "{word}");
+            }
         }
-        for name in ["pack_list", "pack_show", "policy_evaluate", "rule_list"] {
-            assert!(instructions.contains(name), "{name}");
-        }
-        let supports_approval = matches!(agent, Some("codex" | "claude"));
-        assert_eq!(
-            instructions.contains("Before submitting a large patch that needs approval"),
-            supports_approval
+        assert!(instructions.contains("request_approve"), "{instructions}");
+        assert!(
+            instructions.contains("previews and chat cannot approve"),
+            "{instructions}"
         );
-        if supports_approval {
-            assert!(instructions.contains("all direct packs, including pinned packs"));
-            assert!(
-                instructions
-                    .contains("Prefer temporary session grants for work limited to this task.")
-            );
-            assert!(instructions.contains("permission should carry over to future sessions"));
-        }
-        for name in [
-            "policy_propose",
-            "policy_apply",
-            "policy_review",
-            "pack_add",
-            "pack_configure",
-            "pack_update",
-            "pack_remove",
-        ] {
-            assert_eq!(instructions.contains(name), supports_approval, "{name}");
-        }
     }
 }
 
@@ -1072,37 +1052,29 @@ fn frames_messages_and_output_failures_end_the_connection_within_shield_limits()
 }
 
 #[test]
-fn an_expired_request_deadline_answers_without_a_tool_result() {
+fn shield_calls_use_the_connection_lifetime_instead_of_an_execution_budget() {
     let (server, _project) = fixture(None);
-    let mut messages = initialize(&json!({}), "Acme").to_vec();
-    messages.push(tool(json!(2), "status", &json!({})));
-    let mut output = Vec::new();
-    serve(
+    let transport = Transport::with_options(
         server,
-        Cursor::new(frames(&messages)),
-        &mut output,
-        &options(Duration::ZERO, None),
-    )
-    .unwrap();
-    let expired = reply(&lines(&output), &json!(2));
-    assert_eq!(expired["error"]["code"], -32001, "{expired}");
-    // The budget starts when the call runs, and the error names what to do.
-    let message = expired["error"]["message"].as_str().unwrap();
-    assert!(
-        message.contains("nothing changed") && message.contains("doctor"),
-        "{message}"
+        stdio::Options {
+            timeout: Duration::ZERO,
+            ..test_options()
+        },
     );
+    let [init, initialized] = initialize(&json!({}), "Acme");
+    transport.request(&init);
+    transport.send(&initialized);
+    let response = transport.call(json!(2), "status", &json!({}));
+    assert_eq!(response["result"]["isError"], false, "{response}");
 }
 
-/// Shield selects the driver's FIFO contract, which MCP Kit's scheduling
-/// tests verify: one tools lane holding 64 calls run in order, whose budgets
-/// start when each runs, so calls queued behind slow work keep their limit.
+/// Shield uses one FIFO lane holding up to 64 calls.
 #[test]
-fn tool_calls_queue_in_order_with_budgets_starting_when_they_run() {
+fn tool_calls_queue_in_order_without_an_execution_deadline() {
     let options = test_options();
     let tools = &options.lanes[0];
     assert_eq!((tools.workers, tools.capacity), (1, MAX_QUEUED_CALLS));
-    assert_eq!(options.budget_start, stdio::BudgetStart::Dispatch);
+    assert_eq!(options.budget_start, stdio::BudgetStart::Never);
 }
 
 /// A burst of calls waits its turn: none is refused as busy, and each runs.
@@ -1129,7 +1101,6 @@ fn review_preparing_tools_are_published_changes() {
     for tool in catalog["tools"].as_array().unwrap() {
         let name = tool["name"].as_str().unwrap();
         if crate::review::mcp::prepares_review(name) {
-            assert!(crate::review::mcp::mutates(name), "{name}");
             assert_eq!(tool["annotations"]["readOnlyHint"], false, "{name}");
         }
     }
@@ -1152,81 +1123,4 @@ fn review_preparing_tools_are_published_changes() {
             "{name} is not published"
         );
     }
-}
-
-/// Each kind of call stopped at its limit says whether anything took effect
-/// and names the call that continues.
-#[test]
-fn deadline_errors_name_the_outcome_and_the_next_call() {
-    use canonic_mcp_kit::stdio::Handler as _;
-    let (server, _project) = fixture(None);
-    let deadline = |name: &str, arguments: Value| {
-        let call = Request::Tool(canonic_mcp_kit::ToolCall {
-            name: name.into(),
-            arguments,
-            progress_token: None,
-        });
-        server.deadline_messages(&call).running.unwrap()
-    };
-    // A direct review repeats safely; a guided one would ask the user again.
-    let direct = deadline("pack_configure", json!({"reference":"acme/read","set":{}}));
-    assert!(direct.contains("nothing was applied") && direct.contains("same arguments"));
-    for (name, arguments) in [
-        ("pack_add", json!({"reference":"acme/read"})),
-        (
-            "pack_configure",
-            json!({"reference":"acme/read","variables":["x"]}),
-        ),
-    ] {
-        let guided = deadline(name, arguments);
-        assert!(
-            guided.contains("policy_show") && !guided.contains("same arguments"),
-            "{name}: {guided}"
-        );
-    }
-    for (name, route) in [
-        ("policy_apply", "policy_show"),
-        ("policy_review", "policy_show"),
-        ("policy_reject", "policy_show"),
-        ("request_approve", "request_show"),
-        ("request_deny", "request_show"),
-        ("session_grant_approve", "session_grant_show"),
-        ("policy_defer", "policy_draft_list"),
-        ("registry_remove", "registry_list with the original scope"),
-        (
-            "review_defer",
-            "suggestion_list with the original session_id",
-        ),
-        ("protection_set", "status"),
-    ] {
-        let message = deadline(name, json!({}));
-        assert!(
-            message.contains("unknown") && message.contains(route),
-            "{name}: {message}"
-        );
-    }
-    for (name, args) in [
-        (
-            "registry_add",
-            json!({"name":"acme","location":"registry","scope":"user"}),
-        ),
-        ("registry_default", json!({"name":"acme","scope":"user"})),
-    ] {
-        let message = deadline(name, args);
-        assert!(
-            message.contains("unknown")
-                && message.contains("registry_list with the original scope"),
-            "{message}"
-        );
-    }
-    let guidance = deadline("registry_add", json!({}));
-    assert!(
-        guidance.contains("Nothing was enrolled") && guidance.contains("ask the user"),
-        "{guidance}"
-    );
-    let guidance = deadline("registry_add", json!({"review":true}));
-    assert!(guidance.contains("unknown") && guidance.contains("registry_list"));
-    let guidance = deadline("pack_add", json!({"reference":"acme/read","review":true}));
-    assert!(guidance.contains("check the review and its outcome"));
-    assert!(deadline("pack_list", json!({})).contains("nothing changed"));
 }

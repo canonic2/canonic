@@ -249,6 +249,7 @@ mod tests {
             owner: "custom".into(),
             rule: "logs".into(),
             pattern: vec![vec!["acme".into()], vec!["logs".into()]],
+            trust_project_node_tests: false,
         }];
         for enabled in [true, false] {
             let mut review = super::super::setup::preview(root.path(), Some(&plan));

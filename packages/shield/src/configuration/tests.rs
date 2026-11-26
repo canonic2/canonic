@@ -16,6 +16,74 @@ const RULES: &str =
     "schema_version: 1\nkind: custom\ncapabilities: [structured-rules-v1]\nrules: []\n";
 
 #[test]
+fn executable_path_lists_preserve_rule_arguments_and_require_local_configuration() {
+    let absolute = crate::test_support::absolute;
+    let first = absolute("/opt/first/bin/tool");
+    let second = absolute("/opt/second/bin/tool");
+    let other = absolute("/opt/other/bin/tool");
+    let mut source: Value = policy::parse(&pack()).unwrap();
+    source["capabilities"] = json!([
+        "structured-rules-v1",
+        "argument-rules-v1",
+        "variables-v1",
+        "executable-discovery-v1",
+        "executable-path-lists-v1"
+    ]);
+    source["variables"] = json!({"tool_executable":{"type":"list","description":"Tool paths","layer":"local","items":{"type":"string"},"discover":[{"path_search":"tool"}]}});
+    source["rules"] = json!([
+        {"id":"inspect","decision":"allow","conditions":{"domain":"argv","executable":{"var":"tool_executable"},"arguments":{"kind":"exact","values":["inspect"]}}},
+        {"id":"write","decision":"deny","conditions":{"domain":"argv","executable":{"var":"tool_executable"},"arguments":{"kind":"exact","values":["write"]}}}
+    ]);
+    let source = [source.to_string()];
+    let mut shared = config();
+    shared["packs"][0]["variables"] = json!({"tool_executable":[first, second]});
+    assert!(matches!(
+        Candidate::from_yaml(&shared.to_string())
+            .unwrap()
+            .capture(&source, Some(RULES)),
+        Err(Error::Binding {
+            reason: "executable paths must be set in the local layer",
+            ..
+        })
+    ));
+    shared["packs"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("variables");
+    for paths in [json!(first), json!([first, second])] {
+        let local = json!({"schema_version":1,"packs":[{"id":"acme/test","variables":{"tool_executable":paths}}]});
+        let merged = layers::merge(&shared.to_string(), Some(&local.to_string())).unwrap();
+        let snapshot = Candidate::from_yaml(&merged)
+            .unwrap()
+            .capture(&source, Some(RULES))
+            .unwrap();
+        let evaluator = Evaluator::new(vec![(Scope::Project, snapshot)]).unwrap();
+        for (path, operation, decision) in [
+            (first.as_ref(), "inspect", policy::Decision::Allow),
+            (
+                second.as_ref(),
+                "inspect",
+                if paths.is_array() {
+                    policy::Decision::Allow
+                } else {
+                    policy::Decision::Ask
+                },
+            ),
+            (first.as_ref(), "write", policy::Decision::Deny),
+            (other.as_ref(), "inspect", policy::Decision::Ask),
+        ] {
+            let request = policy::Request {
+                executable: path.to_owned(),
+                arguments: vec![operation.into()],
+                cwd: absolute("/acme").into_owned(),
+                project: absolute("/acme").into_owned(),
+            };
+            assert_eq!(evaluator.evaluate(&request).unwrap().decision, decision);
+        }
+    }
+}
+
+#[test]
 fn access_paths_are_strict_bounded_and_bound_to_the_lock() {
     for paths in [
         json!(null),

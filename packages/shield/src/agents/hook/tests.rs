@@ -3,6 +3,7 @@ use super::*;
 use crate::{configuration::Bundle, review};
 use std::fs;
 mod automatic_mcp;
+mod completion_history;
 mod google;
 mod mcp_connections;
 #[cfg(unix)]
@@ -908,6 +909,7 @@ fn allowed_native_shell_survives_session_capture_failures() {
             &json!({"command":"git status"}),
             crate::enforcement::protocol::NativeContext {
                 integration: "claude",
+                event: Event::Before,
                 approval: crate::enforcement::protocol::NativeApproval::Prompt,
                 context_complete: true,
                 working_files: None,
@@ -949,6 +951,7 @@ fn without_working_files(root: &Path, agent: &str, operation: &Value) -> Value {
         &json!({}),
         crate::enforcement::protocol::NativeContext {
             integration: agent,
+            event: Event::Before,
             approval: adapter.approval(Event::Before),
             context_complete: true,
             working_files: None,
@@ -989,6 +992,93 @@ fn argv_fixture(executable: &str, decision: &str) -> assert_fs::TempDir {
     .unwrap();
     review::mcp::initialize_fixture(root.path(), &bundle);
     root
+}
+
+#[test]
+fn native_allow_reads_policy_sources_once_to_evaluate_and_once_to_handoff() {
+    let root = argv_fixture("acme", "allow");
+    let logs = assert_fs::TempDir::new().unwrap();
+    let cli = <crate::cli::Cli as clap::Parser>::parse_from([
+        "shield",
+        "--debug-log-dir",
+        logs.path().to_str().unwrap(),
+        "status",
+    ]);
+    let log = std::sync::Arc::new(crate::diagnostics::Log::open(&cli));
+    let trace = log
+        .request("hook", "native-source-budget", None, None)
+        .unwrap();
+    let _scope = trace.enter();
+    assert_permitted(&call(root.path(), "claude", "acme read"), "claude");
+    assert_eq!(trace.recorded_count("policy.file_source_reads"), 2);
+}
+
+#[test]
+fn native_handoff_refuses_an_allow_that_expires_after_evaluation() {
+    use crate::evidence::POLICY_TIME;
+    use protocol::NativeBoundaryPoint::{BeforeAuthority, BeforeDisposition};
+
+    let root = assert_fs::TempDir::new().unwrap();
+    let rules = json!({"schema_version":1,"kind":"custom","capabilities":["argument-rules-v1","structured-rules-v1"],
+        "rules":[{"id":"temporary","decision":"allow","expires_at":"2030-01-01T12:00:00.5Z",
+            "conditions":{"domain":"argv","executable":"acme","arguments":{"kind":"any"}}}]}).to_string();
+    let bundle = Bundle::capture(
+        "schema_version: 1\npacks: []\nrules: rules.yml\n",
+        &[],
+        Some(&rules),
+    )
+    .unwrap();
+    review::mcp::initialize_fixture(root.path(), &bundle);
+
+    for (index, point) in [BeforeAuthority, BeforeDisposition].into_iter().enumerate() {
+        POLICY_TIME.set(Some("2030-01-01T12:00:00.499999999Z"));
+        assert_permitted(&call(root.path(), "claude", "acme read"), "claude");
+        let _boundary = protocol::at_native_boundary(point, || {
+            POLICY_TIME.set(Some("2030-01-01T12:00:00.5Z"));
+        });
+        let reply = call(root.path(), "claude", "acme read");
+        POLICY_TIME.set(None);
+        assert_eq!(denial_decision(&reply), "deny", "{reply}");
+        assert!(reason(&reply).contains("a rule expired"), "{reply}");
+        let history = review::history_events(root.path()).unwrap();
+        let decisions: Vec<_> = history["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|event| {
+                event["kind"] == "decision"
+                    && event["details"]["operation"]["source"] == "acme read"
+            })
+            .map(|event| &event["details"])
+            .collect();
+        assert_eq!(decisions.len(), 2 * (index + 1), "{history}");
+        assert_eq!(decisions[2 * index]["host_decision"], "allow");
+        let latest = decisions.last().unwrap();
+        assert_eq!(latest["host_decision"], "deny", "{latest}");
+        assert_eq!(latest["code"], "policy-changed", "{latest}");
+        if point == BeforeDisposition {
+            assert_eq!(latest["disposition"], "blocked", "{latest}");
+            assert_eq!(latest["decision"], "allow", "{latest}");
+        }
+    }
+}
+
+#[test]
+fn native_handoff_refuses_an_allow_from_edited_policy_files() {
+    let root = argv_fixture("acme", "allow");
+    assert_permitted(&call(root.path(), "claude", "acme read"), "claude");
+    let path = root.path().join(".shield/rules.yml");
+    let mut rules: Value = crate::policy::parse(&fs::read_to_string(&path).unwrap()).unwrap();
+    rules["rules"][0]["decision"] = json!("deny");
+    let _boundary = protocol::before_native_authority(move || {
+        fs::write(path, rules.to_string()).unwrap();
+    });
+    let stale = call(root.path(), "claude", "acme read");
+    assert_eq!(denial_decision(&stale), "deny", "{stale}");
+    assert!(reason(&stale).contains("policy changed"), "{stale}");
+    let current = call(root.path(), "claude", "acme read");
+    assert_eq!(denial_decision(&current), "deny", "{current}");
+    assert!(reason(&current).contains("denied"), "{current}");
 }
 
 #[test]
@@ -2240,7 +2330,7 @@ fn invalid_policy_missing_artifacts_require_exact_review_and_name_the_fix() {
         );
         assert!(
             value.to_string().contains("missing from this machine")
-                && value.to_string().contains("status"),
+                && value.to_string().contains("pack_restore"),
             "{agent}: {value}"
         );
     }
@@ -2407,6 +2497,55 @@ fn claude_file_tools_follow_location_policy_and_protected_state() {
 }
 
 #[test]
+fn optional_grant_lookup_failure_preserves_fallback_allow() {
+    use crate::enforcement::protocol::{NativeApproval, NativeContext, evaluate_native};
+    use review::integrations::AskFallback;
+
+    for fallback in [AskFallback::Allow, AskFallback::Block] {
+        let (_root, context) = fixture();
+        let root = Path::new(&context.project_root);
+        review::operator::integrations::configure_fixture(
+            root,
+            crate::cli::public::IntegrationChoice::agent("codex"),
+            fallback,
+        );
+        let input = json!({"protocol_version":1,"request_id":"acme-grant-lookup","expected_project_id":context.project_id,
+            "cwd":root,"operation":{"kind":"shell","source":"node --version","dialect":"posix"},
+            "host":{"agent":"codex","session_id":"acme-session","tool_use_id":"acme-call","event":"PreToolUse","consumer_id":null}});
+        let lock = root.join(".shield/state/state.lock");
+        let (receipt, exit) = evaluate_native(
+            root,
+            &serde_json::to_vec(&input).unwrap(),
+            &json!({"command":"node --version"}),
+            NativeContext {
+                integration: "codex",
+                event: Event::Before,
+                approval: NativeApproval::Fallback,
+                context_complete: true,
+                working_files: None,
+            },
+            None,
+            &|stage| {
+                if stage == "native_handoff_ready" {
+                    fs::write(&lock, "fixture writer").unwrap();
+                }
+            },
+        );
+        fs::remove_file(lock).unwrap();
+        if fallback == AskFallback::Allow {
+            assert_eq!(exit, 0, "{receipt}");
+            assert_eq!(receipt["decision"], "ask", "{receipt}");
+            assert_eq!(receipt["disposition"], "allowed", "{receipt}");
+            assert_eq!(receipt["ask_fallback"], "allow", "{receipt}");
+            assert!(receipt["authorization"].is_null(), "{receipt}");
+        } else {
+            assert_eq!(exit, 2, "{receipt}");
+            assert_eq!(receipt["code"], "handoff-failed", "{receipt}");
+        }
+    }
+}
+
+#[test]
 fn native_session_tools_leave_the_decision_to_the_host() {
     let (_root, context) = fixture();
     let root = Path::new(&context.project_root);
@@ -2483,6 +2622,38 @@ fn native_session_tools_leave_the_decision_to_the_host() {
         &json!({"session_id":7,"chars":"rm -rf acme\n"}),
     );
     assert_eq!(typed, json!({}));
+}
+
+#[test]
+fn host_managed_tools_defer_with_an_unreadable_project_checkpoint() {
+    let (root, _) = fixture();
+    let root = root.path();
+    fs::write(root.join(".shield/state/state.json"), "{").unwrap();
+    for (agent, tool) in [
+        ("claude", "TaskList"),
+        ("codex", "update_plan"),
+        ("codex", "future_internal_tool"),
+    ] {
+        for &(event_name, event) in find(agent).unwrap().spec().events {
+            if event == Event::Ended {
+                continue;
+            }
+            let host = native_host(root, agent, event_name, tool, &json!({}));
+            let reply = translate_for(root, agent, event, &serde_json::to_vec(&host).unwrap());
+            assert_eq!(reply, json!({}), "{agent} {tool} {event_name}");
+        }
+        let mut malformed = native_host(root, agent, "PreToolUse", tool, &json!({}));
+        malformed["session_id"] = json!("");
+        let reply = translate(root, agent, &serde_json::to_vec(&malformed).unwrap());
+        assert_eq!(denial_decision(&reply), "deny", "{reply}");
+    }
+    for (name, input) in [
+        ("Bash", json!({"command":"git status"})),
+        ("mcp__acme__inspect", json!({})),
+    ] {
+        let reply = tool(root, "codex", name, &input);
+        assert_eq!(denial_decision(&reply), "deny", "{name}: {reply}");
+    }
 }
 
 #[test]
@@ -3617,7 +3788,7 @@ fn canonical_mcp_inspection_remains_usable_and_unknown_server_tools_block() {
 }
 
 #[test]
-fn unmodeled_completions_are_quiet_without_hiding_supported_history_failures() {
+fn unmodeled_host_tool_completions_are_quiet_and_leave_no_history() {
     let (root, _) = fixture();
     let before = journal(root.path());
     for adapter in super::super::ADAPTERS {
@@ -3627,22 +3798,15 @@ fn unmodeled_completions_are_quiet_without_hiding_supported_history_failures() {
             .iter()
             .filter(|(_, event)| event.post())
         {
-            for tool in ["mcp__acme__run", "AcmeTool"] {
-                let host = json!({"hook_event_name":name,"tool_name":tool,"tool_use_id":"acme-unmodeled",
+            let host = json!({"hook_event_name":name,"tool_name":"AcmeTool","tool_use_id":"acme-unmodeled",
                     "session_id":"acme-session","cwd":root.path(),"tool_input":{},"tool_response":"ACME_PRIVATE_RESULT"});
-                let value = translate_for(
-                    root.path(),
-                    adapter.spec().id,
-                    *event,
-                    &serde_json::to_vec(&host).unwrap(),
-                );
-                assert_eq!(
-                    value,
-                    json!({}),
-                    "{} {name} {tool}: {value}",
-                    adapter.spec().id
-                );
-            }
+            let value = translate_for(
+                root.path(),
+                adapter.spec().id,
+                *event,
+                &serde_json::to_vec(&host).unwrap(),
+            );
+            assert_eq!(value, json!({}), "{} {name}: {value}", adapter.spec().id);
         }
     }
     assert_eq!(
@@ -4298,7 +4462,7 @@ fn agents_read_and_record_policy_files_but_not_state_and_ask_for_agent_settings(
     // Committing .shield shares policy files, never runtime state or the cache.
     assert_eq!(
         fs::read_to_string(root.join(".shield/.gitignore")).unwrap(),
-        "state/\ncache/\nconfig.local.yml\nrules.local.yml\nshield.local.lock\n"
+        "state/\ncache/\nrules.local.yml\nshield.local.lock\n"
     );
 }
 
@@ -5147,6 +5311,53 @@ fn interpreter_review_explains_why_an_allowed_argv_still_asks() {
     assert!(message.contains("cannot inspect the code"), "{value}");
     assert!(message.contains("arguments match an Allow rule"), "{value}");
     assert!(!message.contains("policy_propose"), "{value}");
+}
+
+#[test]
+fn trusted_project_node_tests_pass_the_codex_hook_with_the_generated_prefix() {
+    let root = assert_fs::TempDir::new().unwrap();
+    std::fs::write(root.path().join("probe.test.mjs"), "").unwrap();
+    let rules = json!({"schema_version":1,"kind":"custom",
+        "capabilities":["agent-outputs-v1","argument-rules-v1","project-node-tests-v1","structured-rules-v1"],
+        "rules":[{"id":"project-tests","decision":"allow",
+            "agents":{"codex":{"prefixes":[["node","--test"]],"trust_project_node_tests":true}},
+            "conditions":{"domain":"argv","executable":"node","arguments":{"kind":"prefix","values":["--test"]}}}]}).to_string();
+    let bundle = Bundle::capture(
+        "schema_version: 1\npacks: []\nrules: rules.yml\n",
+        &[],
+        Some(&rules),
+    )
+    .unwrap();
+    review::mcp::initialize_fixture(root.path(), &bundle);
+    let snapshot = crate::runtime::Project::open(root.path())
+        .unwrap()
+        .snapshot()
+        .unwrap();
+    let codex = crate::agents::find("codex").unwrap();
+    let prefix = codex.prefix_rules(snapshot.codex_prefixes()).unwrap();
+    std::fs::create_dir_all(root.path().join(".codex/rules")).unwrap();
+    std::fs::write(root.path().join(".codex/rules/shield.rules"), &prefix).unwrap();
+    assert!(
+        prefix.contains(r#"pattern = ["node", "--test"]"#),
+        "{prefix}"
+    );
+    assert_permitted(
+        &call(
+            root.path(),
+            "codex",
+            "node --test --test-concurrency=1 probe.test.mjs",
+        ),
+        "codex",
+    );
+    let preload = call(
+        root.path(),
+        "codex",
+        "node --test --import=probe.test.mjs probe.test.mjs",
+    );
+    assert_eq!(
+        preload["hookSpecificOutput"]["permissionDecision"], "deny",
+        "{preload}"
+    );
 }
 
 #[test]

@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 pub(crate) enum Candidate {
     Home { home: String },
     Environment { env: String, path: String },
+    PathSearch { path_search: String },
 }
 
 impl Candidate {
@@ -25,6 +26,20 @@ impl Candidate {
                     ));
                 }
                 path
+            }
+            Self::PathSearch { path_search } => {
+                if path_search.is_empty()
+                    || path_search.len() > 128
+                    || !path_search.as_bytes()[0].is_ascii_alphanumeric()
+                    || !path_search
+                        .bytes()
+                        .all(|byte| byte.is_ascii_alphanumeric() || b"._-".contains(&byte))
+                {
+                    return Err(Error::Contract(
+                        "PATH discovery requires a literal executable name",
+                    ));
+                }
+                return Ok(());
             }
         };
         if path.len() > 1024 {

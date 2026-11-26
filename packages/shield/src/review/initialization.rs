@@ -107,7 +107,14 @@ impl Prepared {
         )?;
         let context = super::open(&self.root)?;
         publication.check(&context)?;
-        let repair = publication::projections::materialize(&context, &self.files).is_err()
+        let materialized = publication::projections::materialize(&context, &self.files).is_ok();
+        if materialized && self.initially_absent {
+            super::storage::ignore_lines(
+                &crate::layout::bundle_file(&self.root, ".gitignore"),
+                b"config.local.yml\n",
+            );
+        }
+        let repair = !materialized
             || super::storage::Store::open(&self.root)
                 .and_then(|store| {
                     store.update_checkpoint(&context, &|| Ok(()), |_| Ok(Value::Null))

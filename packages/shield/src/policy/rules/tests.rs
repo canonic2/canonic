@@ -572,7 +572,10 @@ fn prepared_patterns_match_unicode_boundaries_and_glob_byte_semantics() {
         let expected =
             json!(crate::policy::evaluate_selected(&[], &[&c], &request(&[value])).unwrap());
         let plan = Plan::compile(vec![], Some(c), json!({})).unwrap();
-        assert_eq!(&plan.bytes()[..8], b"SHPLAN16");
+        assert_eq!(
+            &plan.bytes()[..8],
+            crate::policy::resolution::compiled::FORMAT.as_bytes()
+        );
         let restored = Plan::load_authenticated(plan.bytes().to_vec()).unwrap();
         let actual = json!(
             restored

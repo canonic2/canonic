@@ -4,9 +4,7 @@ expression: text
 ---
 $ shield status
 --- terminal
-Shield policy is active in [PROJECT], but no agent is connected. Connect one with shield mcp setup.
-Policy: no packs · revision [SHORT-DIGEST]
-History: on, keeping up to 5000 entries; integrity unchecked
-Editable project files are unchecked; inspect them with shield policy review.
-No direct pack selections to check.
+No Shield agent integration is configured.
+Project [PROJECT]
+Use Shield setup to connect an agent.
 --- exit 0

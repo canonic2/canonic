@@ -127,7 +127,15 @@ pub(crate) fn test_pack(input: &crate::cli::PackTest) -> Result<(Value, u8), Err
         let selections = packs.iter().enumerate().map(|(index, (_, pack))| {
             let mut selection = json!({"id":pack.id(),"version":pack.version(),"profile":profile,"path":format!("pack{index}.yml")});
             if index == 0 && !variables.is_empty() {
-                selection["variables"] = json!(variables);
+                let (local, project): (serde_json::Map<_, _>, serde_json::Map<_, _>) = variables.iter()
+                    .map(|(name, value)| (name.clone(), value.clone()))
+                    .partition(|(name, _)| pack.executable_path_variables().contains(name));
+                if !project.is_empty() {
+                    selection["variables"] = json!(project);
+                }
+                if !local.is_empty() {
+                    selection["local"] = json!({"variables":local});
+                }
             }
             selection
         }).collect::<Vec<_>>();

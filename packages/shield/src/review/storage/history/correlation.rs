@@ -4,7 +4,7 @@
 //! matches the completion's binding evidence exactly.
 use crate::review::model::retained_events;
 use serde_json::{Value, json};
-use std::collections::HashMap;
+use std::{borrow::Cow, collections::HashMap};
 
 /// Provenance fields a completion must share with its decision. The working
 /// folder is recorded relative to the project, so a moved project keeps links.
@@ -22,7 +22,7 @@ const UNBOUND: [&str; 3] = ["complete_input", "detail_fields", "attribution_fiel
 #[derive(Default)]
 struct Link {
     request: Option<String>,
-    decision: Value,
+    decision: Option<usize>,
     duplicate: bool,
     conflict: bool,
 }
@@ -47,6 +47,18 @@ fn linkable(event: &Value) -> bool {
             && event["details"]["disposition"] == "approval_required")
 }
 
+fn native_before(event: &Value) -> bool {
+    let provenance = &event["provenance"];
+    let Some(name) = provenance["host_event_name"].as_str() else {
+        return false;
+    };
+    name == "PreToolUse"
+        || provenance["agent"]
+            .as_str()
+            .and_then(crate::agents::find)
+            .is_some_and(|adapter| adapter.event(name) == Some(crate::agents::Event::Before))
+}
+
 /// Native callbacks do not carry Shield receipts. Bind their host call identity
 /// and exact operation instead; missing identity must never collapse calls.
 fn native_binding(event: &Value) -> Option<String> {
@@ -59,11 +71,33 @@ fn native_binding(event: &Value) -> Option<String> {
             return None;
         }
     }
-    let operation = &event["details"]["operation"];
+    let operation = operation_identity(event)?;
+    Some(json!([BINDING.map(|field| &provenance[field]), operation]).to_string())
+}
+
+fn operation_identity(event: &Value) -> Option<Cow<'_, Value>> {
+    let details = &event["details"];
+    let operation = &details["operation"];
     if operation.is_null() {
         return None;
     }
-    Some(json!([BINDING.map(|field| &provenance[field]), operation]).to_string())
+    if operation["kind"] != "mcp" {
+        return Some(Cow::Borrowed(operation));
+    }
+    if let Some(digest) = details.get("mcp_operation_digest") {
+        digest
+            .as_str()
+            .filter(|digest| canonic_registry_kit::digest::is_sha256_hex(digest))?;
+        return Some(Cow::Borrowed(digest));
+    }
+    // Older records can bind only when they still hold the argument object.
+    // In particular, all masked SQL arguments have the same string value.
+    if !operation["arguments"].is_object() {
+        return None;
+    }
+    crate::json::fingerprint(operation)
+        .ok()
+        .map(|digest| Cow::Owned(json!(digest)))
 }
 
 fn links(events: &[Value], limit: usize) -> Vec<Link> {
@@ -81,7 +115,7 @@ fn links(events: &[Value], limit: usize) -> Vec<Link> {
                     let next = ordinals.len();
                     ordinals.entry(id).or_insert(next);
                     decisions.entry(id).or_default().push(index);
-                    if event["provenance"]["host_event_name"] == "PreToolUse"
+                    if native_before(event)
                         && linkable(event)
                         && let Some(binding) = native_binding(event)
                     {
@@ -111,7 +145,7 @@ fn links(events: &[Value], limit: usize) -> Vec<Link> {
                     matching(events, &ordinals, &decisions, &native_calls, event, limit)
                 {
                     link.request = Some(request.into());
-                    link.decision = decision.clone();
+                    link.decision = Some(decision);
                 }
             }
             _ => {}
@@ -128,7 +162,7 @@ fn matching<'a>(
     native_calls: &HashMap<String, Vec<usize>>,
     completion: &Value,
     limit: usize,
-) -> Option<(&'a str, &'a Value)> {
+) -> Option<(&'a str, usize)> {
     let provenance = &completion["provenance"];
     if provenance["project_id"].as_str().is_none_or(str::is_empty) {
         return None;
@@ -158,22 +192,17 @@ fn matching<'a>(
     if ordinals.len() - ordinals.get(request)? > limit {
         return None;
     }
-    let decision = decisions
-        .get(request)?
-        .iter()
-        .map(|i| &events[*i])
-        .find(|d| {
-            bound(d)
-                && linkable(d)
-                && d["details"]["operation"] == completion["details"]["operation"]
-                && BINDING
-                    .iter()
-                    .all(|key| d["provenance"][*key] == provenance[*key])
-        })?;
-    Some((
-        decision["links"]["request_id"].as_str()?,
-        &decision["event_id"],
-    ))
+    let operation = operation_identity(completion)?;
+    let index = decisions.get(request)?.iter().copied().find(|&index| {
+        let decision = &events[index];
+        bound(decision)
+            && linkable(decision)
+            && BINDING
+                .iter()
+                .all(|key| decision["provenance"][*key] == provenance[*key])
+            && operation_identity(decision).as_ref() == Some(&operation)
+    })?;
+    Some((events[index]["links"]["request_id"].as_str()?, index))
 }
 
 fn set(event: &mut Value, object: &str, field: &str, value: Value) {
@@ -182,13 +211,31 @@ fn set(event: &mut Value, object: &str, field: &str, value: Value) {
     }
 }
 
-fn project(event: &mut Value, link: &Link) {
+fn project(event: &mut Value, link: &Link, decision: Option<&Value>) {
     if event["kind"] == "completion" {
         // Stored links are never trusted; only the reader derives them.
         set(event, "links", "request_id", json!(link.request));
-        set(event, "links", "decision_event_id", link.decision.clone());
+        let decision_id = decision.map_or(Value::Null, |decision| decision["event_id"].clone());
+        set(event, "links", "decision_event_id", decision_id);
+        if event["details"]["operation"]["kind"] == "mcp"
+            && event["details"]["operation"]["arguments"] == "[REDACTED]"
+            && event["details"]["mcp_operation_digest"].is_string()
+            && let Some(decision) = decision
+        {
+            let operation = decision["details"]["operation"].clone();
+            set(event, "details", "operation", operation);
+        }
         if link.conflict {
             set(event, "details", "delivery_conflict", json!(true));
+        }
+    }
+    if let Some(details) = event.get_mut("details").and_then(Value::as_object_mut) {
+        details.remove("mcp_operation_digest");
+        if details
+            .get("operation")
+            .is_some_and(|operation| operation["kind"] == "mcp")
+        {
+            details.remove("input_digest");
         }
     }
 }
@@ -204,7 +251,7 @@ fn uncorrelated_mask(events: &[Value], links: &[Link]) -> Vec<bool> {
             continue;
         }
         let mut projected = event.clone();
-        project(&mut projected, link);
+        project(&mut projected, link, None);
         let size = crate::json::encoded_len(&projected).unwrap_or(usize::MAX);
         let next = bytes
             .saturating_add(size)
@@ -221,18 +268,25 @@ fn uncorrelated_mask(events: &[Value], links: &[Link]) -> Vec<bool> {
 
 /// Events as readers show them: completions carry reader-derived links, exact
 /// duplicate deliveries are dropped and conflicting deliveries are marked.
-pub(super) fn view(events: Vec<Value>, limit: usize) -> Vec<Value> {
+pub(super) fn view(mut events: Vec<Value>, limit: usize) -> Vec<Value> {
     let links = links(&events, limit);
     let keep = uncorrelated_mask(&events, &links);
+    for (index, (link, keep)) in links.iter().zip(&keep).enumerate() {
+        if *keep && !link.duplicate {
+            let (earlier, current) = events.split_at_mut(index);
+            project(
+                &mut current[0],
+                link,
+                link.decision.map(|index| &earlier[index]),
+            );
+        }
+    }
     events
         .into_iter()
         .zip(links)
         .zip(keep)
         .filter(|((_, link), keep)| *keep && !link.duplicate)
-        .map(|((mut event, link), _)| {
-            project(&mut event, &link);
-            event
-        })
+        .map(|((event, _), _)| event)
         .collect()
 }
 
@@ -398,6 +452,39 @@ mod tests {
         assert!(result[2]["details"]["reported_request_id"].is_null());
         // Retention rewrites preserve raw records, not synthesized receipts.
         assert_eq!(retain_raw(events.clone(), 5000), events);
+    }
+
+    #[test]
+    fn legacy_mcp_completion_requires_retained_arguments_or_a_valid_digest() {
+        for reported in [Value::Null, json!("original")] {
+            for (tool, arguments, digest, linked) in [
+                ("execute_sql", json!("[REDACTED]"), None, false),
+                (
+                    "execute_sql",
+                    json!("[REDACTED]"),
+                    Some("bad-digest"),
+                    false,
+                ),
+                ("inspect", json!({"query":"acme"}), None, true),
+            ] {
+                let operation =
+                    json!({"kind":"mcp","alias":"acme","tool":tool,"arguments":arguments});
+                let mut decided = decision("original");
+                let mut completed = completion();
+                completed["details"]["reported_request_id"] = reported.clone();
+                for event in [&mut decided, &mut completed] {
+                    event["details"]["operation"] = operation.clone();
+                    if let Some(digest) = digest {
+                        event["details"]["mcp_operation_digest"] = json!(digest);
+                    }
+                }
+                let result = view(vec![decided, completed], 5000);
+                assert_eq!(
+                    result[1]["links"]["decision_event_id"] == "event-original",
+                    linked
+                );
+            }
+        }
     }
 
     #[test]

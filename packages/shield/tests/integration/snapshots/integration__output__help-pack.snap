@@ -11,6 +11,7 @@ Commands:
   show       Show an installed selection, its rules and source
   add        Install a permission pack or change its profile, after confirmation
   update     Update one selection or all direct selections, including pinned packs, after confirmation
+  restore    Restore missing locked pack artifacts to this machine without changing policy
   remove     Remove an installed selection after reviewing its effects
   configure  Change a selection's variable values and rule overrides, after confirmation
   search     Search the default or named source without installing policy

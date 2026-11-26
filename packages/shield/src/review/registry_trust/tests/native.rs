@@ -305,6 +305,86 @@ fn native_revocation_between_core_and_override_never_consumes_approved_grant() {
 }
 
 #[test]
+fn native_hook_waits_for_initial_registry_publication() {
+    use crate::review::storage::registry_trust::INITIAL_ADOPTION_STAGED;
+    use std::{sync::mpsc, thread, time::Instant};
+
+    if !crate::test_support::isolated_home(concat!(
+        module_path!(),
+        "::native_hook_waits_for_initial_registry_publication"
+    )) {
+        return;
+    }
+    let fixture = Fixture::new();
+    let prepared = Prepared::new(&fixture.context, "acme", &|| Ok(())).unwrap();
+    let logs = assert_fs::TempDir::new().unwrap();
+    let log = std::sync::Arc::new(crate::diagnostics::Log::create(logs.path()).unwrap());
+    let trace = log
+        .request("hook", "initial_registry_adoption", None, None)
+        .unwrap();
+    let root = fixture.project.path();
+    thread::scope(|scope| {
+        let (staged, marker) = mpsc::channel();
+        let (resume, proceed) = mpsc::channel();
+        let publisher = scope.spawn(move || {
+            INITIAL_ADOPTION_STAGED.with(|slot| {
+                slot.replace(Some(Box::new(move || {
+                    staged.send(()).unwrap();
+                    proceed.recv_timeout(Duration::from_secs(5)).unwrap();
+                })));
+            });
+            Namespace::user()
+                .unwrap()
+                .publish(&prepared.update, None)
+                .unwrap()
+        });
+        marker.recv_timeout(Duration::from_secs(5)).unwrap();
+        let (head, mode) = trust_record_paths(&fixture.source);
+        assert!(!head.exists());
+        assert!(mode.is_file());
+        let (answer, result) = mpsc::channel();
+        let request = trace.clone();
+        scope.spawn(move || {
+            let _scope = request.enter();
+            let reply = agents::translate_event(
+                root,
+                agents::find("claude").unwrap(),
+                &serde_json::to_vec(&json!({"hook_event_name":"PreToolUse","tool_name":"Bash",
+                    "tool_use_id":"acme-call","session_id":"acme-session","cwd":root,
+                    "tool_input":{"command":"acme status"}}))
+                .unwrap(),
+                agents::Event::Before,
+                &crate::diagnostics::Log::disabled(),
+            );
+            answer.send(reply).unwrap();
+        });
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while trace.recorded_count("state.object_lease_waits") == 0 {
+            let early = result.try_recv();
+            assert!(
+                matches!(early, Err(mpsc::TryRecvError::Empty)),
+                "the hook returned before publication could finish: {early:?}"
+            );
+            assert!(
+                Instant::now() < deadline,
+                "the hook did not reach the registry lease"
+            );
+            thread::sleep(Duration::from_millis(5));
+        }
+        resume.send(()).unwrap();
+        let outcome = publisher.join().unwrap();
+        assert_eq!(outcome.generation, 1);
+        assert!(outcome.durable && !outcome.repair_needed);
+        let reply = result.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert_eq!(
+            reply["hookSpecificOutput"]["permissionDecision"], "allow",
+            "{reply}"
+        );
+    });
+    trace.finish("success");
+}
+
+#[test]
 fn native_final_guard_waits_for_publication_without_consuming_a_grant() {
     use std::{sync::mpsc, thread};
 
@@ -426,7 +506,6 @@ fn native_session_override_cannot_use_revoked_source_after_initial_core_evaluati
 
 #[test]
 fn native_final_callback_retains_source_guard_and_omitted_installed_rows_do_not_hide_revocation() {
-    use clap::Parser as _;
     if !crate::test_support::isolated_home(concat!(
         module_path!(),
         "::native_final_callback_retains_source_guard_and_omitted_installed_rows_do_not_hide_revocation"
@@ -443,7 +522,7 @@ fn native_final_callback_retains_source_guard_and_omitted_installed_rows_do_not_
         .unwrap();
     let project = crate::runtime::Project::open(fixture.project.path()).unwrap();
     let snapshot = project.snapshot().unwrap();
-    let source = snapshot.native_source();
+    let source = snapshot.native_source().unwrap();
     let namespace = Namespace::user().unwrap();
     let previous = namespace.read(fixture.source.identity()).unwrap().unwrap();
     fixture.publish(2, true);
@@ -456,13 +535,7 @@ fn native_final_callback_retains_source_guard_and_omitted_installed_rows_do_not_
     )
     .unwrap();
     let logs = assert_fs::TempDir::new().unwrap();
-    let cli = crate::cli::Cli::parse_from([
-        "shield",
-        "--debug-log-dir",
-        logs.path().to_str().unwrap(),
-        "status",
-    ]);
-    let log = std::sync::Arc::new(crate::diagnostics::Log::open(&cli));
+    let log = std::sync::Arc::new(crate::diagnostics::Log::create(logs.path()).unwrap());
     let trace = log
         .request("hook", "native_final_authority", None, None)
         .unwrap();
@@ -471,7 +544,7 @@ fn native_final_callback_retains_source_guard_and_omitted_installed_rows_do_not_
         let authority = source
             .acquire(Path::new(&fixture.context.project_root))
             .unwrap();
-        agents::finalize_native(vec![authority], || {
+        agents::finalize_native(vec![authority], |_| {
             assert!(
                 matches!(
                     namespace.publish(&update, Some(&previous)),

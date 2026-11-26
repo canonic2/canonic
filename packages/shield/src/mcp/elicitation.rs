@@ -40,7 +40,7 @@ struct RegistryInput {
     owner: String,
     project: String,
     binding: String,
-    arguments: Option<Value>,
+    handoff: Option<Value>,
 }
 
 /// Reserve capacity before showing a legacy form. An unanswered or declined
@@ -77,7 +77,7 @@ impl RegistryReservation {
                 owner: review.retry_owner(),
                 project: review.project_id.clone(),
                 binding: binding.into(),
-                arguments: None,
+                handoff: None,
             },
         );
         Ok(Self {
@@ -95,7 +95,7 @@ impl RegistryReservation {
             .registry
             .get_mut(&self.token)
             .ok_or(crate::review::Error::StaleSnapshot)?;
-        entry.arguments = Some(arguments);
+        entry.handoff = Some(arguments);
         Ok(())
     }
 }
@@ -109,7 +109,7 @@ impl Drop for RegistryReservation {
         if state
             .registry
             .get(&self.token)
-            .is_some_and(|input| input.arguments.is_none())
+            .is_some_and(|input| input.handoff.is_none())
         {
             state.registry.remove(&self.token);
         }
@@ -123,20 +123,11 @@ pub(super) fn use_registry_inputs(
     context: &Context,
 ) -> Outcome {
     let reference = call.arguments["review_ref"].as_str().unwrap_or_default();
-    let input = {
-        let mut questions = server
-            .questions
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let owned = questions.registry.get(reference).is_some_and(|input| {
-            input.owner == review.retry_owner()
-                && input.project == review.project_id
-                && input.arguments.is_some()
-        });
-        owned
-            .then(|| questions.registry.remove(reference))
-            .flatten()
-    };
+    let input = server
+        .questions
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .take_registry_input(&review, reference);
     let result = input
         .ok_or(crate::review::Error::Missing)
         .and_then(|input| {
@@ -144,7 +135,7 @@ pub(super) fn use_registry_inputs(
                 Ok(None)
             } else {
                 crate::review::mcp::validate_registry_inputs(&review, &input.binding)?;
-                Ok(input.arguments)
+                Ok(input.handoff)
             }
         });
     match result {
@@ -170,6 +161,17 @@ struct Capture {
 }
 
 impl Questions {
+    fn take_registry_input(&mut self, review: &Review, reference: &str) -> Option<RegistryInput> {
+        let input = self.registry.get(reference)?;
+        if input.owner != review.retry_owner()
+            || input.project != review.project_id
+            || input.handoff.is_none()
+        {
+            return None;
+        }
+        self.registry.remove(reference)
+    }
+
     fn capture(&self, bytes: usize) -> Result<Capture, RpcError> {
         self.source_bytes.try_update(Ordering::Relaxed, Ordering::Relaxed, |used| {
             used.checked_add(bytes).filter(|total| *total <= self.source_limit)
@@ -194,6 +196,7 @@ struct Pending {
     plan: Question,
     requests: Requests,
     rounds: u8,
+    trace: Option<crate::diagnostics::trace::Link>,
     _capture: Capture,
 }
 
@@ -292,6 +295,7 @@ pub(super) fn call(
                 plan,
                 requests,
                 rounds: 1,
+                trace: crate::diagnostics::trace::current_link(),
                 _capture: capture,
             },
         );
@@ -390,10 +394,14 @@ fn modern_resume(
         Ok(answers) => answers,
         Err(error) => return Outcome::Method(Err(error)),
     };
+    crate::diagnostics::trace::link_retry(pending.trace.as_ref());
     let Some(answer) = answers.get("settings") else {
         pending.rounds += 1;
         return match request.elicitation(pending.requests.clone(), Some(token)) {
-            Ok(result) => Outcome::InputRequired(result),
+            Ok(result) => {
+                pending.trace = crate::diagnostics::trace::current_link();
+                Outcome::InputRequired(result)
+            }
             Err(error) => Outcome::Method(Err(error)),
         };
     };
@@ -473,7 +481,7 @@ fn legacy_review(review: &Review, reservation: Option<&RegistryReservation>, val
         data["review_action"] =
             json!({"tool":"registry_add","arguments":{"review_ref":reservation.token}});
         data["next_action"] = json!(
-            "Call registry_add with the returned review_ref to review the captured registry source and trust scope. Pass discard: true with that reference to release it instead."
+            "Call registry_add with the returned review_ref in this connection to review the captured registry source and trust scope. Pass discard: true with that reference to release it instead."
         );
     } else if data["apply_arguments"].is_object() && data["proposal_id"].is_string() {
         data.as_object_mut()
@@ -500,6 +508,32 @@ pub(super) fn output(review: &Review, name: &str, value: Value, context: &Contex
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn registry_handoffs_keep_capacity_until_consumed_or_discarded() {
+        let questions = Arc::new(Mutex::new(Questions::default()));
+        let review = Review::new("project".into(), "/acme".into(), "mcp");
+        let pending = RegistryReservation::new(&questions, &review, "pending", "binding").unwrap();
+        for token in ["first", "one", "two", "three", "four", "five", "six"] {
+            RegistryReservation::new(&questions, &review, token, "binding")
+                .unwrap()
+                .publish(json!({"name":"acme"}))
+                .unwrap();
+        }
+        assert!(matches!(
+            RegistryReservation::new(&questions, &review, "new", "binding"),
+            Err(crate::review::Error::Overloaded)
+        ));
+        let mut state = questions.lock().unwrap();
+        assert!(state.registry.contains_key("pending"));
+        let first = state.take_registry_input(&review, "first").unwrap();
+        assert_eq!(first.handoff, Some(json!({"name":"acme"})));
+        assert!(state.take_registry_input(&review, "first").is_none());
+        drop(state);
+        let replacement =
+            RegistryReservation::new(&questions, &review, "replacement", "binding").unwrap();
+        drop((pending, replacement));
+    }
 
     #[test]
     fn capture_budget_releases_only_when_its_owner_drops() {

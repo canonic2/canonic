@@ -409,7 +409,7 @@ pub(crate) fn refused(
     identity: &Identity<'_>,
     summary: &Summary,
 ) -> Result<Outcome, Error> {
-    refused_observed(root, key, identity, summary, &[])
+    refused_observed(root, key, identity, summary, &[], None)
 }
 
 /// Optional decision IDs link this exact retry to its consumed approval without
@@ -420,6 +420,7 @@ pub(crate) fn refused_observed(
     identity: &Identity<'_>,
     summary: &Summary,
     decision_requests: &[&str],
+    authority: Option<&super::runtime::consumer::NativeAuthority>,
 ) -> Result<Outcome, Error> {
     let context = super::open_authorization(root)?;
     let store = Store::open(root)?;
@@ -437,6 +438,9 @@ pub(crate) fn refused_observed(
         return Ok(outcome);
     }
     let value = store.update_authorization(&context, |state| {
+        if let Some(authority) = authority {
+            authority.check_locked(state)?;
+        }
         let time = now()?;
         state.compact_authorization_at(time);
         match lookup(state, key, time)? {
@@ -576,7 +580,7 @@ fn record_allowance(
 /// with nothing to cover writes nothing.
 #[cfg(test)]
 pub(crate) fn followup(root: &Path, key: &Key<'_>) -> Result<bool, Error> {
-    followup_observed(root, key, &[])
+    followup_observed(root, key, &[], None)
 }
 
 /// Link the later permission callback to the same one-time authorization.
@@ -584,6 +588,7 @@ pub(crate) fn followup_observed(
     root: &Path,
     key: &Key<'_>,
     decision_requests: &[&str],
+    authority: Option<&super::runtime::consumer::NativeAuthority>,
 ) -> Result<bool, Error> {
     // Rechecked under the writer lock: the grant covers only the exact
     // request it was consumed for.
@@ -603,6 +608,9 @@ pub(crate) fn followup_observed(
         return Ok(false);
     }
     let value = store.update_authorization(&context, |state| {
+        if let Some(authority) = authority {
+            authority.check_locked(state)?;
+        }
         let Some(index) = covering(state, now()?)? else {
             return Ok(json!(false));
         };

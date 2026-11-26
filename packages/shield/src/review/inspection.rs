@@ -283,14 +283,18 @@ impl Settings {
         local: bool,
         change: impl FnOnce(&mut crate::policy::Binding) -> Result<(), Error>,
     ) -> Result<(), Error> {
-        match (&mut self.local, local) {
-            (Some(_), true) => {
+        match (&self.local, local) {
+            (Some(previous), true) => {
                 let mut effective = self.effective();
                 change(&mut effective)?;
-                self.local = Some(crate::configuration::layers::Overlay::between(
-                    &self.shared,
-                    &effective,
-                ));
+                let mut overlay =
+                    crate::configuration::layers::Overlay::between(&self.shared, &effective);
+                for name in &previous.unset {
+                    if !effective.variables.contains_key(name) && !overlay.unset.contains(name) {
+                        overlay.unset.push(name.clone());
+                    }
+                }
+                self.local = Some(overlay);
             }
             _ => change(&mut self.shared)?,
         }

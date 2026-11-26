@@ -56,7 +56,8 @@ export async function initialize(root, config, cache, env = process.env) {
     await writeFile(join(root, '.shield', pack.path), await readFile(join(root, pack.path)));
   }
   await writeFile(join(root, '.shield/config.yml'), JSON.stringify(candidate));
-  await operator(root, cache ? ['init', '--cache-dir', cache] : ['init'], [], env);
+  await exec(binary, ['init', '--no-baseline', '--no-setup', '--project', root,
+    ...(cache ? ['--cache-dir', cache] : [])], { timeout: 30000, env });
   return revision(root, env);
 }
 

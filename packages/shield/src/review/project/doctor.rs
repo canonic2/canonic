@@ -29,17 +29,18 @@ pub(in crate::review) fn report(context: &Context) -> Result<Value, Error> {
     }
 
     // Requests are decided by the policy files; report whether they load.
-    let cache = crate::review::files::cache_for(&current.operator).ok();
-    match crate::review::files::check(Path::new(&context.project_root), cache.as_deref()) {
-        Ok(digest) => value["policy_files"] = json!({"digest":digest}),
-        Err(error) => {
-            value["policy_files"] = json!({"error":error.to_string()});
-            problem(
-                "policy",
-                error.to_string(),
-                "Fix the policy files, then run shield doctor",
-            );
-        }
+    value["policy_files"] =
+        state::policy_files(Path::new(&context.project_root), &current.operator);
+    if let Some(error) = value["policy_files"]["error"].as_str() {
+        problem(
+            "policy",
+            error.into(),
+            if value["policy_files"]["code"] == "missing_pack" {
+                "shield pack restore"
+            } else {
+                "Resolve the reported policy file problem, then run shield doctor"
+            },
+        );
     }
 
     // Pack updates are verified against retained registry checkpoints and the
@@ -98,6 +99,7 @@ pub(in crate::review) fn report(context: &Context) -> Result<Value, Error> {
 
     value["checks"] = json!(checks);
     state::inspection_location(context, &current, &mut value);
+    state::describe(&mut value, true);
     Ok(value)
 }
 

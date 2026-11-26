@@ -25,6 +25,7 @@ struct Preview {
     evaluator: Evaluator,
     id: String,
     selector: String,
+    value: Value,
 }
 
 impl Lookup {
@@ -84,13 +85,12 @@ impl Lookup {
             return None;
         }
         Some(json!({"tool":"pack_configure",
-            "arguments":{"reference":preview.selector,"set":{(name.clone()):executable},"layer":"local"},
-            "instruction":format!("The installed {} pack has an unset {name} setting. The current policy would allow this command with that binding. If this is the intended tool, configure the exact path locally and submit the returned apply_arguments unchanged to policy_apply for review.", preview.id)}))
+            "arguments":{"reference":preview.selector,"set":{(name.clone()):preview.value},"layer":"local"},
+            "instruction":format!("The installed {} pack would allow this command with the exact executable path added to its {name} setting. If this is the intended tool, configure the path locally and submit the returned apply_arguments unchanged to policy_apply for review.", preview.id)}))
     }
 
     fn prepare(&self, state: &State, executable: &str, name: &str) -> Option<Vec<Preview>> {
         let candidate = &state.candidates["project"];
-        let value = json!(executable);
         let mut previews = Vec::new();
         for (index, row) in state.operator["installed"].as_array()?.iter().enumerate() {
             let Some(source) = candidate["packs"][index]
@@ -105,20 +105,34 @@ impl Lookup {
             let Some(declaration) = declarations.get(name) else {
                 continue;
             };
-            if declaration.kind != variables::Kind::String
+            if !(declaration.kind == variables::Kind::String || declaration.executable_paths())
                 || declaration.layer() != variables::Layer::Local
                 || declaration.default.is_some()
-                || declaration.check(&value).is_err()
                 || !super::discovery::declares_path(declaration, Path::new(executable))
             {
                 continue;
             }
             let settings = inspection::selection_settings(candidate, index).ok()?;
-            if settings.effective().variables.contains_key(name)
-                || settings
-                    .local
-                    .is_some_and(|local| local.unset.iter().any(|unset| unset == name))
+            if settings
+                .local
+                .as_ref()
+                .is_some_and(|local| local.unset.iter().any(|unset| unset == name))
             {
+                continue;
+            }
+            let mut value = json!(executable);
+            if let Some(existing) = settings.effective().variables.get(name) {
+                if !declaration.executable_paths() {
+                    continue;
+                }
+                let Value::Array(mut paths) = declaration.normalize(existing) else {
+                    continue;
+                };
+                paths.push(value);
+                value = Value::Array(paths);
+            }
+            let value = declaration.normalize(&value);
+            if declaration.check(&value).is_err() {
                 continue;
             }
             let probes = self.probes.get();
@@ -144,6 +158,7 @@ impl Lookup {
                 evaluator: Evaluator::new(vec![(Scope::Project, snapshot)]).ok()?,
                 id: row["id"].as_str()?.to_owned(),
                 selector: selector.to_owned(),
+                value,
             });
         }
         Some(previews)

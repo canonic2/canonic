@@ -172,7 +172,7 @@ fn arguments() -> Value {
             json!({"kind":{"const":"sequence"},"prefix":list(reference("text"),0),"rest":rest}),
             &["kind", "prefix", "rest"],
         ),
-        object(options, &["kind", "prefix", "flags", "values", "operands"]),
+        reference("options_arguments"),
         object(
             json!({"kind":{"const":"risk_tokens"},"prefix":list(reference("text"),0),"any_of":list(reference("text"),1)}),
             &["kind", "prefix", "any_of"],
@@ -184,7 +184,28 @@ fn arguments() -> Value {
     arguments["examples"] = json!([
         {"kind":"options","prefix":["run","dev"],"flags":[],"values":[],"operands":false}
     ]);
-    json!({"leading":leading,"arguments":arguments})
+    let options = object(options, &["kind", "prefix", "flags", "values", "operands"]);
+    json!({"leading":leading,"options_arguments":options,"arguments":arguments})
+}
+
+fn argument_paths() -> Value {
+    let selection = object(
+        json!({"path":reference("path"),"recursive":{"type":"boolean"}}),
+        &["path"],
+    );
+    let mut paths = object(
+        json!({
+            "grammar":reference("options_arguments"),
+            "options":{"type":"object","maxProperties":256,"additionalProperties":selection},
+            "operands":selection
+        }),
+        &["grammar"],
+    );
+    paths["anyOf"] = json!([
+        {"required":["options"],"properties":{"options":{"minProperties":1}}},
+        {"required":["operands"]}
+    ]);
+    paths
 }
 fn domains() -> Value {
     let url = object(
@@ -192,7 +213,7 @@ fn domains() -> Value {
         &["schemes", "hosts"],
     );
     let common = json!({"cwd":reference("path"),"environment":reference("environment")});
-    let argv = json!({"arguments":reference("arguments"),"graphql":reference("graphql"),"targets":one_of(vec![reference("target"),list(reference("target"),1)]),"possible_effects":{"type":"array","minItems":1,"maxItems":11,"items":{"enum":["repository-write","worktree-write","data-removal","history-rewrite","network","code-execution","daemon-write","image-build","host-exposure","privileged-runtime","configuration"]}}});
+    let argv = json!({"arguments":reference("arguments"),"argument_paths":argument_paths(),"graphql":reference("graphql"),"targets":one_of(vec![reference("target"),list(reference("target"),1)]),"possible_effects":{"type":"array","minItems":1,"maxItems":11,"items":{"enum":["repository-write","worktree-write","data-removal","history-rewrite","network","code-execution","daemon-write","image-build","host-exposure","privileged-runtime","configuration"]}}});
     let shell = json!({"source":reference("text"),"dialect_version":one_of(vec![nonempty(4096),object(json!({"exact":nonempty(4096)}),&["exact"])])});
     let file = json!({"sources":reference("quantified"),"destination":reference("path"),"recursive":{"type":"boolean"},"targets":one_of(vec![reference("target"),list(reference("target"),1)])});
     let web = json!({"query":reference("text"),"url":reference("url"),"method":reference("method"),"request_fields":reference("field_map")});
@@ -255,6 +276,21 @@ fn domains() -> Value {
     conditions.push(object(json!({"domain":{"const":"exact_request"},"input":reference("normalized_input"),"context":context(),"executable":{"oneOf":[nonempty(4096),{"type":"null"}]}}),&["domain","input","context","executable"]));
     json!({"url":url,"conditions":one_of(conditions),"requirements":{"anyOf":requirements}})
 }
+fn agent_outputs() -> Value {
+    use crate::policy::rules::agent_outputs::{MAX_PREFIXES, MAX_TOKENS};
+    let literal = json!({"type":"string","minLength":1});
+    let token = one_of(vec![
+        literal.clone(),
+        json!({"type":"array","minItems":1,"maxItems":MAX_TOKENS,"items":literal}),
+    ]);
+    let prefix = json!({"type":"array","minItems":2,"maxItems":MAX_TOKENS,"items":token});
+    let codex = object(
+        json!({"prefixes":{"type":"array","minItems":1,"maxItems":MAX_PREFIXES,"items":prefix}, "trust_project_node_tests":{"type":"boolean"}}),
+        &["prefixes"],
+    );
+    object(json!({"codex":codex}), &["codex"])
+}
+
 fn rule() -> Value {
     let message = nonempty(512);
     let alternatives = json!({"type":"array","minItems":1,"maxItems":3,"items":nonempty(256)});
@@ -264,11 +300,11 @@ fn rule() -> Value {
     );
     guidance["minProperties"] = json!(1);
     let mut rule = object(
-        json!({"id":{"type":"string","minLength":1,"maxLength":128},"decision":{"enum":["allow","ask","deny"]},"conditions":{"anyOf":[reference("conditions"),reference("historical_conditions")]},"requirements":reference("requirements"),"on_unmet":object(json!({"decision":{"enum":["ask","deny"]},"message":message,"alternatives":alternatives}),&["decision"]),"reason":string(4096),"guidance":reference("guidance"),"expires_at":{"type":"string"},"historical_matcher":reference("historical_matcher"),"historical_normalized":reference("historical_normalized")}),
+        json!({"id":{"type":"string","minLength":1,"maxLength":128},"decision":{"enum":["allow","ask","deny"]},"conditions":{"anyOf":[reference("conditions"),reference("historical_conditions")]},"requirements":reference("requirements"),"on_unmet":object(json!({"decision":{"enum":["ask","deny"]},"message":message,"alternatives":alternatives}),&["decision"]),"reason":string(4096),"guidance":reference("guidance"),"agents":agent_outputs(),"expires_at":{"type":"string"},"historical_matcher":reference("historical_matcher"),"historical_normalized":reference("historical_normalized")}),
         &["id", "decision", "conditions"],
     );
     rule["if"] = json!({"required":["historical_normalized"]});
-    rule["then"] = json!({"properties":{"conditions":reference("historical_conditions")},"not":{"anyOf":[{"required":["historical_matcher"]},{"required":["requirements"]},{"required":["on_unmet"]},{"required":["guidance"]}]}});
+    rule["then"] = json!({"properties":{"conditions":reference("historical_conditions")},"not":{"anyOf":[{"required":["historical_matcher"]},{"required":["requirements"]},{"required":["on_unmet"]},{"required":["guidance"]},{"required":["agents"]}]}});
     rule["else"] = json!({"properties":{"conditions":reference("conditions"),"reason":nonempty(4096),"expires_at":{"type":"string","format":"date-time"}}});
     json!({"guidance":guidance,"rule_custom":rule})
 }

@@ -3,6 +3,7 @@
 //! follows otherwise. Fixed protected state never qualifies.
 use super::{AgentAdapter, Decision, Event, Reply, Request};
 use crate::review::hook_approval::{self, Identity, Key, Outcome, Summary, one_line};
+use crate::review::runtime::consumer::NativeAuthority;
 use serde_json::{Value, json};
 use std::path::Path;
 
@@ -44,6 +45,7 @@ pub(super) fn in_session(
     request: &Request<'_>,
     refusals: &[Value],
     reply: &mut Reply,
+    authority: Option<&NativeAuthority>,
 ) -> Option<Reply> {
     let first = refusals.first()?;
     if !refusals.iter().all(approvable)
@@ -102,6 +104,7 @@ pub(super) fn in_session(
                 &identity,
                 &summary,
                 &decision_requests,
+                authority,
             ) {
                 Ok(Outcome::Allowed) => Some(allowed()),
                 Ok(Outcome::Pending(id, others)) => {
@@ -118,7 +121,7 @@ pub(super) fn in_session(
             }
         }
         // A later callback of an attempt whose grant was just consumed.
-        None => hook_approval::followup_observed(root, &key, &decision_requests)
+        None => hook_approval::followup_observed(root, &key, &decision_requests, authority)
             .ok()
             .filter(|covered| *covered)
             .map(|_| allowed()),

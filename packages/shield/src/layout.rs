@@ -29,7 +29,7 @@ pub(crate) const ROOT_CONFIG: &str = ".shield/config.yml";
 pub(crate) const GROUPED_CONFIG: &str = ".config/shield/config.yml";
 /// The grouped bundle directory.
 pub(crate) const GROUPED_BUNDLE: &str = ".config/shield";
-/// The uncommitted local files beside the selected shared configuration.
+/// The local files beside the selected shared configuration.
 pub(crate) const LOCAL_FILES: [&str; 3] =
     ["config.local.yml", "rules.local.yml", "shield.local.lock"];
 

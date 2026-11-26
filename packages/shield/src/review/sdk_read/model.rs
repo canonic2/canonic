@@ -5,7 +5,6 @@ use std::collections::BTreeMap;
 
 pub(super) const PROFILE_LIMIT: usize = 1024;
 pub(super) const CONTEXT_LIMIT: usize = 128;
-pub(super) const CONTEXT_TTL_MS: u64 = 3_600_000;
 pub(super) const INDEX_BYTES: usize = 256 * 1024;
 
 pub(super) fn digest(value: &str) -> bool {
@@ -77,7 +76,9 @@ pub(super) struct ContextRecord {
     pub project_root: String,
     pub profile: String,
     pub created_at_ms: u64,
-    pub expires_at_ms: u64,
+    /// Retained only to decode records issued by earlier builds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expires_at_ms: Option<u64>,
     pub binary: super::binary::Receipt,
 }
 
@@ -90,7 +91,9 @@ impl ContextRecord {
             || self.project_root.len() > 4096
             || self.project_root.contains('\0')
             || !std::path::Path::new(&self.project_root).is_absolute()
-            || self.expires_at_ms.checked_sub(self.created_at_ms) != Some(CONTEXT_TTL_MS)
+            || self
+                .expires_at_ms
+                .is_some_and(|expiry| expiry.checked_sub(self.created_at_ms) != Some(3_600_000))
         {
             return Err(Error::Invalid("SDK read context is invalid"));
         }

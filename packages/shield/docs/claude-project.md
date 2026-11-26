@@ -23,21 +23,20 @@ approval. Reviewed policy reuse and temporary approval isolation are described i
 
 ## Install or repair an integration
 
-Run `shield mcp setup` for guided management. Choose **Install or repair** or
-**Remove owned registrations**, mark at least one integration with Space on
-**Select agents**, then press Enter. Installation includes a **Tool permissions**
-page. Review the complete changes and choose **Apply reviewed changes** on
-**Apply MCP setup?**; **Cancel** is highlighted by default. Unmarked agents keep
-their configuration. Setup shows each integration's registration status. Hub is
-unavailable until this folder is a Hub project, Box until it is a Box project,
-and both on Windows. During first-time
-`shield init`, no marked agents means **Skip for now** instead.
+Run `shield setup` from the project directory for first use or to repair saved
+registrations. Use `shield setup --agent claude` or `shield setup --agent codex`
+to choose an agent explicitly. Repeat `--agent` to select both. The review shows
+the project, agents, and proposed access or configuration changes. Choose
+**Inspect details** in the terminal review to see the exact changes.
 
-Initialize the project with `shield init`, then run `shield mcp setup --agent claude` in an operator terminal to install native
-command hooks and Shield's project MCP entry. Confirmation shows the owned files,
-binary and project. Claude uses `.claude/settings.local.json` and `.mcp.json`.
-To add Codex as well, run `shield mcp setup --agent codex`; Codex uses
-`.codex/hooks.json` and `.codex/config.toml`. No user/global settings are changed.
+For guided registration maintenance, run `shield mcp setup`. Choose **Install
+or repair** or **Remove owned registrations**, mark the integrations with Space
+on **Select agents**, then press Enter. Installation includes a **Tool permissions**
+page. Confirm with **Apply reviewed changes** on **Apply MCP setup?**.
+**Cancel** is highlighted by default. Unmarked agents keep their configuration.
+
+Claude uses `.claude/settings.local.json` and `.mcp.json`. Codex uses
+`.codex/hooks.json` and `.codex/config.toml`. Setup changes project settings.
 When the policy's rules ask for [Codex prefix rules](policy-rules.md#codex-prefix-rules),
 Shield also writes `.codex/rules/shield.rules`. Setup and every policy change
 Shield writes rewrite it, removing it when no such rule remains or Codex is
@@ -81,11 +80,11 @@ agent. Hub and Box read the same definition format from their own folders:
 
 ```sh
 # Hub project (.hub/config.yml, created by hub setup)
-shield mcp setup --agent hub
+shield setup --agent hub
 hub setup
 
 # Box project (.box/config.yml, created by box config init)
-shield mcp setup --agent box
+shield setup --agent box
 box config sync
 ```
 
@@ -209,14 +208,13 @@ See [MCP review](project-mcp.md#proposals-and-operator-review).
 Repeating setup repairs missing tool approvals. Unmarking a tool or removing
 Shield deletes only approvals Shield added; other servers and existing approvals
 are preserved. Check `shield doctor --json` for missing or changed files and
-binaries. Status reports inspected hooks separately from retained hook activity.
+binaries. Status reports configured hooks with separate fields for host loading
+and interception, both unchecked. Use `shield history list` to inspect retained
+hook activity.
 Hub- or Box-published callbacks appear with `managed_by: hub` or
 `managed_by: box` when their generated
 settings match. Duplicate, changed or incomplete callbacks report degradation.
-`coverage.verification.agents` lists the latest retained hook event and timestamp
-for each observed agent; `coverage.live_host_verification: observed` describes that history, not
-an attestation of current host loading. With no available hook evidence it reports
-`unverified`, which does not establish that hooks are inactive.
+Follow the `next` action to review repair with the publisher that owns them.
 
 ## Intercepted requests
 

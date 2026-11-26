@@ -13,7 +13,24 @@ test('interactive SDK factory scopes approval tools to its captured reads and ex
   assert.equal(read.hookSpecificOutput.permissionDecision, 'deny');
   assert.match(read.hookSpecificOutput.permissionDecisionReason, /mcp__shield__request_approve/);
   const id = (await f.cli(['request', 'list'])).requests[0].request_id;
-  assert.equal((await pre(input('mcp__shield__request_approve', { request_id: id }))).hookSpecificOutput.permissionDecision, 'allow');
+  const before = await f.events();
+  const post = options.hooks.PostToolUse[0].hooks[0];
+  for (const tool of ['request_show', 'request_approve', 'request_deny']) {
+    const call = input(`mcp__shield__${tool}`, { request_id: id });
+    assert.equal((await pre(call)).hookSpecificOutput.permissionDecision, 'allow');
+    for (const event of ['PostToolUse', 'PostToolUseFailure']) {
+      const complete = options.hooks[event][0].hooks[0];
+      assert.deepEqual(await complete({ ...call, hook_event_name: event }, call.tool_use_id), {});
+    }
+  }
+  assert.deepEqual(await f.events(), before);
+  const completion = { ...input('mcp__shield__request_approve', { request_id: id }), hook_event_name: 'PostToolUse' };
+  assert.match((await post({ ...completion, session_id: 'other-session' })).systemMessage, /history unavailable/);
+  assert.match((await post(completion, 'other-call')).systemMessage, /history unavailable/);
+  const allowedRead = input('Read', { file_path: f.allowed });
+  assert.equal((await pre(allowedRead)).hookSpecificOutput.permissionDecision, 'allow');
+  assert.deepEqual(await post({ ...allowedRead, hook_event_name: 'PostToolUse' }), {});
+  assert.equal((await f.events()).filter(event => event.kind === 'completion').length, 1);
   for (const [name, args, session] of [
     ['mcp__shield__request_approve', { request_id: 'read-request-foreign' }],
     ['mcp__other__request_approve', { request_id: id }],

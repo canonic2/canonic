@@ -143,10 +143,9 @@ fn project_hints(output: String, project: Option<&std::path::Path>) -> String {
 fn shows_pack_updates(command: &PublicCommand) -> bool {
     matches!(
         command,
-        PublicCommand::Status(_)
-            | PublicCommand::Pack(crate::cli::public::Pack {
-                command: PackCommand::List { .. }
-            })
+        PublicCommand::Pack(crate::cli::public::Pack {
+            command: PackCommand::List { .. }
+        })
     )
 }
 
@@ -592,6 +591,26 @@ fn pack_result(command: &PackCommand, value: &Value) -> String {
     match command {
         PackCommand::List { .. } => packs::list(value),
         PackCommand::Show { .. } => packs::show(value),
+        PackCommand::Restore => {
+            let restored = value["fetched"].as_array().map_or(0, Vec::len);
+            let failures = value["fetch_failures"].as_array().into_iter().flatten();
+            let mut output = format!(
+                "Restored {}.\n",
+                plural(restored, "locked pack", "locked packs")
+            );
+            for failure in failures {
+                let _ = writeln!(
+                    output,
+                    "{}: {}",
+                    label(&failure["release"]),
+                    label(&failure["error"])
+                );
+            }
+            if let Some(action) = value["next_action"].as_str() {
+                let _ = writeln!(output, "{action}");
+            }
+            output
+        }
         PackCommand::Search { .. } => packs::search(value),
         PackCommand::Info { view, .. } if view == "settings" => format!(
             "{}\n",
@@ -729,13 +748,8 @@ mod tests {
         stderr:
         Run shield pack update to review compatible updates.
         ");
-        assert_eq!(
-            pack_update_notice(
-                &PublicCommand::Status(crate::cli::public::InspectionArgs::default()),
-                &notice
-            ),
-            pack_update_notice(&command, &notice)
-        );
+        let status = PublicCommand::Status(crate::cli::public::InspectionArgs::default());
+        assert!(!result(&status, &value).contains("Pack updates"));
     }
 
     #[test]

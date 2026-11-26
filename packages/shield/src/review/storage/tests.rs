@@ -378,10 +378,10 @@ fn optional_session_capture_skips_unchanged_publication() {
 }
 
 #[test]
-fn updates_append_missing_local_state_ignores_to_an_existing_file() {
+fn updates_restore_state_ignores_and_preserve_the_config_ignore_choice() {
     let (root, context) = enrolled();
     let path = root.path().join(".shield/.gitignore");
-    // An ignore file an earlier release wrote gains the current state name.
+    // Keep the operator's choice to track the local configuration while adding state ignores.
     fs::write(&path, "review/").unwrap();
     Store::open(root.path())
         .unwrap()
@@ -389,7 +389,7 @@ fn updates_append_missing_local_state_ignores_to_an_existing_file() {
         .unwrap();
     assert_eq!(
         fs::read_to_string(&path).unwrap(),
-        "review/\nstate/\ncache/\nconfig.local.yml\nrules.local.yml\nshield.local.lock\n"
+        "review/\nstate/\ncache/\nrules.local.yml\nshield.local.lock\n"
     );
 }
 

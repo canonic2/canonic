@@ -194,6 +194,25 @@ pub(crate) fn now() -> String {
     format_utc(seconds)
 }
 
+/// Policy expiry uses the clock's full precision. An unavailable clock is
+/// represented by an invalid timestamp so expiring rules fail closed.
+pub(crate) fn policy_now() -> String {
+    #[cfg(test)]
+    if let Some(now) = POLICY_TIME.get() {
+        return now.to_owned();
+    }
+    let Ok(now) = SystemTime::now().duration_since(UNIX_EPOCH) else {
+        return String::new();
+    };
+    let whole = format_utc(now.as_secs());
+    format!("{}.{:09}Z", whole.trim_end_matches('Z'), now.subsec_nanos())
+}
+
+#[cfg(test)]
+thread_local! {
+    pub(crate) static POLICY_TIME: std::cell::Cell<Option<&'static str>> = const { std::cell::Cell::new(None) };
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

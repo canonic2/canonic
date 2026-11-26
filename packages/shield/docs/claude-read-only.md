@@ -36,10 +36,10 @@ application's `finally` cleanup after SDK work finishes.
 
 The new profile belongs to this developer and policy lineage. It follows the
 project across locations when binary and adapter contents match; changing either
-requires a new review. Each new factory obtains a private checkout-bound context
-valid for one hour. Copies and moves cannot replay an old context; create a fresh
-factory. At most 128 contexts are retained per developer. No context token is
-passed in model input or command arguments.
+requires a new review. Each factory obtains a private context for the checkout.
+The context stays valid while the factory's native owner holds its lease.
+Copies and moves require a fresh factory. At most 128 contexts can be live per
+developer. The token stays outside model input and command arguments.
 
 The profile authorizes only the fixed read mapping. It adds no policy permission
 and cannot bypass Deny or the exact-read approval required by Ask. Callback
@@ -53,7 +53,8 @@ returns `{hooks, close}`. Pass `hooks` to your trusted SDK host and await `close
 when the session ends. Supply `binary`, `project`, the reviewed `binaryDigest`
 and optional `timeoutMs` from trusted application configuration. Closing cancels
 this client's pending approval waits and releases its private context after its
-evaluator children finish.
+evaluator children finish. If the application exits, its connection to the
+native owner closes and the lease is released.
 
 The parent independently hashes the opened native executable, then checks its
 file version and every canonical ancestor directory before and after each child.
@@ -75,10 +76,12 @@ Ask blocks by default. A trusted application may supply
 `onApprovalRequired: async ({request_id}, {signal}) => waitForOperator(request_id, signal)`.
 This handler receives only a public request ID. It must use the existing human
 approval channel; returning cannot issue a grant. The original Read callback then
-separately consumes the exact approved request. Human interaction must finish
-within that callback's total configured deadline, at most 60 seconds. A later
-Read callback starts a fresh request, even with identical text or a reused tool
-ID. The client never gives private retry references to the model or handler.
+separately consumes the exact approved request. Shield pauses its work budget
+while the handler waits for a person and resumes with the time left. Claude's
+hook runner can cancel the original callback independently. The handler receives
+that cancellation through its signal. A later Read callback starts a fresh
+request, even with identical text or a reused tool ID. The client keeps private
+retry references inside the adapter.
 
 Each client admits at most eight concurrent callbacks with no queue. Additional
 PreToolUse calls deny without starting a child; completion overload reports lost

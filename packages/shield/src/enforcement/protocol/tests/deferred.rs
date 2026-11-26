@@ -25,6 +25,7 @@ fn completion_history_failure_retains_a_diagnostic_category() {
         &json!({}),
         NativeContext {
             integration: "codex",
+            event: Event::Completed,
             approval: NativeApproval::Fallback,
             context_complete: true,
             working_files: None,
@@ -72,6 +73,13 @@ fn sdk_v2_completion_receipts_defer_links_and_v1_remains_compatible() {
             } else {
                 assert_eq!(receipt["history"].as_object().unwrap().len(), 3);
                 assert!(receipt["history"].get("correlation").is_none());
+            }
+            for event in ["AfterTool", "PostToolUseFailure"] {
+                let mut invalid = input.clone();
+                invalid["host"]["event"] = json!(event);
+                let (receipt, exit) = evaluate(root.path(), &serde_json::to_vec(&invalid).unwrap());
+                assert_eq!(exit, 2, "{event}: {receipt}");
+                assert_eq!(receipt["code"], "invalid-input");
             }
         }
     }

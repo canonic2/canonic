@@ -17,19 +17,9 @@ pub(super) fn instructions_for(context: &crate::review::Context) -> String {
 }
 
 fn instructions_with(adapter: &dyn crate::agents::review::ReviewAdapter) -> String {
-    let inspection = "Shield manages project permissions. Call setup to initialize or repair the project's integrations, follow the returned action, then check status and doctor. Disabled enforcement and configured hooks do not establish live interception. Inspect decisions with policy_evaluate, rules with rule_list, and installed packs with pack_list or pack_show. If the request is allowed, continue with the normal tool. Use suggestion_list for this session's evidence and existing reviews. \
-Use history_list or history_show with an absolute project path for history in an enrolled nested worktree. For more results, follow next_cursor with the same filters. Restart without a cursor on invalid_cursor. ";
-    let host = adapter.guidance().instructions;
-    if adapter.confirmation() == crate::agents::review::Confirmation::Terminal {
-        return format!("{inspection}{host}");
-    }
-    let approvals = "For one-time approval, follow request_approve and repeat the approved call once unchanged. Ordinary session grants cover eligible Ask decisions only. For a repeated Ask, inspect session_grant_list, propose bounded commands with session_grant_propose, and pass its unchanged apply_arguments to session_grant_approve. Follow denial-specific recovery for Deny. Use session_grant_reconsider only on explicit request and obtain fresh confirmation. \
-Prefer temporary session grants for work limited to this task. Propose persistent policy when the permission should carry over to future sessions. Open skill://shield/custom-rules/SKILL.md via MCP resources/read. Check policy_evaluate and rule_list, preserve scope and deny boundaries, and use rule_add or policy_propose. \
-Update a named pack with pack_update and its reference. Omit reference only to update all direct packs, including pinned packs. Use pack_info for setup settings before pack_add and pack_configure for installed settings. Use pack_remove with a reference, or let the person choose what to remove. When the user wants a pack, rule or registry change applied, set review: true to request human confirmation after preparation. Follow a returned review_action when the host needs a separate call. Registry input and source trust require separate decisions. \
-For a separately prepared proposal, use policy_review with its proposal_id or pass unchanged apply_arguments to policy_apply for native tool approval. A preview, report, prepared Task or chat reply grants no approval. For a preparation Task, poll tasks/get and pass its review_arguments to policy_propose. Recover a lost handle with identical creation arguments. Read report_resources via resources/read for more evidence. When an administrative review requires the operator terminal, ask the person to run the returned operator_action. Stop on a decline. Never bypass a refusal or automatically restart failed or cancelled work. ";
-    let form_limit = crate::review::hook_approval::MAX_FORM;
     format!(
-        "{inspection}When an edit needs one-time approval, the complete form fits at most {form_limit} UTF-8 bytes, including the patch, paths and review text. Before submitting a large patch that needs approval, split it into smaller complete patches at file or hunk boundaries. {approvals}{host}"
+        "Shield manages project permissions. Use setup to connect agents, status for a summary, and doctor for repair. For a block or Ask, follow the returned action, such as request_approve for one call, session_grant_show for session grants, or suggestion_list for recurring requests. Only the supported approval flow grants permission; previews and chat cannot approve. Do not bypass refusals or retry a decline. {}",
+        adapter.guidance().instructions
     )
 }
 
@@ -38,60 +28,6 @@ pub(super) fn approval_unavailable(agent: Option<&str>) -> &'static str {
         return "This host did not provide Shield's confirmation form. Report the missing in-session capability; do not ask the user to run terminal commands for approval.";
     }
     crate::agents::review::resolve(agent).guidance().unavailable
-}
-
-/// What a call stopped at its request time limit means and how to continue.
-/// Calls wait in order without a limit, so this covers only a call's own work.
-/// `guided` calls collect input through a form; repeating one asks the user
-/// again and prepares a new review, so they check for a saved one instead.
-pub(super) fn deadline(name: &str, guided: bool, review: bool) -> &'static str {
-    match name {
-        _ if review && crate::review::mcp::prepares_review(name) => {
-            "Shield stopped this call at its time limit. Call policy_show to check the review and its outcome before asking again."
-        }
-        _ if guided && crate::review::mcp::prepares_review(name) => {
-            "Shield stopped preparing this review at its time limit, so nothing was applied, but a review may have been saved. Call policy_show with status pending before calling the tool again, so the user is not asked twice. If it stops again, tell the user Shield timed out on this call and include the doctor tool's result."
-        }
-        _ if crate::review::mcp::prepares_review(name) => {
-            "Shield stopped preparing this review at its time limit, so nothing was applied. Call the tool again with the same arguments; it returns the review if one was saved. If it stops again, tell the user Shield timed out on this call and include the doctor tool's result."
-        }
-        "policy_apply" | "policy_review" | "policy_withdraw" | "policy_reject" => {
-            "Shield stopped this call at its time limit; whether it took effect is unknown. Call policy_show with its proposal_id before calling it again."
-        }
-        "request_approve" | "request_deny" => {
-            "Shield stopped this call at its time limit; whether it took effect is unknown. Call request_show for each request ID it named before calling it again."
-        }
-        "session_grant_propose"
-        | "session_grant_reconsider"
-        | "session_grant_approve"
-        | "session_grant_revoke" => {
-            "Shield stopped this call at its time limit; whether it took effect is unknown. Call session_grant_show with its proposal_id or grant_id, or with session_ref to list them, before calling it again."
-        }
-        "policy_defer" | "policy_draft_remove" => {
-            "Shield stopped this call at its time limit; whether it took effect is unknown. Call policy_draft_list before calling it again."
-        }
-        "registry_add" if guided && !review => {
-            "Shield stopped collecting registry details at its time limit. Nothing was enrolled. If the details are still needed, ask the user before opening the form again."
-        }
-        "registry_add" => {
-            "Shield stopped this call at its time limit. Whether the registry was enrolled is unknown. Call registry_list with the original scope and check the named alias and source before calling it again."
-        }
-        "registry_default" => {
-            "Shield stopped this call at its time limit. Whether the default registry changed is unknown. Call registry_list with the original scope and check the current default before calling it again."
-        }
-        "registry_remove" => {
-            "Shield stopped this call at its time limit. Whether the registry was removed is unknown. Call registry_list with the original scope and check whether the named alias is still registered in that scope before calling it again."
-        }
-        "review_defer" => {
-            "Shield stopped this call at its time limit. Whether the reviews were deferred is unknown. Call suggestion_list with the original session_id and check review_status for the named review_ids before calling it again."
-        }
-        _ if crate::review::mcp::mutates(name) => {
-            "Shield stopped this call at its time limit; whether it took effect is unknown. Call status before calling it again."
-        }
-        _ => {
-            "Shield stopped this read at its time limit; nothing changed. Call it once more. If it stops again, tell the user Shield timed out on this call and include the doctor tool's result."
-        }
-    }
 }
 
 /// The structured message of a declined host confirmation.
@@ -119,7 +55,14 @@ pub(super) fn request_unavailable(agent: Option<&str>) -> &'static str {
 /// Text block 0. An error's structured message carries its recovery, so the
 /// summary repeats it rather than keeping a second copy of the guidance.
 pub(super) fn summary(name: &str, agent: Option<&str>, value: &Value) -> String {
-    let primary = primary_summary(name, agent, value);
+    let mut primary = primary_summary(name, agent, value);
+    if value["truncated"] == true
+        || value["missing"]
+            .as_array()
+            .is_some_and(|fields| !fields.is_empty())
+    {
+        primary.push_str(" Some details are omitted. Check the missing and truncated fields.");
+    }
     let notice = &value["data"]["pack_update_notice"];
     if value["error"].is_null()
         && let Some(message) = notice["message"].as_str()
@@ -136,38 +79,20 @@ pub(super) fn summary(name: &str, agent: Option<&str>, value: &Value) -> String 
 fn primary_summary(name: &str, agent: Option<&str>, value: &Value) -> String {
     let error = &value["error"];
     if !error.is_null() {
-        if error["code"] == "cache_unavailable"
-            && let Some(route) = error["operator_route"].as_str()
-        {
-            return format!(
-                "Compiled policy unavailable. Ask the user to run `{route}`; retry after it succeeds."
-            );
-        }
-        let message = error["message"]
-            .as_str()
-            .map(|message| {
-                let message: String = message.chars().filter(|c| !c.is_control()).collect();
-                format!("{}.", message.trim_end_matches('.'))
-            })
-            .filter(|message| message.len() > 1);
-        // A routed refusal's message already names the user's step.
-        let routed = error["operator_route"].is_string();
-        return match (error["code"].as_str().unwrap_or(""), message) {
-            ("invalid_input", Some(message)) if routed => message,
-            ("invalid_input", Some(message)) if message != "Request or retained state is invalid." => {
-                format!("{message} Correct the arguments and retry.")
-            }
-            ("invalid_input", _) => "Invalid tool input. Correct the arguments and retry.".into(),
-            (_, Some(message)) => message,
-            _ => "Shield could not complete this request. Inspect doctor and ask the user to resolve the reported problem before retrying.".into(),
-        };
+        return error_summary(error);
     }
     let data = &value["data"];
-    if data["unchanged"] == true {
+    if data["unchanged"] == true && name != "setup" {
         return "Already up to date; no proposal or approval is needed.".into();
     }
     match name {
         "setup" => {
+            if data["setup_error"].is_string() {
+                return with_guidance("Shield setup needs attention.", data);
+            }
+            if data["next"]["server"] == "hub" {
+                return with_guidance("Hub publication pending.", data);
+            }
             let outcome = match data["setup_status"].as_str() {
                 Some("initialized") => "Shield set up for this project.",
                 Some("unchanged") => "Shield setup is current.",
@@ -175,10 +100,39 @@ fn primary_summary(name: &str, agent: Option<&str>, value: &Value) -> String {
                 Some("resumed") => "Previously approved Shield setup finished.",
                 _ => "Shield setup needs attention.",
             };
-            format!("{outcome} {}", data["next_action"].as_str().unwrap_or_default()).trim_end().into()
+            with_guidance(outcome, data)
+        }
+        "enable" | "disable" => {
+            let outcome = match (name, data["changed"] == false) {
+                ("enable", true) => "Shield is already enabled for this project.",
+                ("enable", false) => "Shield enabled for this project.",
+                (_, true) => "Shield is already paused for this project.",
+                (_, false) => "Shield paused for this project.",
+            };
+            with_guidance(outcome, data)
         }
         "mcp_setup" if data["operator_recovery"].is_object() => data["next_action"].as_str().unwrap_or("Ask the user to run the target-project operator recovery command.").into(),
+        "mcp_setup" if data["setup_error"].is_string() => with_guidance("Shield integration setup needs attention.", data),
+        "mcp_setup" => with_guidance("Shield integration settings reviewed.", data),
+        "mcp_setup_preview" => "Shield integration preview ready.".into(),
         "registry_add" if data["status"] == "input_collected" => data["next_action"].as_str().unwrap_or("Registry details collected; separate trust confirmation is required.").into(),
+        "registry_add" | "registry_remove" | "registry_default" | "registry_trust" => {
+            let alias = data["alias"].as_str().unwrap_or("selected registry");
+            let scope = data["scope"].as_str().unwrap_or("project");
+            match name {
+                "registry_add" => format!("Registry {alias} registered at {scope} scope."),
+                "registry_remove" => format!("Registry {alias} removed from {scope} scope."),
+                "registry_default" => format!("Registry {alias} is now the {scope} default."),
+                _ => format!("Trust for registry {alias} updated at {scope} scope."),
+            }
+        }
+        "pack_restore" => pack_restore_summary(data),
+        "protection_set" => "Shield protected-file settings saved.".into(),
+        "history_configure" if data["purged"] == true => "Shield history cleared and settings saved.".into(),
+        "history_configure" => "Shield history settings saved.".into(),
+        "policy_defer" => "Policy decision saved for later.".into(),
+        "policy_draft_remove" => "Deferred policy decision removed.".into(),
+        "policy_reject" => "Policy proposal rejected.".into(),
         "session_grant_list"|"session_grant_show"|"session_grant_propose"|"session_grant_reconsider"|"session_grant_approve"|"session_grant_revoke"=>data["next_action"].as_str().unwrap_or("Session grant inspection only; no command was executed.").into(),
         "pack_info" => format!("{} Inspection only; nothing is installed. {}", pack_lead(data), data["setup"]["message"].as_str().unwrap_or_default()).trim_end().to_owned(),
         "policy_evaluate" => {
@@ -210,44 +164,94 @@ fn primary_summary(name: &str, agent: Option<&str>, value: &Value) -> String {
         "docs_read" => "Guide text returned; next_cursor continues this page.".into(),
         "policy_withdraw" => "Policy proposal withdrawn. The policy files are unchanged.".into(),
         "policy_compare" => "Policy comparison returned. Check coverage and unknowns; this preview grants no execution permission.".into(),
-        "status" | "doctor" => setup_status(data),
-        _ => "Records returned. Check missing and truncated evidence.".into(),
+        "status" | "doctor" => diagnostic_summary(data),
+        _ => data["next_action"].as_str().filter(|text| !text.is_empty())
+            .map_or_else(|| format!("Shield {} complete.", name.replace('_', " ")), str::to_owned),
     }
 }
 
-/// Hosts often show only the first text block. Installed hooks and a usable
-/// MCP connection must never be presented as proof of active enforcement.
-fn setup_status(data: &Value) -> String {
-    let mut message = if data["enabled"] == false {
-        "Shield enforcement is disabled. Call enable to review resuming it; protected-file and operator guards still apply.".to_owned()
-    } else if data["policy_files"]["error"].is_string() {
-        "Shield cannot load its policy files. Inspect policy_files.error and the doctor checks."
-            .to_owned()
-    } else {
-        match data["enforcement"].as_str() {
-            Some("installed") => "Shield enforcement is enabled and native hooks are configured.".into(),
-            Some("defined-for-hub") => "Shield is defined for Hub but native hooks are not published. Call Hub's setup tool to review publication.".into(),
-            Some("defined-for-box") => "Shield is defined for Box but native hooks are not published. Use Box's config_sync to review publication.".into(),
-            Some("not-installed") => "Shield has no native hooks configured. Call mcp_setup to review connecting agents.".into(),
-            Some("degraded") => "Shield's integration configuration needs attention.".into(),
-            _ => "Shield configuration inspected.".into(),
-        }
-    };
-    if data["repair_needed"] == true
-        || data["checks"]
-            .as_array()
-            .is_some_and(|checks| checks.iter().any(|row| row["blocking"] != false))
+fn error_summary(error: &Value) -> String {
+    if error["code"] == "cache_unavailable"
+        && let Some(route) = error["operator_route"].as_str()
     {
-        message.push_str(" Inspect coverage diagnostics and checks for the exact affected settings. Review Shield-owned changes with mcp_setup; use Hub's setup for Hub-published hooks. Third-party server settings belong to their publisher.");
-    } else if data["checks"]
-        .as_array()
-        .is_some_and(|checks| !checks.is_empty())
-    {
-        message.push_str(" Inspect the nonblocking warnings.");
+        return format!(
+            "Compiled policy unavailable. Ask the user to run `{route}`; retry after it succeeds."
+        );
     }
-    message.push_str(
-        " Current host loading and live policy interception are unverified by this report.",
+    let message = error["message"]
+        .as_str()
+        .map(|message| {
+            let message: String = message.chars().filter(|c| !c.is_control()).collect();
+            format!("{}.", message.trim_end_matches('.'))
+        })
+        .filter(|message| message.len() > 1);
+    // A routed refusal's message already names the user's step.
+    let routed = error["operator_route"].is_string();
+    match (error["code"].as_str().unwrap_or(""), message) {
+        ("invalid_input", Some(message)) if routed => message,
+        ("invalid_input", Some(message)) if message != "Request or retained state is invalid." => {
+            format!("{message} Correct the arguments and retry.")
+        }
+        ("invalid_input", _) => "Invalid tool input. Correct the arguments and retry.".into(),
+        (_, Some(message)) => message,
+        _ => "Shield could not complete this request. Inspect doctor and ask the user to resolve the reported problem before retrying.".into(),
+    }
+}
+
+fn pack_restore_summary(data: &Value) -> String {
+    let count = |key| data[key].as_array().map_or(0, Vec::len);
+    let restored = count("fetched");
+    let failed = count("fetch_failures");
+    let outcome = if restored == 0 && failed == 0 && data["policy_files"]["error"].is_null() {
+        "Locked pack artifacts are already available.".to_owned()
+    } else if failed > 0 {
+        format!("Restored {restored} locked packs. {failed} could not be restored.")
+    } else {
+        format!("Restored {restored} locked packs.")
+    };
+    with_guidance(&outcome, data)
+}
+
+fn with_guidance(outcome: &str, data: &Value) -> String {
+    data["next_action"]
+        .as_str()
+        .filter(|text| !text.is_empty())
+        .map_or_else(|| outcome.to_owned(), |text| format!("{outcome} {text}"))
+}
+
+fn diagnostic_summary(data: &Value) -> String {
+    let mut message = with_guidance(
+        data["summary"]
+            .as_str()
+            .unwrap_or("Shield diagnostics inspected."),
+        data,
     );
+    if data["enforcement_evidence"]["saved_policy"] == "enabled"
+        && data["enforcement_evidence"]["published_hooks"] == "configured"
+    {
+        message.push_str(" Host loading and interception are unverified.");
+    }
+    if let Some(checks) = data["checks"].as_array() {
+        let blocking = checks
+            .iter()
+            .filter(|check| check["blocking"] != false)
+            .count();
+        let warnings = checks.len() - blocking;
+        for (count, one, many) in [
+            (blocking, "check needs attention", "checks need attention"),
+            (warnings, "warning", "warnings"),
+        ] {
+            match count {
+                0 => {}
+                1 => {
+                    let _ = write!(message, " 1 {one}.");
+                }
+                _ => {
+                    let _ = write!(message, " {count} {many}.");
+                }
+            }
+        }
+    }
     message
 }
 
@@ -345,31 +349,16 @@ pub(super) struct TextData<'a> {
 
 enum Projection<'a> {
     Complete(&'a Value),
-    Selectors(&'a Value),
+    Selectors(&'a Value, &'static [&'static str]),
 }
 
 impl Serialize for Projection<'_> {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         match self {
             Self::Complete(data) => data.serialize(serializer),
-            Self::Selectors(data) => {
+            Self::Selectors(data, keys) => {
                 let mut map = serializer.serialize_map(None)?;
-                // Preserve the canonical key order of the compatibility text.
-                for key in [
-                    "after_candidate_id",
-                    "apply_arguments",
-                    "before_candidate_id",
-                    "policy_revision",
-                    "proposal_id",
-                    "status",
-                    "unchanged",
-                    "committed",
-                    "report_resources",
-                    "preparation_task_id",
-                    "review_arguments",
-                    "review_action",
-                    "next_action",
-                ] {
+                for &key in *keys {
                     if let Some(field) = data.get(key) {
                         map.serialize_entry(key, field)?;
                     }
@@ -381,6 +370,7 @@ impl Serialize for Projection<'_> {
 }
 
 pub(super) fn text_data<'a>(name: &str, value: &'a Value) -> TextData<'a> {
+    let data = &value["data"];
     TextData {
         data: if [
             "policy_propose",
@@ -395,9 +385,41 @@ pub(super) fn text_data<'a>(name: &str, value: &'a Value) -> TextData<'a> {
         ]
         .contains(&name)
         {
-            Projection::Selectors(&value["data"])
+            Projection::Selectors(
+                data,
+                &[
+                    "after_candidate_id",
+                    "apply_arguments",
+                    "before_candidate_id",
+                    "policy_revision",
+                    "proposal_id",
+                    "status",
+                    "unchanged",
+                    "committed",
+                    "report_resources",
+                    "preparation_task_id",
+                    "review_arguments",
+                    "review_action",
+                    "next_action",
+                ],
+            )
+        } else if name == "status" && data["summary"].is_string() {
+            Projection::Selectors(
+                data,
+                &[
+                    "project_root",
+                    "configuration",
+                    "policy_files",
+                    "enforcement_evidence",
+                    "policy_candidate_id",
+                    "pending_approvals",
+                    "pending_configuration_total",
+                    "next",
+                    "next_action",
+                ],
+            )
         } else {
-            Projection::Complete(&value["data"])
+            Projection::Complete(data)
         },
         error: &value["error"],
         missing: &value["missing"],
@@ -423,46 +445,18 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn setup_reports_distinguish_disabled_unpublished_and_configured_hooks() {
-        for tool in ["status", "doctor"] {
-            for (data, expected) in [
-                (
-                    json!({"enabled":false,"enforcement":"installed"}),
-                    "Shield enforcement is disabled.",
-                ),
-                (
-                    json!({"enabled":true,"enforcement":"defined-for-hub"}),
-                    "Shield is defined for Hub but native hooks are not published.",
-                ),
-                (
-                    json!({"enabled":true,"enforcement":"not-installed"}),
-                    "Shield has no native hooks configured.",
-                ),
-                (
-                    json!({"enabled":true,"enforcement":"installed"}),
-                    "Shield enforcement is enabled and native hooks are configured.",
-                ),
-                (
-                    json!({"enabled":true,"enforcement":"installed","policy_files":{"error":"invalid policy"}}),
-                    "Shield cannot load its policy files.",
-                ),
-            ] {
-                let message = summary(tool, Some("codex"), &json!({"data":data}));
-                assert!(message.starts_with(expected), "{message}");
-                assert!(
-                    message.contains("live policy interception are unverified"),
-                    "{message}"
-                );
-            }
-            let message = summary(
-                tool,
-                None,
-                &json!({"data":{"enabled":true,"enforcement":"degraded","repair_needed":true}}),
-            );
-            assert!(message.contains("mcp_setup"), "{message}");
-            assert!(message.contains("Hub's setup"), "{message}");
-            assert!(!message.contains("Ask the user to follow"), "{message}");
-        }
+    fn administrative_results_lead_with_the_outcome_and_its_action() {
+        let enabled = json!({"data":{"changed":true,"enabled":true},"error":null});
+        assert_eq!(
+            summary("enable", None, &enabled),
+            "Shield enabled for this project."
+        );
+        let hub = json!({"data":{"setup_status":"configured","next":{"server":"hub"},
+            "next_action":"Run Hub setup for this project."},"error":null});
+        assert_eq!(
+            summary("setup", None, &hub),
+            "Hub publication pending. Run Hub setup for this project."
+        );
     }
 
     #[test]

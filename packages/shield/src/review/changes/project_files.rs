@@ -5,6 +5,7 @@ use std::{collections::BTreeMap, path::Path};
 
 pub(in crate::review) struct Capture {
     pub(in crate::review) candidate: Value,
+    pub(in crate::review) snapshot: crate::configuration::Snapshot,
     pub(in crate::review) metadata: Value,
     pub(in crate::review) paths: BTreeMap<String, Option<String>>,
 }
@@ -12,6 +13,7 @@ pub(in crate::review) struct Capture {
 type Reader<'a> = dyn FnMut(&str) -> Result<Option<String>, Error> + 'a;
 
 pub(in crate::review) fn capture(context: &Context, before: &State) -> Result<Capture, Error> {
+    crate::diagnostics::trace::count("policy.file_source_reads", 1);
     let root = crate::review::project::root(context);
     let directory = crate::layout::bundle(&root);
     // Missing pack artifacts resolve exactly as they do for enforcement.
@@ -96,14 +98,22 @@ fn capture_with(before: &State, source: &mut Reader<'_>) -> Result<Capture, Erro
         .as_str()
         .map(|path| read(path)?.ok_or(Error::Invalid("project artifact unreadable")))
         .transpose()?;
-    let candidate = json!(crate::configuration::Bundle::capture_layers(
+    let (bundle, snapshot) = crate::configuration::Bundle::capture_with_snapshot(
         &source,
         local.as_deref(),
         &bytes,
         rules.as_deref(),
         local_rules.as_deref(),
         &disabled_bytes,
-    )?);
+    )?;
+    let candidate = json!(bundle);
+    // Keep the same bound as the encoded bundle reader without allocating and
+    // decoding JSON just to reconstruct the snapshot we already have.
+    let encoded =
+        crate::json::encoded_len(&candidate).map_err(|_| Error::Invalid("candidate encoding"))?;
+    if encoded > crate::configuration::MAX_BUNDLE_BYTES {
+        return Err(crate::policy::Error::Limit.into());
+    }
     update_shared_metadata(before, &source, &candidate, &mut meta)?;
     let paths = files
         .into_iter()
@@ -116,6 +126,7 @@ fn capture_with(before: &State, source: &mut Reader<'_>) -> Result<Capture, Erro
         .collect();
     Ok(Capture {
         candidate,
+        snapshot,
         metadata: meta,
         paths,
     })

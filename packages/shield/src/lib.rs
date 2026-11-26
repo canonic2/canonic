@@ -60,9 +60,14 @@ pub fn run(cli: &cli::Cli) -> std::process::ExitCode {
     let serve = cli.command.mcp_serve();
     // Internal callbacks already record fixed hook stages. They must not start
     // an asynchronous request writer whose shutdown can delay or warn on hooks.
-    let trace = (serve.is_none() && !matches!(cli.command, cli::PublicCommand::Internal(_)))
-        .then(|| log.request("command", "command", None, None))
-        .flatten();
+    let operation = match (&cli.command, serve) {
+        (_, Some(_)) => None,
+        (cli::PublicCommand::Internal(command), None) => {
+            matches!(command.as_ref(), cli::Command::Run(_)).then_some("checked_run")
+        }
+        _ => Some("command"),
+    };
+    let trace = operation.and_then(|operation| log.request("command", operation, None, None));
     let _trace_scope = trace.as_ref().map(diagnostics::trace::Request::enter);
     if !matches!(cli.command, cli::PublicCommand::Internal(_))
         && serve.is_none()
@@ -101,12 +106,10 @@ fn run_internal(
             return runtime_protocol::run(&input.project, input.timeout_ms);
         }
         cli::Command::SdkReadOpen(input) => {
-            return match review::sdk_read::mint(&input.project, &input.mapping_digest) {
-                Ok(context) => {
-                    println!("{}", context.launch_value());
-                    std::process::ExitCode::SUCCESS
-                }
-                Err(_) => std::process::ExitCode::from(2),
+            return if review::sdk_read::serve_owner(&input.project, &input.mapping_digest).is_ok() {
+                std::process::ExitCode::SUCCESS
+            } else {
+                std::process::ExitCode::from(2)
             };
         }
         cli::Command::SdkReadClose(input) => {

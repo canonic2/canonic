@@ -4,6 +4,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { transport } from '../process-transport/index.mjs';
 import { response, PROTOCOL_VERSION } from '../runtime-response/index.mjs';
 import { pinBinary, launchEnvironment } from './binary.mjs';
+import { openOwner } from './owner.mjs';
 
 const TOKEN = 'SHIELD_SDK_READ_CONTEXT_TOKEN';
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -21,7 +22,7 @@ const deny = request => ({ hookSpecificOutput: { hookEventName: 'PreToolUse', pe
 
 async function mappingDigest() {
   const hash = createHash('sha256').update('shield-sdk-read-mapping-v1\0');
-  for (const path of ['claude-runtime-read-only/index.mjs', 'claude-runtime-read-only/binary.mjs', 'runtime-response/index.mjs',
+  for (const path of ['claude-runtime-read-only/index.mjs', 'claude-runtime-read-only/binary.mjs', 'claude-runtime-read-only/owner.mjs', 'runtime-response/index.mjs',
     'enforcement-response/json.mjs', 'process-transport/index.mjs']) {
     const name = Buffer.from(path);
     const bytes = await readFile(new URL(`../${path}`, import.meta.url));
@@ -71,21 +72,20 @@ export async function createClaudeRuntimeReadOnlyClient(options) {
   const [binary, project] = await Promise.all([realpath(selectedBinary), realpath(selectedProject)]);
   const pin = await pinBinary(binary, binaryDigest);
   const launchEnv = launchEnvironment(process.env);
-  let token;
+  let owner;
   try {
-    token = await pin.guard(async () => transport({ binary, args: ['__internal', 'sdk-read-open', '--mapping-digest', await mappingDigest(), '--project', project],
-      timeoutMs, input: Buffer.alloc(0), env: launchEnv, stdoutLimit: 65 }, (bytes, exit) => {
-      if (exit !== 0 || bytes.length !== 65 || !/^[a-f0-9]{64}\n$/.test(bytes.toString('ascii'))) throw Error('Invalid context');
-      return bytes.toString('ascii').slice(0, 64);
-    }));
+    await pin.guard(async () => {
+      owner = await openOwner(binary, ['__internal', 'sdk-read-open', '--mapping-digest', await mappingDigest(), '--project', project], launchEnv, timeoutMs);
+    });
   } catch (error) {
+    await owner?.close().catch(() => {});
     await pin.close();
     if (error?.code === 'binary_identity' || error?.code === 'unsupported_platform') throw error;
     throw Error('Shield SDK context could not open. Verify the registered binary and retry with a new client.');
   }
   let projectId;
   let closing = false;
-  let closed = false;
+  let closePromise;
   const inflight = new Set();
   const pending = new Map();
   const completed = new Map();
@@ -97,7 +97,7 @@ export async function createClaudeRuntimeReadOnlyClient(options) {
     while (map.size > 128) map.delete(map.keys().next().value);
   };
   const track = (operation, overloaded) => {
-    if (inflight.size >= 8 || closing || closed) return Promise.resolve(overloaded());
+    if (inflight.size >= 8 || closing) return Promise.resolve(overloaded());
     const promise = operation();
     inflight.add(promise);
     promise.then(() => inflight.delete(promise), () => inflight.delete(promise));
@@ -105,13 +105,14 @@ export async function createClaudeRuntimeReadOnlyClient(options) {
   };
   const invoke = async (operation, payload, signal, deadline) => {
     const remaining = deadline === undefined ? timeoutMs : Math.min(timeoutMs, Math.floor(deadline - performance.now()));
-    if (remaining < 1 || signal?.aborted) throw Error('Shield callback expired');
+    const lifetime = signal ? AbortSignal.any([signal, owner.signal]) : owner.signal;
+    if (remaining < 1 || lifetime.aborted) throw Error('Shield callback interrupted');
     const frame = Buffer.from(JSON.stringify({ protocol_version: PROTOCOL_VERSION,
       correlation_id: randomUUID(), operation, payload }));
     if (frame.length > 524_288) throw Error('Shield request limit');
     const envelope = JSON.parse(frame.toString('utf8'));
     const result = await pin.guard(() => transport({ binary, args: ['__internal', 'runtime-request', '--project', project, '--timeout-ms', String(remaining)],
-      timeoutMs: remaining, signal, input: frame, env: { ...launchEnv, [TOKEN]: token }, expected: {
+      timeoutMs: remaining, signal: lifetime, input: frame, env: { ...launchEnv, [TOKEN]: owner.token }, expected: {
         correlation_id: envelope.correlation_id, operation, project_id: projectId,
         inputDigest: createHash('sha256').update(frame).digest('hex'), request_id: payload.request_id,
         retry_ref: payload.retry_ref, reported_request_id: payload.request_id } }, response));
@@ -121,12 +122,12 @@ export async function createClaudeRuntimeReadOnlyClient(options) {
   };
   const callback = (input, toolUseId, context = {}) => track(async () => {
     const controller = new AbortController();
-    const deadline = performance.now() + timeoutMs;
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    let deadline = performance.now() + timeoutMs;
+    let timer = setTimeout(() => controller.abort(), timeoutMs);
     controllers.add(controller);
     try {
-      if (closing || closed || (context.signal !== undefined && !(context.signal instanceof AbortSignal))) return deny();
-      const signal = context.signal ? AbortSignal.any([context.signal, controller.signal]) : controller.signal;
+      if (context.signal !== undefined && !(context.signal instanceof AbortSignal)) return deny();
+      const signal = AbortSignal.any([controller.signal, owner.signal, ...(context.signal ? [context.signal] : [])]);
       const call = capture(input, toolUseId);
       const reportedCwd = call.context.cwd;
       const identity = JSON.stringify([call.provenance.session_id, call.provenance.tool_use_id]);
@@ -144,22 +145,29 @@ export async function createClaudeRuntimeReadOnlyClient(options) {
       if (result.result.disposition === 'approval_required' && onApprovalRequired !== undefined) {
         const { approval_request_id: requestId, retry_ref: retryRef } = result.result;
         if (!requestId || !retryRef) throw Error('Missing private continuation');
+        const remaining = Math.floor(deadline - performance.now());
+        if (remaining < 1 || signal.aborted) throw Error('Shield callback interrupted');
+        clearTimeout(timer);
         let abort;
         try {
           await Promise.race([Promise.resolve().then(() => onApprovalRequired(Object.freeze({ request_id: requestId }), Object.freeze({ signal }))),
-            new Promise((_, reject) => { abort = () => reject(Error('Shield callback expired')); signal.addEventListener('abort', abort, { once: true }); if (signal.aborted) abort(); })]);
+            new Promise((_, reject) => { abort = () => reject(Error('Shield callback interrupted')); signal.addEventListener('abort', abort, { once: true }); if (signal.aborted) abort(); })]);
         } finally { if (abort) signal.removeEventListener('abort', abort); }
+        deadline = performance.now() + remaining;
+        timer = setTimeout(() => controller.abort(), remaining);
         result = await invoke('runtime.consume', { ...payload, request_id: requestId, retry_ref: retryRef }, signal, deadline);
       }
       const receipt = result.result;
       const diagnostic = receipt.history.status === 'dropped' ? warning() : {};
       if (receipt.disposition !== 'allowed') return { ...deny(receipt.approval_request_id), ...diagnostic };
+      if (receipt.consumed) clearTimeout(timer);
+      await pin.check();
+      if (signal.aborted || (!receipt.consumed && performance.now() >= deadline)) throw Error('Shield callback interrupted');
       if (tracked && !ambiguous && seen.get(identity)?.generation === generation) pending.set(identity, {
         call: { ...call, context: { ...call.context, cwd: effectiveCwd } }, reportedCwd,
         request_id: result.request_id, at: Date.now() });
       else pending.delete(identity);
       prune(pending);
-      await pin.check();
       return { ...diagnostic, hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow',
         permissionDecisionReason: receipt.consumed ? 'Shield consumed operator approval for this registered text read.' : 'Shield active policy permits this registered text read.',
         updatedInput: { ...call.input.original_input } } };
@@ -168,7 +176,7 @@ export async function createClaudeRuntimeReadOnlyClient(options) {
   }, () => ({ ...deny(), ...warning() }));
   const completion = (input, toolUseId, context = {}) => track(async () => {
     try {
-      if (closing || closed || (context.signal !== undefined && !(context.signal instanceof AbortSignal))) return warning();
+      if (context.signal !== undefined && !(context.signal instanceof AbortSignal)) return warning();
       const call = capture(input, toolUseId, true);
       const identity = JSON.stringify([call.provenance.session_id, call.provenance.tool_use_id]);
       prune(pending); prune(completed);
@@ -192,22 +200,20 @@ export async function createClaudeRuntimeReadOnlyClient(options) {
       return result.result.status === 'dropped' ? warning() : {};
     } catch { return warning(); }
   }, warning);
-  const matcher = hook => Object.freeze([Object.freeze({ hooks: Object.freeze([hook]), timeout: Math.ceil((timeoutMs + 1000) / 1000) })]);
-  const hooks = Object.freeze({ PreToolUse: matcher(callback), PostToolUse: matcher(completion), PostToolUseFailure: matcher(completion) });
-  return Object.freeze({ hooks, close: async () => {
-    if (closed) return;
+  const matcher = (hook, interactive = false) => Object.freeze([Object.freeze({ hooks: Object.freeze([hook]),
+    ...(interactive ? {} : { timeout: Math.ceil((timeoutMs + 1000) / 1000) }) })]);
+  const hooks = Object.freeze({ PreToolUse: matcher(callback, onApprovalRequired !== undefined),
+    PostToolUse: matcher(completion), PostToolUseFailure: matcher(completion) });
+  return Object.freeze({ hooks, close: () => closePromise ??= (async () => {
     closing = true;
     for (const controller of controllers) controller.abort();
     await Promise.allSettled([...inflight]);
     try {
-      await pin.guard(() => transport({ binary, args: ['__internal', 'sdk-read-close', '--project', project], timeoutMs,
-        input: Buffer.alloc(0), stdoutLimit: 0, env: { ...launchEnv, [TOKEN]: token } }, (bytes, exit) => {
-        if (exit !== 0 || bytes.length !== 0) throw Error('Invalid close');
-      }));
-    } catch { await pin.close(); closed = true; token = undefined; throw Error('Shield SDK context could not close.'); }
-    closed = true;
-    token = undefined;
-    await pin.close();
-    pending.clear(); completed.clear(); seen.clear();
-  } });
+      await owner.close();
+    } finally {
+      owner = undefined;
+      await pin.close();
+      pending.clear(); completed.clear(); seen.clear();
+    }
+  })() });
 }

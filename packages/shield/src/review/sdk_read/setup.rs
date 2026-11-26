@@ -43,7 +43,7 @@ impl Prepared {
             "mapping_files":mapping::paths(),
             "permission":"Only the registered plain-text Read mapping may run. Policy Deny blocks; policy Ask requires an independently reviewed exact-read approval. Shells, writes and unknown operations remain unsupported.",
             "consent_scope":"This developer and policy lineage, reusable across locations only for these exact binary and adapter mapping contents.",
-            "runtime_context":"Each factory obtains a private checkout-epoch context, expiring after one hour; at most 128 contexts are retained per developer. A copied or moved checkout cannot replay it.",
+            "runtime_context":"Each factory obtains a private context for this checkout that lasts while the factory owns its native lease. At most 128 live contexts are allowed per developer. A copied or moved checkout cannot replay it.",
             "policy_effect":"No policy permission, native integration or legacy SDK registration changes."
         })
     }

@@ -226,9 +226,9 @@ pub(super) fn validate_pending_ownership(meta: &Value) -> Result<(), Error> {
 /// Old mod registration requests precede host attribution. Retained ownership
 /// selects their receipt representation, never permission to read or execute.
 pub(crate) fn has_legacy_interceptor(root: &Path) -> bool {
-    review::open(root)
-        .and_then(|context| review::project::checkpoint(&context))
-        .and_then(|state| registration(&state.operator))
+    Store::inspect(root)
+        .and_then(|store| store.read_diagnostic_checkpoint())
+        .and_then(|(state, _)| registration(&state.operator))
         .ok()
         .flatten()
         .is_some_and(|registration| registration.interceptor.is_some())
@@ -806,12 +806,15 @@ fn diagnose_registered<'a>(
     unsettled: Option<&Plan>,
     diagnostics: &mut Vec<&'static str>,
     degraded: &mut std::collections::BTreeSet<&'a str>,
-) -> (Vec<&'a str>, Value, Value) {
+) -> (Vec<&'a str>, Value, Value, Vec<&'a str>) {
     let mut agents = Vec::new();
+    let mut ownership_conflicts = Vec::new();
     for (agent, installation) in &r.agents {
         let before = diagnostics.len();
-        if native::diagnose(root, agent, &r.binary, installation, diagnostics).is_err() {
-            diagnostics.push("agent native configuration is unreadable");
+        match native::diagnose(root, agent, &r.binary, installation, diagnostics) {
+            Ok(true) => ownership_conflicts.push(agent.as_str()),
+            Ok(false) => {}
+            Err(_) => diagnostics.push("agent native configuration is unreadable"),
         }
         if diagnostics.len() != before || unsettled.is_some_and(|p| p.affects(agent)) {
             degraded.insert(agent.as_str());
@@ -863,7 +866,12 @@ fn diagnose_registered<'a>(
         host_integration["definition_status"] = host_integration["status"].clone();
         host_integration["status"] = json!("degraded");
     }
-    (agents, host_integration, legacy_interceptor)
+    (
+        agents,
+        host_integration,
+        legacy_interceptor,
+        ownership_conflicts,
+    )
 }
 
 fn agent_output_drift(
@@ -935,6 +943,16 @@ fn diagnose_prefixes(
     }
 }
 
+/// The coverage diagnostic for a confirmed setup plan that has not finished.
+const SETUP_PENDING: &str = "confirmed setup requires repair";
+
+/// Whether coverage reports a confirmed setup plan that has not finished.
+pub(in crate::review) fn setup_pending(coverage: &Value) -> bool {
+    coverage["diagnostics"]
+        .as_array()
+        .is_some_and(|rows| rows.iter().any(|row| row == SETUP_PENDING))
+}
+
 pub(in crate::review) fn status(context: &Context, state: &State) -> Value {
     let root = Path::new(&context.project_root);
     let meta = crate::review::project::metadata(state);
@@ -944,27 +962,28 @@ pub(in crate::review) fn status(context: &Context, state: &State) -> Value {
         let unsettled = pending(&meta)?;
         let mut degraded = std::collections::BTreeSet::new();
         if unsettled.is_some() {
-            diagnostics.push("confirmed setup requires repair");
+            diagnostics.push(SETUP_PENDING);
         }
         let config = checked_mcp_config(root, registered.is_some(), &mut diagnostics)
             .unwrap_or_else(|_| {
                 diagnostics.push("shared MCP configuration is unreadable or invalid");
                 Value::Null
             });
-        let (agents, mut host_integration, legacy_interceptor) = registered.as_ref().map_or_else(
-            || (Vec::new(), Value::Null, Value::Null),
-            |r| {
-                diagnose_registered(
-                    root,
-                    state,
-                    r,
-                    &config,
-                    unsettled.as_ref(),
-                    &mut diagnostics,
-                    &mut degraded,
-                )
-            },
-        );
+        let (agents, mut host_integration, legacy_interceptor, ownership_conflicts) =
+            registered.as_ref().map_or_else(
+                || (Vec::new(), Value::Null, Value::Null, Vec::new()),
+                |r| {
+                    diagnose_registered(
+                        root,
+                        state,
+                        r,
+                        &config,
+                        unsettled.as_ref(),
+                        &mut diagnostics,
+                        &mut degraded,
+                    )
+                },
+            );
         // Coverage compares the agents' files with the policy files as they
         // are now, hand edits included, using their plan only when one is
         // already compiled. Status never compiles: without a cached plan the
@@ -1028,7 +1047,7 @@ pub(in crate::review) fn status(context: &Context, state: &State) -> Value {
                     "permission_request":adapter.is_some_and(|a|a.spec().events.iter().any(|(event,e)|*e==agents::Event::Permission && r.agents[agent].groups.contains_key(*event))),
                     "ask_fallback":if adapter.is_some_and(|a|a.spec().needs_ask_fallback) { json!(fallback(&meta,&state.settings,agent).unwrap_or_default()) } else { Value::Null }})
             }).collect::<Vec<_>>()),
-            "diagnostics":diagnostics,"repair_needed":!healthy,
+            "diagnostics":diagnostics,"repair_needed":!healthy,"hook_ownership_conflicts":ownership_conflicts,
             "tool_interception":if registered.as_ref().is_some_and(|r|!r.agents.is_empty()) {"native hooks installed; host loading is unverified"} else if !legacy_interceptor.is_null() {"legacy text-read interceptor installed; host loading is unverified"} else if host_integration.is_null() {"not installed"} else if host_integration["agent"] == host_definition::HUB.id {"native hooks defined for Hub to publish; host loading is unverified"} else {"native hooks defined for Box to publish; host loading is unverified"},
             "live_host_verification":"unverified",
             "discovery":"restart host; trust project, review native hooks and approve MCP",

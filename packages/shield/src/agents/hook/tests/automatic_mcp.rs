@@ -241,6 +241,7 @@ fn wrong_project_before_discovery(root: &Path, agent: &str) {
         "operation":{"kind":"mcp","alias":"external","tool":"docs_search","arguments":{"query":"rename"}}});
     let native = NativeContext {
         integration: agent,
+        event: Event::Before,
         approval: NativeApproval::Fallback,
         context_complete: true,
         working_files: None,

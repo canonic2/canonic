@@ -10,9 +10,8 @@ const object = value => value !== null && typeof value === 'object' && !Array.is
 
 function reply(bytes, exit, expected) {
   const value = parseJSON(bytes);
-  // An empty disposition retains the host's permissions for unmodeled calls.
-  if (exit === 0 && object(value) && Object.keys(value).length === 0
-    && expected.event === 'tool.execute.before') return null;
+  // Empty before defers to host permissions. Empty after acknowledges a skipped observation.
+  if (exit === 0 && object(value) && Object.keys(value).length === 0) return null;
   if (exit !== 0 || !object(value) || Object.keys(value).length !== 4
     || !['protocol_version','event','decision','reason'].every(key => Object.hasOwn(value,key))
     || value.protocol_version !== VERSION || value.event !== expected.event

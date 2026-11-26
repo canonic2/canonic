@@ -90,6 +90,37 @@ fn proposals_build_on_edited_files_and_keep_the_edit() {
 }
 
 #[test]
+fn following_policy_files_reuses_the_content_key_read() {
+    let (root, context) = crate::review::tests::enrolled();
+    let state = super::super::storage::Store::open(root.path()).unwrap();
+    let mut state = state.read_checkpoint().unwrap();
+    let config = crate::layout::config_file(root.path());
+    let text = fs::read_to_string(&config).unwrap();
+    // A new byte identity forces a first follow even if enrollment warmed the
+    // process cache. The edit changes no permissions.
+    fs::write(config, format!("# Acme policy\n{text}")).unwrap();
+    let logs = assert_fs::TempDir::new().unwrap();
+    let log = std::sync::Arc::new(crate::diagnostics::Log::create(logs.path()).unwrap());
+
+    for (reads, validations) in [(2, 2), (1, 0)] {
+        let trace = log.request("command", "follow policy", None, None).unwrap();
+        {
+            let _scope = trace.enter();
+            sync(&context, &mut state).unwrap();
+            assert_eq!(trace.recorded_count("policy.file_source_reads"), reads);
+            assert_eq!(
+                trace.recorded_count("policy.source_captures")
+                    + trace.recorded_count("policy.source_capture_reuses"),
+                validations
+            );
+        }
+        trace.finish("success");
+    }
+    let active = load(root.path()).unwrap();
+    assert_eq!(state.policy_revision, active.evaluator.revision());
+}
+
+#[test]
 fn rules_that_config_yml_does_not_name_are_reported_not_ignored() {
     let root = project();
     root.child(".shield/config.yml")
@@ -200,7 +231,20 @@ fn a_corrupt_cached_plan_is_compiled_again() {
     let cache = super::super::cache::default_directory().expect("cache");
     let path = plan_path(&cache, &policy.digest);
     fs::write(&path, b"not a plan").expect("corrupt");
-    let reloaded = load(root.path()).expect("recompiled");
+    let directory = assert_fs::TempDir::new().unwrap();
+    let log = std::sync::Arc::new(crate::diagnostics::Log::create(directory.path()).unwrap());
+    let trace = log.request("test", "load", None, None).unwrap();
+    let reloaded = {
+        let _scope = trace.enter();
+        load(root.path()).expect("recompiled")
+    };
+    trace.finish("success");
+    assert_eq!(trace.recorded_count("cache.plan_bytes_read"), 10);
+    assert!(
+        log.records().iter().any(|row| {
+            row["event"] == "request_span" && row["fields"]["stage"] == "cache.load"
+        })
+    );
     assert_eq!(policy.evaluator.revision(), reloaded.evaluator.revision());
     assert!(
         read_plan(&path, &policy.digest).is_some(),

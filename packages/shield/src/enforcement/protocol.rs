@@ -1,7 +1,7 @@
 //! Owns strict normalized host input, bounded text-read binding and gate transport.
 use super::{AgentAccess, Error, handoff, read_text::Binding};
 use crate::review::observations::{self, Host};
-use crate::{policy, runtime::Project};
+use crate::{agents::Event, policy, runtime::Project};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{fs, io::Read, path::Path, process::ExitCode};
@@ -19,6 +19,8 @@ pub(crate) enum NativeApproval {
 #[derive(Clone, Copy)]
 pub(crate) struct NativeContext<'a> {
     pub integration: &'a str,
+    /// Phase derived by the adapter from the validated vendor callback.
+    pub event: Event,
     pub approval: NativeApproval,
     pub context_complete: bool,
     pub working_files: Option<&'a crate::location::WorkingFiles>,
@@ -35,8 +37,14 @@ mod tests;
 #[cfg(test)]
 type NativeBoundaryHook = Box<dyn FnOnce()>;
 #[cfg(test)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum NativeBoundaryPoint {
+    BeforeAuthority,
+    BeforeDisposition,
+}
+#[cfg(test)]
 thread_local! {
-    static NATIVE_BOUNDARY: std::cell::RefCell<Option<NativeBoundaryHook>> = const { std::cell::RefCell::new(None) };
+    static NATIVE_BOUNDARY: std::cell::RefCell<Option<(NativeBoundaryPoint, NativeBoundaryHook)>> = const { std::cell::RefCell::new(None) };
 }
 #[cfg(test)]
 pub(crate) struct NativeBoundary;
@@ -48,10 +56,27 @@ impl Drop for NativeBoundary {
 }
 #[cfg(test)]
 pub(crate) fn before_native_authority(callback: impl FnOnce() + 'static) -> NativeBoundary {
+    at_native_boundary(NativeBoundaryPoint::BeforeAuthority, callback)
+}
+#[cfg(test)]
+pub(crate) fn at_native_boundary(
+    point: NativeBoundaryPoint,
+    callback: impl FnOnce() + 'static,
+) -> NativeBoundary {
     NATIVE_BOUNDARY.with(|slot| {
-        *slot.borrow_mut() = Some(Box::new(callback));
+        *slot.borrow_mut() = Some((point, Box::new(callback)));
     });
     NativeBoundary
+}
+#[cfg(test)]
+pub(crate) fn reach_native_boundary(point: NativeBoundaryPoint) {
+    let scheduled = NATIVE_BOUNDARY.with(|slot| {
+        slot.borrow_mut()
+            .take_if(|(scheduled, _)| *scheduled == point)
+    });
+    if let Some((_, callback)) = scheduled {
+        callback();
+    }
 }
 
 #[derive(Deserialize)]
@@ -240,6 +265,37 @@ pub(crate) struct NativeOutcome {
     pub(crate) receipt: Value,
     pub(crate) code: u8,
     pub(crate) authority: Option<crate::review::runtime::consumer::NativeAuthority>,
+    pub(crate) pending_history: Option<PendingNativeHistory>,
+}
+
+/// A candidate allowance is only published once the native handoff settles.
+pub(crate) struct PendingNativeHistory {
+    project_id: String,
+    cwd: String,
+    host: Host,
+    details: Value,
+}
+
+impl PendingNativeHistory {
+    pub(crate) fn record(
+        mut self,
+        root: &Path,
+        blocked: Option<&str>,
+        stage: &dyn Fn(&'static str),
+    ) -> Value {
+        stage("history_start");
+        if let Some(code) = blocked {
+            self.details["host_decision"] = json!("deny");
+            self.details["disposition"] = json!("blocked");
+            self.details["code"] = json!(code);
+            self.details["authorization"] = Value::Null;
+        }
+        let result = observations::context(root, &self.project_id, &self.cwd, &self.host)
+            .and_then(|context| observations::decision(&context, self.details));
+        let receipt = history_receipt(result, stage);
+        stage("history_ready");
+        receipt
+    }
 }
 
 /// One project-bound snapshot shared by host classification and evaluation.
@@ -295,7 +351,10 @@ pub(crate) fn evaluate_native(
     prepared: Option<Prepared>,
     stage: &dyn Fn(&'static str),
 ) -> (Value, u8) {
-    let outcome = evaluate_native_guarded(root, bytes, original, native, prepared, stage);
+    let mut outcome = evaluate_native_guarded(root, bytes, original, native, prepared, stage);
+    if let Some(history) = outcome.pending_history {
+        outcome.receipt["history"] = history.record(root, None, stage);
+    }
     (outcome.receipt, outcome.code)
 }
 
@@ -317,17 +376,15 @@ fn evaluate_with_original(
     stage("policy_evaluation_start");
     let (mut value, mut code) = match &input {
         None => (failure(None, "invalid-input"), 2),
-        Some(parsed) => completion_response(parsed).unwrap_or_else(|| {
-            evaluate_inner(root, parsed, original, native, prepared, stage, &mut source)
-        }),
+        Some(parsed) => completion_response(parsed, native.map(|context| context.event))
+            .unwrap_or_else(|| {
+                evaluate_inner(root, parsed, original, native, prepared, stage, &mut source)
+            }),
     };
     stage("policy_evaluation_ready");
     #[cfg(test)]
-    if native.is_some()
-        && code == 0
-        && let Some(callback) = NATIVE_BOUNDARY.with(|slot| slot.borrow_mut().take())
-    {
-        callback();
+    if native.is_some() && code == 0 {
+        reach_native_boundary(NativeBoundaryPoint::BeforeAuthority);
     }
     let authority = if native.is_some()
         && code == 0
@@ -345,7 +402,7 @@ fn evaluate_with_original(
             Err(error) => {
                 value = failure(
                     input.as_ref().map(|input| input.request_id.as_str()),
-                    runtime_failure(&crate::runtime::Error::from(error)),
+                    native_authority_failure(error),
                 );
                 code = 2;
                 None
@@ -376,6 +433,8 @@ fn evaluate_with_original(
         && value["policy_unavailable"] != true
         && let Some(host) = &input.host
     {
+        // A confirmed fallback can independently allow a policy Ask.
+        let independently_allowed = value["disposition"] == "allowed";
         let result = observations::context(
             root,
             input.expected_project_id.as_deref().unwrap_or_default(),
@@ -383,17 +442,18 @@ fn evaluate_with_original(
             host,
         )
         .and_then(|context| crate::review::session_grants::handoff(&context, &mut value, original));
-        if result.is_err() && value["decision"] != "allow" {
+        if result.is_err() && !independently_allowed {
             value = failure(Some(&input.request_id), "handoff-failed");
             code = 2;
         }
     }
-    let (receipt, code) =
+    let (receipt, pending_history) =
         finish_response(root, input.as_ref(), original, native, value, code, stage);
     NativeOutcome {
         receipt,
         code,
         authority,
+        pending_history,
     }
 }
 
@@ -407,7 +467,7 @@ fn finish_response(
     mut value: Value,
     code: u8,
     stage: &dyn Fn(&'static str),
-) -> (Value, u8) {
+) -> (Value, Option<PendingNativeHistory>) {
     if let Some(fields) = value.as_object_mut() {
         fields.remove("_shell_analysis");
         fields.remove("_codex_covered");
@@ -452,28 +512,38 @@ fn finish_response(
     if value.get("approval").is_none() {
         value["approval"] = json!({"request_id":null,"status":"none","approval_id":null});
     }
-    stage("history_start");
+    let pending_history = input.and_then(|input| {
+        (native.is_some()
+            && value["disposition"] == "allowed"
+            && !matches!(
+                input.operation,
+                Operation::Completion { .. } | Operation::Register
+            ))
+        .then_some(())?;
+        Some(PendingNativeHistory {
+            project_id: input.expected_project_id.clone()?,
+            cwd: input.cwd.clone(),
+            host: input.host.clone()?,
+            details: decision_details(input, &value, &observed, original),
+        })
+    });
+    if pending_history.is_none() {
+        stage("history_start");
+    }
     let legacy_receipt = native.is_none()
         && input
             .is_some_and(|input| input.protocol_version == 1 && uses_legacy_receipt(root, input));
     value["history"] = match input {
+        _ if pending_history.is_some() => {
+            json!({"status":"pending","request_id":null,"event_id":null})
+        }
         Some(input) if input.host.is_some() && !matches!(input.operation, Operation::Register) => {
             let result = if matches!(input.operation, Operation::Completion { .. }) && code != 0 {
                 Err(crate::review::Error::Invalid("invalid completion"))
             } else {
-                record(root, input, &value, &observed, original)
+                record(root, input, &value, &observed, original, native.is_some())
             };
-            result.unwrap_or_else(|error| {
-                // Preserve a bounded diagnostic category, never OS text or
-                // paths. Keep the closed SDK history-receipt shapes unchanged.
-                stage(match error {
-                    crate::review::Error::Locked => "history_failed_busy",
-                    crate::review::Error::Io(_) => "history_failed_io",
-                    crate::review::Error::Invalid(_) => "history_failed_invalid",
-                    _ => "history_failed_unavailable",
-                });
-                json!({"status":"failed","request_id":null,"event_id":null})
-            })
+            history_receipt(result, stage)
         }
         _ => json!({"status":"not-requested","request_id":null,"event_id":null}),
     };
@@ -501,8 +571,26 @@ fn finish_response(
         // changes only wire representation after policy, grants and history.
         fields.remove("diagnostics");
     }
-    stage("history_ready");
-    (value, code)
+    if pending_history.is_none() {
+        stage("history_ready");
+    }
+    (value, pending_history)
+}
+
+fn history_receipt(
+    result: Result<Value, crate::review::Error>,
+    stage: &dyn Fn(&'static str),
+) -> Value {
+    result.unwrap_or_else(|error| {
+        // Preserve a bounded diagnostic category, never OS text or paths.
+        stage(match error {
+            crate::review::Error::Locked => "history_failed_busy",
+            crate::review::Error::Io(_) => "history_failed_io",
+            crate::review::Error::Invalid(_) => "history_failed_invalid",
+            _ => "history_failed_unavailable",
+        });
+        json!({"status":"failed","request_id":null,"event_id":null})
+    })
 }
 
 fn uses_legacy_receipt(root: &Path, input: &Input) -> bool {
@@ -526,6 +614,7 @@ fn record(
     value: &Value,
     observed: &Value,
     original: Option<&Value>,
+    native: bool,
 ) -> Result<Value, crate::review::Error> {
     let id = input
         .expected_project_id
@@ -542,7 +631,12 @@ fn record(
         operation,
     } = &input.operation
     {
-        return observations::completion(
+        let complete = if native && matches!(operation.as_ref(), Operation::Mcp { .. }) {
+            observations::native_mcp_completion
+        } else {
+            observations::completion
+        };
+        return complete(
             &context,
             &crate::review::EventInput {
                 delivery_id: delivery_id.clone(),
@@ -552,6 +646,15 @@ fn record(
             &json!(operation),
         );
     }
+    observations::decision(&context, decision_details(input, value, observed, original))
+}
+
+fn decision_details(
+    input: &Input,
+    value: &Value,
+    observed: &Value,
+    original: Option<&Value>,
+) -> Value {
     let policy = observed["evaluation"]["decision"].clone();
     let host_decision = match value["disposition"].as_str() {
         Some("allowed") => json!("allow"),
@@ -559,14 +662,13 @@ fn record(
         Some("approval_required") => json!("ask"),
         _ => value["decision"].clone(),
     };
-    let details = json!({"operation":input.operation,"original_input":original,"request":observed["request"],
+    json!({"operation":input.operation,"original_input":original,"request":observed["request"],
         "evaluation":observed["evaluation"],"policy_revision":value["identity"]["policy_revision"],
         "activation_id":value["identity"]["activation_id"],"candidate_digest":value["identity"]["candidate_digest"],
-        "decision":policy,"host_decision":host_decision,"disposition":value["disposition"],"ask_fallback":value["ask_fallback"],"integration":value["integration"],"mcp_match":value["mcp_match"],"host_context_complete":value["host_context_complete"],"code":value["code"],"approval":value["approval"],"authorization":value["authorization"],"execution":"unobserved"});
-    observations::decision(&context, details)
+        "decision":policy,"host_decision":host_decision,"disposition":value["disposition"],"ask_fallback":value["ask_fallback"],"integration":value["integration"],"mcp_match":value["mcp_match"],"host_context_complete":value["host_context_complete"],"code":value["code"],"approval":value["approval"],"authorization":value["authorization"],"execution":"unobserved"})
 }
 
-fn completion_response(input: &Input) -> Option<(Value, u8)> {
+fn completion_response(input: &Input, native_event: Option<Event>) -> Option<(Value, u8)> {
     let Operation::Completion {
         status, operation, ..
     } = &input.operation
@@ -594,10 +696,19 @@ fn completion_response(input: &Input) -> Option<(Value, u8)> {
         mcp @ Operation::Mcp { .. } => mcp.valid_window(),
         _ => false,
     };
-    let valid_event = input.host.as_ref().is_some_and(|h| match status.as_str() {
-        "completed" | "unknown" => h.event == "PostToolUse",
-        "failed" | "cancelled" => h.event == "PostToolUseFailure",
-        _ => false,
+    let valid_event = input.host.as_ref().is_some_and(|host| {
+        // Native phases are trusted adapter context. Unwrapped SDK requests
+        // continue to supply only the versioned protocol's event names.
+        let event = native_event.or(match host.event.as_str() {
+            "PostToolUse" => Some(Event::Completed),
+            "PostToolUseFailure" => Some(Event::Failed),
+            _ => None,
+        });
+        matches!(
+            (event, status.as_str()),
+            (Some(Event::Completed), "completed" | "unknown")
+                | (Some(Event::Failed), "failed" | "cancelled")
+        )
     });
     Some(if valid_read && valid_event {
         (
@@ -659,7 +770,10 @@ fn evaluate_inner(
         mcp,
     } = prepared;
     if native.is_some() {
-        *source = Some(snapshot.native_source());
+        match snapshot.native_source() {
+            Ok(proof) => *source = Some(proof),
+            Err(error) => return (failure(id, native_authority_failure(error.into())), 2),
+        }
     }
     snapshot.observe_working_files(native.and_then(|n| n.working_files));
     let identity = snapshot.identity();
@@ -1281,6 +1395,13 @@ fn runtime_failure(error: &crate::runtime::Error) -> &'static str {
         crate::runtime::Error::Locked => "runtime-busy",
         crate::runtime::Error::CacheUnavailable => "compiled-cache-unavailable",
         _ => "runtime-unavailable",
+    }
+}
+
+pub(crate) fn native_authority_failure(error: crate::review::Error) -> &'static str {
+    match error {
+        crate::review::Error::StaleSnapshot => "policy-changed",
+        error => runtime_failure(&crate::runtime::Error::from(error)),
     }
 }
 

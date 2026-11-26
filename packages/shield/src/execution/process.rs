@@ -91,6 +91,7 @@ impl OwnedChild {
         Self::spawn(&super::launch::EffectiveLaunch::process_fixture(request)?)
     }
     pub(super) fn spawn(launch: &super::launch::EffectiveLaunch) -> Result<Self, Error> {
+        let _trace = crate::diagnostics::trace::span("child.spawn");
         let child = command(launch).spawn()?;
         Ok(Self {
             child,
@@ -253,6 +254,7 @@ impl OwnedChild {
         started: Instant,
         timeout: u64,
     ) -> Result<Outcome, Error> {
+        let _trace = crate::diagnostics::trace::span("child.wait");
         let mut stopping = None;
         loop {
             // Observe exit without reaping so the original leader still reserves

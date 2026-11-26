@@ -5,6 +5,7 @@ use crate::{
     configuration::{CandidateEvaluation, Evaluator},
     policy,
 };
+use policy::resolution::compiled::ExpirationWindow;
 use serde::Serialize;
 #[cfg(test)]
 use serde_json::{Value, json};
@@ -68,6 +69,7 @@ impl From<Error> for RuntimeError {
             Error::Io(error) => Self::Io(error),
             Error::Policy(error) => Self::Policy(error),
             Error::Invalid(reason)
+            | Error::HookOwnership(reason)
             | Error::Ambiguous { reason, .. }
             | Error::Grouped { reason, .. } => Self::Invalid(reason),
             Error::ApprovalFormTooLong { .. } => Self::Invalid("approval form is too long"),
@@ -147,6 +149,13 @@ impl SnapshotIdentity {
     #[must_use]
     pub fn candidate_digest(&self) -> &str {
         &self.candidate_digest
+    }
+
+    fn check_project(&self, state: &super::State) -> Result<(), Error> {
+        if state.project_id != self.project_id || state.project_root != self.project_root {
+            return Err(Error::StaleSnapshot);
+        }
+        Ok(())
     }
 }
 
@@ -228,17 +237,56 @@ pub struct Snapshot {
 pub(crate) struct NativeSource {
     identity: SnapshotIdentity,
     evaluator: Arc<Evaluator>,
+    expiration: Option<ExpirationWindow>,
 }
 
 /// Keeps acknowledged registry authority stable until vendor disposition is
 /// finalized. It does not hold project authority or cover external host work.
 pub(crate) struct NativeAuthority {
     identity: SnapshotIdentity,
+    expiration: Option<ExpirationWindow>,
+    modes: serde_json::Value,
+    installed: serde_json::Value,
     _registry: crate::review::registry_trust::Guard,
 }
 impl NativeAuthority {
     pub(crate) fn same_source(&self, other: &Self) -> bool {
-        self.identity == other.identity
+        self.identity == other.identity && self.expiration == other.expiration
+    }
+
+    /// Recheck after queueing for an exact grant or the final vendor reply.
+    pub(crate) fn check_locked(&self, state: &super::State) -> Result<(), Error> {
+        self.identity.check_project(state)?;
+        if state.operator["registry_trust"] != self.modes
+            || state.operator["installed"] != self.installed
+        {
+            return Err(Error::StaleSnapshot);
+        }
+        // The cache key binds the retained plan to the exact policy inputs.
+        // Check the files themselves because the checkpoint carries no rules.
+        let root = self.identity.project_root();
+        if crate::review::files::plan_key(root)? != self.identity.candidate_digest {
+            return Err(Error::StaleSnapshot);
+        }
+        if let Some(expiration) = &self.expiration
+            && !expiration.contains_now()?
+        {
+            return Err(Error::StaleSnapshot);
+        }
+        Ok(())
+    }
+
+    pub(crate) fn with_current<T>(&self, disposition: impl FnOnce() -> T) -> Result<T, Error> {
+        let store = Store::open(self.identity.project_root())?;
+        let context = Context::new(
+            self.identity.project_id.clone(),
+            self.identity.project_root.clone(),
+            "hook",
+        );
+        store.inspect_checkpoint(&context, &|| Ok(()), |state| {
+            self.check_locked(state)?;
+            Ok(disposition())
+        })
     }
 }
 impl NativeSource {
@@ -246,18 +294,8 @@ impl NativeSource {
         self.evaluator.effective().access_paths()
     }
 
-    /// The policy is the files; a request evaluated against them stays bound to
-    /// its project only.
-    fn check(&self, state: &super::State) -> Result<(), Error> {
-        if state.project_id != self.identity.project_id
-            || state.project_root != self.identity.project_root
-        {
-            return Err(Error::StaleSnapshot);
-        }
-        Ok(())
-    }
-    /// Acquire shared trust outside project authority, then confirm the exact
-    /// current policy revision and mode references under the short authority reader.
+    /// Acquire shared registry trust. The native handoff revalidates source
+    /// bytes and expiration after waiting, immediately before it grants access.
     pub(crate) fn acquire(&self, root: &Path) -> Result<NativeAuthority, Error> {
         let root = root.canonicalize()?;
         if root != Path::new(&self.identity.project_root) {
@@ -265,7 +303,7 @@ impl NativeSource {
         }
         let store = Store::open(&root)?;
         let state = store.read_checkpoint()?;
-        self.check(&state)?;
+        self.identity.check_project(&state)?;
         let registry = crate::review::registry_trust::guard_effective(
             &state.operator,
             self.evaluator.effective(),
@@ -274,17 +312,10 @@ impl NativeSource {
         if registry.revision != self.identity.registry_revision {
             return Err(Error::StaleSnapshot);
         }
-        let context = Context::new(state.project_id.clone(), state.project_root.clone(), "hook");
-        store.inspect_checkpoint(&context, &|| Ok(()), |current| {
-            self.check(current)?;
-            if current.operator["registry_trust"] != state.operator["registry_trust"]
-                || current.operator["installed"] != state.operator["installed"]
-            {
-                return Err(Error::StaleSnapshot);
-            }
-            Ok(())
-        })?;
         Ok(NativeAuthority {
+            expiration: self.expiration,
+            modes: state.operator["registry_trust"].clone(),
+            installed: state.operator["installed"].clone(),
             identity: self.identity.clone(),
             _registry: registry,
         })
@@ -338,11 +369,12 @@ pub(crate) fn codex_covers(
 }
 
 impl Snapshot {
-    pub(crate) fn native_source(&self) -> NativeSource {
-        NativeSource {
+    pub(crate) fn native_source(&self) -> Result<NativeSource, policy::Error> {
+        Ok(NativeSource {
             identity: self.identity.clone(),
             evaluator: Arc::clone(&self.evaluator),
-        }
+            expiration: self.evaluator.expiration_window()?,
+        })
     }
     pub(crate) fn has_mcp_integrations(&self) -> bool {
         self.evaluator.has_mcp_integrations()
@@ -416,10 +448,15 @@ impl Snapshot {
             dialect_version: dialect_version.map(str::to_owned),
             original_input: original.cloned().unwrap_or_else(|| serde_json::json!({})),
         };
+        let mut working_files = self.working_files.clone();
+        if let Some(files) = &mut working_files {
+            files.node_options =
+                std::env::var_os("NODE_OPTIONS").is_some_and(|value| !value.is_empty());
+        }
         let context = policy::resolution::normalized::Context {
             cwd: cwd.into(),
             environment: None,
-            working_files: self.working_files.clone(),
+            working_files,
         };
         input
             .validate(&context, &self.identity.project_root)
@@ -430,7 +467,7 @@ impl Snapshot {
                 &context,
                 &self.identity.project_root,
                 None,
-                &crate::evidence::now(),
+                &crate::evidence::policy_now(),
                 &|| Ok(()),
             )
             .map_err(RuntimeError::Policy)
@@ -587,11 +624,7 @@ pub(in crate::review) fn load(
             Error::PolicyFileConflict(_) => error,
             error => Error::PolicyFiles(error.to_string()),
         })?;
-    crate::review::registry_trust::recover_effective(
-        &state.operator,
-        policy.evaluator.effective(),
-    )?;
-    let registry_guard = crate::review::registry_trust::guard_effective(
+    let registry_guard = crate::review::registry_trust::guard_runtime(
         &state.operator,
         policy.evaluator.effective(),
         checkpoint,

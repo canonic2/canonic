@@ -186,6 +186,56 @@ fn enrolled_setup_without_forms_keeps_the_resolved_agent_in_the_terminal_command
 }
 
 #[test]
+fn enrolled_setup_form_refusals_keep_the_resolved_agent_in_the_terminal_command() {
+    for code in [
+        "confirmation_review_requires_details",
+        "confirmation_review_too_large",
+    ] {
+        let (server, project) = fixture(Some("codex"));
+        let mut connections = serde_json::Map::new();
+        if code == "confirmation_review_requires_details" {
+            connections.insert("acme".into(), json!({"transport":{"type":"stdio","command":"acme-private-launcher"},"agents":{"codex":"acme"}}));
+        } else {
+            for index in 0..5 {
+                let name = format!("acme-{index}");
+                let url = format!("https://acme.example/{index}/{}", "a".repeat(2900));
+                connections.insert(
+                    name.clone(),
+                    json!({"transport":{"type":"http","url":url},"agents":{"codex":name}}),
+                );
+            }
+        }
+        std::fs::write(
+            project.root.path().join(".shield/config.yml"),
+            json!({"schema_version":1,"packs":[],"mcp":connections}).to_string(),
+        )
+        .unwrap();
+        let transport = connect(server);
+        for modern in [false, true] {
+            let response = if modern {
+                transport.request(&super::skills::modern(
+                    3,
+                    "tools/call",
+                    json!({"name":"setup","arguments":{}}),
+                    json!({"elicitation":{"form":{}}}),
+                ))
+            } else {
+                transport.call(json!(2), "setup", &json!({}))
+            };
+            let error = &response["result"]["structuredContent"]["error"];
+            assert_eq!(error["code"], code, "{response}");
+            assert_eq!(
+                error["operator_action"],
+                json!({"command":"shield",
+                "argv":["--project",project.review.project_root,"setup","--agent","codex"]})
+            );
+            assert!(!response.to_string().contains("acme-private-launcher"));
+            assert!(!project.root.path().join(".codex/hooks.json").exists());
+        }
+    }
+}
+
+#[test]
 fn admin_parity_known_native_hosts_without_form_ui_report_the_in_session_gap() {
     for (agent, version) in [("gemini", "0.67.0"), ("agy", "1.5.1")] {
         let (server, _project) = fixture(Some(agent));

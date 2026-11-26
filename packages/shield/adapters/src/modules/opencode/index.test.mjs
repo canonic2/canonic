@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import plugin from './index.mjs';
 
-test('OpenCode V1 verifies result version, exact fields, exit and Deny before host execution', {skip:process.platform==='win32'}, async()=>{
+test('OpenCode V1 verifies exact replies for authorization and completion', {skip:process.platform==='win32'}, async t=>{
   const root=await mkdtemp(join(tmpdir(),'shield-opencode-plugin-'));
   const previousPath=process.env.PATH;
   try {
@@ -51,5 +51,19 @@ test('OpenCode V1 verifies result version, exact fields, exit and Deny before ho
     assert.equal(unmodeledOutput.args,unmodeledArgs);
     unmodeledOutput.args={command:'host still owns permission'};
     await assert.rejects(hooks['tool.execute.before']({...input,callID:''},{args}));
+
+    const warn=t.mock.method(console,'error',()=>{});
+    const complete=()=>hooks['tool.execute.after']({...input,args});
+    await complete();
+    assert.equal(warn.mock.callCount(),0,'a successful empty reply skips observation');
+    await fixture(JSON.stringify({protocol_version:1,event:'tool.execute.after',decision:'observed',reason:''}));
+    await complete();
+    assert.equal(warn.mock.callCount(),0,'a recorded observation stays quiet');
+    for(const [body,exit] of [['{}',2],['',0],['{"systemMessage":"Shield could not record the tool completion in history."}',0]]) {
+      await fixture(body,exit);
+      await complete();
+    }
+    assert.equal(warn.mock.callCount(),3);
+    for(const call of warn.mock.calls) assert.match(call.arguments[0],/completion history unavailable/);
   } finally { if(previousPath===undefined)delete process.env.PATH;else process.env.PATH=previousPath;await rm(root,{recursive:true,force:true}); }
 });

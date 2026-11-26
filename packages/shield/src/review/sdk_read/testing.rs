@@ -43,7 +43,12 @@ impl Fixture {
                 .collect::<Result<Vec<_>, _>>()?;
             issued
                 .into_iter()
-                .map(|issued| RegisteredReadConsumer::admit_secret(&self.root, issued.0))
+                .map(|issued| {
+                    Ok(RegisteredReadConsumer {
+                        _test_owner: Some(issued.1),
+                        ..RegisteredReadConsumer::admit_secret(&self.root, issued.0)?
+                    })
+                })
                 .collect()
         })
     }

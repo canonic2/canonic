@@ -32,9 +32,21 @@ pub(in crate::review::operator) struct Options {
     pub(in crate::review::operator) local: bool,
     /// A step comes before this walk, so Escape on its first question goes back.
     pub(in crate::review::operator) earlier: bool,
-    /// Start at the walk's last step with the selection's current values as
-    /// its answers, for a later step that went back into it.
+    /// Return to the last step of a completed walk.
     pub(in crate::review::operator) resume: bool,
+}
+
+/// Answers and the questions actually reached in this selection's walk.
+#[derive(Default)]
+pub(in crate::review::operator) struct Navigation {
+    answers: Answers,
+    history: Vec<usize>,
+}
+
+impl Navigation {
+    pub(in crate::review::operator) fn has_questions(&self) -> bool {
+        !self.history.is_empty()
+    }
 }
 
 /// Where the walk is.
@@ -56,20 +68,13 @@ pub(in crate::review::operator) fn walk(
     artifact: &str,
     settings: &mut Settings,
     options: Options,
+    navigation: &mut Navigation,
 ) -> Result<Step<()>, Error> {
     let flow = Flow::new(artifact, settings.effective().variables, options.scope)?;
-    let mut answers = Answers::new();
-    // Declarations asked in this walk, in order; going back pops one.
-    let mut history: Vec<usize> = Vec::new();
+    let Navigation { answers, history } = navigation;
     let mut next = 0;
     let mut stage = Stage::Questions;
     if options.resume {
-        for (index, (name, declaration)) in flow.declarations.iter().enumerate() {
-            if flow.asks(name, declaration, &answers) {
-                answers.insert(name.clone(), flow.current.get(name).cloned());
-                history.push(index);
-            }
-        }
         if history.is_empty() {
             return Ok(Step::Back);
         }
@@ -77,79 +82,93 @@ pub(in crate::review::operator) fn walk(
         next = flow.declarations.len();
         stage = if history.len() >= 2 {
             Stage::Review
-        } else if options.scope == Walk::All && !options.local && asks_place(settings, &answers) {
+        } else if options.scope == Walk::All
+            && !options.local
+            && asks_place(settings, &flow.declarations, answers)
+        {
             Stage::Place
         } else {
             next = history.pop().unwrap_or_default();
             Stage::Questions
         };
+    } else {
+        history.clear();
     }
     loop {
-        stage = match stage {
-            Stage::Questions => {
-                while next < flow.declarations.len() {
-                    let (name, declaration) = &flow.declarations[next];
-                    if flow.asks(name, declaration, &answers) {
-                        break;
-                    }
-                    answers.remove(name);
-                    next += 1;
-                }
-                let Some((name, declaration)) = flow.declarations.get(next) else {
-                    stage = Stage::Review;
-                    continue;
-                };
-                let known = questions::Known {
-                    current: flow.current.get(name),
-                    answered: answers.get(name),
-                    back: options.earlier || !history.is_empty(),
-                };
-                match questions::ask(tty, project, pack, name, declaration, &known)? {
-                    Step::Done(answer) => {
-                        answers.insert(name.clone(), answer);
-                        history.push(next);
+        stage =
+            match stage {
+                Stage::Questions => {
+                    while next < flow.declarations.len() {
+                        let (name, declaration) = &flow.declarations[next];
+                        if flow.asks(name, declaration, answers) {
+                            break;
+                        }
+                        answers.remove(name);
                         next += 1;
                     }
-                    Step::Back => match history.pop() {
-                        Some(previous) => next = previous,
-                        None => return Ok(Step::Back),
-                    },
-                }
-                Stage::Questions
-            }
-            Stage::Review if history.len() < 2 => Stage::Place,
-            Stage::Review => match flow.review(tty, project, pack, &mut answers)? {
-                Step::Done(()) => Stage::Place,
-                Step::Back => {
-                    next = history.pop().unwrap_or_default();
+                    let Some((name, declaration)) = flow.declarations.get(next) else {
+                        stage = Stage::Review;
+                        continue;
+                    };
+                    let known = questions::Known {
+                        current: flow.current.get(name),
+                        answered: answers.get(name),
+                        back: options.earlier || !history.is_empty(),
+                    };
+                    match questions::ask(tty, project, pack, name, declaration, &known)? {
+                        Step::Done(answer) => {
+                            answers.insert(name.clone(), answer);
+                            history.push(next);
+                            next += 1;
+                        }
+                        Step::Back => match history.pop() {
+                            Some(previous) => next = previous,
+                            None => return Ok(Step::Back),
+                        },
+                    }
                     Stage::Questions
                 }
-            },
-            Stage::Place if answers.is_empty() => return Ok(Step::Done(())),
-            Stage::Place => {
-                let place = if options.local {
-                    Step::Done(Place::Local)
-                } else if options.scope == Walk::Missing {
-                    Step::Done(Place::Suggested)
-                } else {
-                    placement(tty, settings, &flow.declarations, &answers)?
-                };
-                match place {
-                    Step::Done(place) => {
-                        bind_answers(settings, &flow.declarations, answers, place)?;
-                        return Ok(Step::Done(()));
-                    }
-                    Step::Back if history.len() >= 2 => Stage::Review,
-                    Step::Back => match history.pop() {
-                        Some(previous) => {
-                            next = previous;
+                Stage::Review if history.len() < 2 => Stage::Place,
+                Stage::Review => {
+                    let reviewed = flow.review(tty, project, pack, answers)?;
+                    // Editing an earlier answer can add or remove later questions.
+                    history.clear();
+                    history.extend(flow.declarations.iter().enumerate().filter_map(
+                        |(index, (name, _))| answers.contains_key(name).then_some(index),
+                    ));
+                    match reviewed {
+                        Step::Done(()) => Stage::Place,
+                        Step::Back => {
+                            next = history.pop().unwrap_or_default();
                             Stage::Questions
                         }
-                        None => return Ok(Step::Back),
-                    },
+                    }
                 }
-            }
-        };
+                Stage::Place if answers.is_empty() => return Ok(Step::Done(())),
+                Stage::Place => {
+                    let place = if options.local {
+                        Step::Done(Place::Local)
+                    } else if options.scope == Walk::Missing {
+                        Step::Done(Place::Suggested)
+                    } else {
+                        placement(tty, settings, &flow.declarations, answers)?
+                    };
+                    match place {
+                        Step::Done(place) => {
+                            bind_answers(settings, &flow.declarations, answers, place)?;
+                            return Ok(Step::Done(()));
+                        }
+                        Step::Back if history.len() >= 2 => Stage::Review,
+                        Step::Back => match history.pop() {
+                            Some(previous) => {
+                                next = previous;
+                                Stage::Questions
+                            }
+                            None => return Ok(Step::Back),
+                        },
+                    }
+                }
+            };
     }
 }
 
@@ -157,21 +176,22 @@ pub(in crate::review::operator) fn walk(
 fn bind_answers(
     settings: &mut Settings,
     declarations: &[(String, Declaration)],
-    mut answers: Answers,
+    answers: &Answers,
     place: Place,
 ) -> Result<(), Error> {
     for (name, declaration) in declarations {
-        let Some(answer) = answers.remove(name) else {
+        let Some(answer) = answers.get(name) else {
             continue;
         };
         let local = answer.is_some()
-            && match place {
-                Place::Suggested => suggests_local(settings, name, declaration),
-                Place::Project => false,
-                Place::Local => true,
-            };
+            && (declaration.executable_paths()
+                || match place {
+                    Place::Suggested => suggests_local(settings, name, declaration),
+                    Place::Project => false,
+                    Place::Local => true,
+                });
         settings.edit(local, |binding| {
-            match &answer {
+            match answer {
                 Some(value) => binding.variables.insert(name.clone(), value.clone()),
                 None => binding.variables.remove(name),
             };
@@ -334,17 +354,19 @@ enum Place {
     Local,
 }
 
-/// One question for all answers. Local-only selections and walks that only
-/// unset values have a single place and skip it.
+/// One question for shareable answers. Executable path lists always stay local.
 fn placement(
     tty: &mut Terminal,
     settings: &Settings,
     declarations: &[(String, Declaration)],
     answers: &Answers,
 ) -> Result<Step<Place>, Error> {
-    if !asks_place(settings, answers) {
+    if !asks_place(settings, declarations, answers) {
         return Ok(Step::Done(Place::Project));
     }
+    let executable_paths = declarations.iter().any(|(name, declaration)| {
+        declaration.executable_paths() && answers.get(name).is_some_and(Option::is_some)
+    });
     let local: Vec<&str> = declarations
         .iter()
         .filter(|(name, d)| {
@@ -355,22 +377,31 @@ fn placement(
     let suggested = if local.is_empty() {
         "Every value shared with the project".to_owned()
     } else {
-        format!("Only on this machine: {}", local.join(", "))
+        format!("In the local layer: {}", local.join(", "))
+    };
+    let (prompt, description, share) = if executable_paths {
+        (
+            "Where to save the other answers",
+            "Executable path lists use config.local.yml. Git ignore rules control what Git includes by default.",
+            "Share the other answers with the project",
+        )
+    } else {
+        (
+            "Where to save these answers",
+            "Shared values use config.yml. Local values use config.local.yml. Git ignore rules control what Git includes by default.",
+            "All shared with the project",
+        )
     };
     let chosen = tty.choose_step(
-        "Where to save these answers",
-        "Project values are committed and shared; local values stay on this machine.",
+        prompt,
+        description,
         &[
             ("suggested", "As the pack suggests", &suggested),
-            (
-                "project",
-                "All shared with the project",
-                "config.yml, shared with the team",
-            ),
+            ("project", share, "config.yml, shared with the team"),
             (
                 "local",
-                "All only on this machine",
-                "config.local.yml, ignored by Git",
+                "All in the local layer",
+                "config.local.yml, in this checkout",
             ),
         ],
         "suggested",
@@ -387,13 +418,21 @@ fn placement(
 }
 
 /// Whether the save-location question has a choice to offer.
-fn asks_place(settings: &Settings, answers: &Answers) -> bool {
-    settings.local.is_some() && answers.values().any(Option::is_some)
+fn asks_place(
+    settings: &Settings,
+    declarations: &[(String, Declaration)],
+    answers: &Answers,
+) -> bool {
+    settings.local.is_some()
+        && declarations.iter().any(|(name, declaration)| {
+            !declaration.executable_paths() && answers.get(name).is_some_and(Option::is_some)
+        })
 }
 
 fn suggests_local(settings: &Settings, name: &str, declaration: &Declaration) -> bool {
     let current = settings.layer(name);
-    current == "local"
+    declaration.executable_paths()
+        || current == "local"
         || (current != "project" && declaration.layer() == policy::model::variables::Layer::Local)
 }
 
@@ -401,6 +440,31 @@ fn suggests_local(settings: &Settings, name: &str, declaration: &Declaration) ->
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn sharing_guided_answers_keeps_executable_paths_local() {
+        let declarations: Vec<(String, Declaration)> = serde_json::from_value(json!([
+            ["tools", {"type":"list","description":"Tool paths","layer":"local",
+                "items":{"type":"string"},"discover":[{"path_search":"tool"}]}],
+            ["profile", {"type":"string","description":"Profile"}],
+        ]))
+        .unwrap();
+        let mut settings = Settings {
+            shared: policy::Binding::default(),
+            local: Some(crate::configuration::layers::Overlay::default()),
+        };
+        let paths = json!([crate::test_support::absolute("/opt/acme/bin/tool")]);
+        let mut answers = Answers::from([("tools".into(), Some(paths.clone()))]);
+        assert!(!asks_place(&settings, &declarations, &answers));
+        answers.insert("profile".into(), Some(json!("development")));
+        assert!(asks_place(&settings, &declarations, &answers));
+        bind_answers(&mut settings, &declarations, &answers, Place::Project).unwrap();
+        assert!(!settings.shared.variables.contains_key("tools"));
+        assert_eq!(settings.shared.variables["profile"], "development");
+        let local = settings.local.unwrap();
+        assert_eq!(local.variables["tools"], paths);
+        assert!(!local.variables.contains_key("profile"));
+    }
 
     #[test]
     fn a_list_item_saved_alone_shows_the_same_dependent_questions_as_a_list() {

@@ -123,7 +123,9 @@ fn results_preserve_complete_evidence_and_escaped_text_for_success_and_error() {
         } else {
             "Policy preview: ask. This result does not authorize execution."
         };
-        let expected = result(summary, &text, &evidence, failed);
+        let summary =
+            format!("{summary} Some details are omitted. Check the missing and truncated fields.");
+        let expected = result(&summary, &text, &evidence, failed);
         let reply = tool_result("policy_evaluate", None, evidence, failed, &|| Ok(()));
         assert_eq!(value(&reply), expected);
     }
@@ -215,7 +217,9 @@ fn pack_updates_notice_reaches_structured_and_text_results_without_proposing() {
         "reference":"main/acme/node","installed_version":"1.0.0","available_version":"2.0.0","freshness":"fresh"
     }]}}});
     // Cancelled serialization must not consume the first delivery.
-    let interrupted = with_pack_notice(&context, "status", evidence.clone(), false, &|| {
+    let status = with_pack_notice(&context, "status", evidence.clone(), false, &|| Ok(()));
+    assert!(status.structured_content.unwrap()["data"]["pack_update_notice"].is_null());
+    let interrupted = with_pack_notice(&context, "pack_list", evidence.clone(), false, &|| {
         Err(Interrupted)
     });
     assert!(
@@ -224,7 +228,7 @@ fn pack_updates_notice_reaches_structured_and_text_results_without_proposing() {
             .as_ref()
             .is_none_or(|v| v["data"]["pack_update_notice"].is_null())
     );
-    let reply = with_pack_notice(&context, "status", evidence.clone(), false, &|| Ok(()));
+    let reply = with_pack_notice(&context, "pack_list", evidence.clone(), false, &|| Ok(()));
     let data = reply.structured_content.as_ref().unwrap();
     assert!(
         data["data"]["pack_update_notice"]["instruction"]

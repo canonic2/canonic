@@ -553,8 +553,11 @@ impl Rule {
         if self.fallback.is_some() {
             result.insert("fallback-rules-v1".into());
         }
-        if self.agents.is_some() {
+        if let Some(agents) = &self.agents {
             result.insert("agent-outputs-v1".into());
+            if agents.trusts_project_node_tests() {
+                result.insert("project-node-tests-v1".into());
+            }
         }
         for value in std::iter::once(&self.conditions).chain(self.requirements.as_ref()) {
             if value["url"].get("subdomains").is_some() {

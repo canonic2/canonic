@@ -110,7 +110,7 @@ pub(crate) fn receipt(root: &Path, mut status: Value, outcome: &str) -> Value {
             rows.iter()
                 .any(|row| row["managed_by"] == "hub" && row["status"] == "installed")
         });
-    let (next_action, next) = if hub
+    let (next_action, mut next) = if hub
         && (outcome != "unchanged"
             || !hub_hooks
             || coverage["host_integration"]["status"] == "degraded")
@@ -137,6 +137,9 @@ pub(crate) fn receipt(root: &Path, mut status: Value, outcome: &str) -> Value {
     } else {
         ("", Value::Null)
     };
+    if next.is_object() {
+        next["project"] = json!(root);
+    }
     json!({"setup_status":outcome,"project":root,"project_id":status["project_id"],"policy_revision":status["policy_revision"],"enabled":status["enabled"],"enforcement":status["enforcement"],"cache_location":status["cache_location"],"next_action":next_action,"next":next})
 }
 

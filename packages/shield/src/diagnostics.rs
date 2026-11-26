@@ -66,7 +66,7 @@ impl Log {
     }
 
     #[cfg(test)]
-    fn create(directory: &Path) -> std::io::Result<Self> {
+    pub(crate) fn create(directory: &Path) -> std::io::Result<Self> {
         Self::create_with_drain(directory, Duration::from_millis(5))
     }
 
@@ -99,6 +99,15 @@ impl Log {
         self.path.as_deref()
     }
 
+    pub(crate) fn observed_us(&self, observed: Instant) -> u64 {
+        u64::try_from(
+            observed
+                .saturating_duration_since(self.started.expect("enabled diagnostics epoch"))
+                .as_micros(),
+        )
+        .unwrap_or(u64::MAX)
+    }
+
     pub(crate) fn request(
         self: &Arc<Self>,
         surface: &'static str,
@@ -126,6 +135,16 @@ impl Log {
         if let Some(recorder) = self.traces.get() {
             recorder.flush();
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn records(&self) -> Vec<Value> {
+        self.flush();
+        std::fs::read_to_string(self.path().unwrap())
+            .unwrap()
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect()
     }
 
     #[cfg(test)]
@@ -195,12 +214,7 @@ impl Log {
         let tool = frame
             .and_then(|v| v["params"]["name"].as_str())
             .filter(|s| tool_names().iter().any(|name| name == *s));
-        let observed_us = u64::try_from(
-            observed
-                .saturating_duration_since(self.started.expect("enabled diagnostics epoch"))
-                .as_micros(),
-        )
-        .unwrap_or(u64::MAX);
+        let observed_us = self.observed_us(observed);
         self.event(direction, || json!({"observed_us":observed_us,"bytes":bytes.len(),"valid_json":frame.is_some(),"method":method,"tool":tool,"id":frame.and_then(|v|label(&v["id"]).map(Value::String).or_else(||v["id"].as_i64().map(|id|json!(id)))),"error_code":frame.and_then(|v|v["error"]["code"].as_i64()),"tool_error":frame.and_then(|v|v["result"]["isError"].as_bool())}));
     }
 }

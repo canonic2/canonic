@@ -118,15 +118,16 @@ reports `not-checked` because it does not inspect agent integration files.
 When paused, `enforcement` reports `disabled` even when hooks remain installed;
 `enabled` is false. Protected-file and operator guards remain in place while
 ordinary policy enforcement is paused. Use the MCP `enable` tool or
-`shield enable` to review resuming enforcement. For a Hub installation,
-use `hub setup --dry-run` to review what Hub would publish; for Box, use
-`box config sync --server shield --dry-run`.
+`shield enable` to review resuming enforcement. If publication or repair is
+pending, follow the `next` action in Shield's report. Use
+`hub setup --dry-run` to inspect a Hub publication plan or
+`box config sync --server shield --dry-run` for Box.
+If Hub reports that published hooks were removed, review their restoration
+with Hub's returned action or run `hub setup --adopt` in the same project.
 
-Check `coverage.verification.agents` for recorded hook activity and its timestamp.
-Recorded events show that callbacks ran at those times; they do not prove that
-every current session loaded hooks. Missing or unavailable history also does not
-prove that hooks are inactive. Use `shield history list` and
-`shield history show ENTRY` to inspect the actual requests and outcomes.
+`status` and `doctor` leave live loading and interception unchecked. Use
+`shield history list` and `shield history show ENTRY` to inspect recorded
+callbacks, timestamps and decisions.
 
 Interrupted confirmed setup resumes on the next MCP request while preserving
 unrelated settings. If an owned setting conflicts, the agent can request

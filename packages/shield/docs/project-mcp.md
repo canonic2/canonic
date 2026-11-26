@@ -60,7 +60,11 @@ Existing or malformed project state retains its normal inspection and repair
 path; first-run setup does not overwrite it.
 
 For a Hub project, call Shield `setup`, then follow its `next` action to call
-Hub `setup` for publication. For direct setup use native IDs, for example
+Hub `setup` with the returned project arguments. Hub's `setup_preview` can show
+the publication plan first. Confirm changes in Hub's own review, and follow
+any operator action it returns if the host cannot show a form. After
+publication, use Shield `status` to check the hooks and `doctor` for any repair.
+For direct setup use native IDs, for example
 `agents: ["claude", "codex"]`. Reload affected agents to load new hooks.
 An existing MCP connection lets the agent finish configuration in-session;
 adding a connection to a running host may require a host reload before its tools
@@ -69,8 +73,8 @@ appear. `--skills-only` remains static discovery and cannot initialize a project
 | Category | Tools |
 | --- | --- |
 | Status | `status`, `doctor` |
-| Packs and registries | `pack_list`, `pack_show`, `registry_list`, `registry_add`, `registry_remove`, `registry_default`, `pack_search`, `pack_info`, `pack_add`, `pack_configure`, `pack_update`, `pack_remove` |
-| Policy and rules | `policy_show`, `rule_list`, `rule_add`, `rule_edit`, `rule_remove`, `suggestion_list`, `review_defer`, `policy_propose`, `policy_apply`, `policy_withdraw`, `policy_defer`, `policy_draft_list`, `policy_draft_remove`, `policy_reject` |
+| Packs and registries | `pack_list`, `pack_show`, `registry_list`, `registry_add`, `registry_remove`, `registry_default`, `pack_search`, `pack_info`, `pack_add`, `pack_configure`, `pack_update`, `pack_remove`, `pack_restore` |
+| Policy and rules | `policy_show`, `rule_list`, `rule_add`, `rule_edit`, `rule_remove`, `suggestion_list`, `review_defer`, `policy_propose`, `policy_review`, `policy_apply`, `policy_withdraw`, `policy_defer`, `policy_draft_list`, `policy_draft_remove`, `policy_reject` |
 | Approvals and history | `request_list`, `request_show`, `request_approve`, `request_deny`, `history_list`, `history_show`, `history_configure` |
 | Session grants | `session_grant_list`, `session_grant_show`, `session_grant_propose`, `session_grant_reconsider`, `session_grant_approve`, `session_grant_revoke` |
 | Administration | `setup`, `enable`, `disable`, `protection_set`, `mcp_setup` |
@@ -182,13 +186,25 @@ exact capture. Stale reviews require a fresh decision.
   reports each agent separately. Changes to a shared launcher location or the
   saved tool permissions include the affected integrations in a broader review
   with an explanation before anything is published.
-- Shield compiles the policy files itself; there is no cache tool. If a result
+- If `status` or `doctor` reports a missing locked pack, follow its
+  `next` action to `pack_restore`. This fetches the versions and digests
+  already named by the project's locks into the local artifact store.
+- Shield compiles the policy files itself. If a result
   reports `cache_unavailable`, call `doctor` and ask the user to fix the folder
   or choose another with `shield mcp setup --cache-dir`.
+
+`status` summarizes saved policy and integration configuration. Use `doctor`
+for the affected settings and the next repair step. Their `next` value names
+the project, tool and arguments or the scoped operator command when one is
+available. Configured hooks leave host loading and live interception unverified.
+Use `history_list` for retained interception evidence.
 
 `request_list` and `request_show` include native hook requests as well as read
 and execution requests. `request_deny` asks the user to deny a pending request
 or revoke its unused grant; consumption and revocation are mutually exclusive.
+The complete one-time review of an edit fits up to 12,000 UTF-8 bytes, including
+paths and review text. Split a larger change into complete patches at file or
+hunk boundaries so each patch can be shown in full.
 
 Only the agent that made a native hook request can approve it, and only when
 this project has that agent's integration. A copy carrying Shield's runtime
@@ -717,8 +733,8 @@ refused. Reconnect cannot take over a candidate. Closed attempts return no apply
 arguments. To try again while still authorized, prepare with a new
 `idempotency_key` or `supersedes_proposal_id` and obtain a fresh decision.
 
-If `policy_propose` reports a deadline error, its proposal may already be
-saved. Retry the identical arguments on the same connection to recover its
+If the reply to `policy_propose` is lost, its proposal may already be saved.
+Retry the identical arguments on the same connection to recover its
 current outcome. Only a live review owned by that interaction returns approval
 arguments. Use `policy_show`, with `proposal_id` for a known review, to inspect
 it. A timeout does not establish that the
@@ -1012,13 +1028,14 @@ no user input through `tasks/update`; well-formed unissued answers are ignored.
 Do not restart cancelled or failed work automatically. If it is still needed,
 prepare a new request with a new `idempotency_key` after inspecting the failure.
 
-Tasks retain results for 24 hours from creation. Each project admits at most
+Tasks retain results for 24 hours after settlement. Each project admits at most
 32 retained tasks and two running preparations; a full reservation selects the
 synchronous path before work starts. Captures are limited to 16 MiB and results
 to 1 MiB, within a 640 MiB project task-store bound. Oversized captures fail
-without creating a proposal. Execution has its own cooperative 60-second budget.
-Closing a connection does not cancel published work, but exiting its process can
-stop the worker. Reopening marks an interrupted task failed without replaying it.
+without creating a proposal. Published work runs while its worker owns the task.
+It can finish after a connection closes, and explicit cancellation stops it at
+its next checkpoint. If its process exits, reopening reports the interrupted
+task as failed without replaying it.
 Polling does not extend retention or restart work. It settles an unowned working
 record as failed even if the polling server was already running when its owner died.
 
@@ -1158,24 +1175,20 @@ Bundled reads use a separate worker with eight outstanding reads, allowing them
 to finish while the policy evaluator is busy.
 Task management uses two separate workers with eight outstanding requests, so
 status and cancellation remain reachable while preparation runs.
-`--request-timeout-ms` bounds active evaluation and encoding from dispatch
-(default 5,000 ms, range 1–60,000). A call that exceeds it receives `-32001`
-with recovery guidance. Queued calls have no separate deadline and wait for
-the worker to return. Client cancellation suppresses pending responses.
-A legacy approval form pauses the call's budget while the person decides. Its
-continuation uses the remaining budget for revalidation, commit and encoding.
-Modern form continuations arrive as separate calls with their own budgets.
-Cancellation is cooperative, so a worker blocked in native I/O can continue
-to hold up the queue after its timeout reply. Clients also own process and I/O
-limits. Lost `policy_propose` replies can be recovered by resubmitting the same
+Queued calls, active work and confirmation waits stay live while the request
+and connection are open. Clients may impose their own time limits. Client
+cancellation suppresses pending responses and stops work at its next checkpoint.
+A worker blocked in native I/O can hold up the queue until that I/O returns.
+Lost `policy_propose` replies can be recovered by resubmitting the same
 arguments. For any lost `pack_add` or `pack_configure` reply, inspect `policy_show`
 before retrying, even if no form opened. Consumed form state cannot be replayed
 and private answers must not be reconstructed.
 
 Keep stdin open until you have the replies you need. When it closes, queued
 policy mutations, including `policy_review` and `policy_apply`, are refused
-with `-32800`. A pending confirmation is withdrawn, and read-only tools
-still finish.
+with `-32800`. Shield withdraws pending confirmations and gives running work
+a 250 ms grace period before requesting cancellation. Queued reads can drain
+with the same grace period per call.
 
 Closing stdin drains admitted work and joins the worker before exit 0. Framing or
 transport failure cancels and joins work and exits 1. Resident clients complete

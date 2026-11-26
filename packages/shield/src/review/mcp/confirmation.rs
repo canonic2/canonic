@@ -88,6 +88,33 @@ pub(super) fn summary(proposal: &Proposal, args: &Value) -> String {
 }
 pub(super) fn captured_summary(candidate: &Value, reviewed_files: bool, args: &Value) -> String {
     let mut lines = Vec::new();
+    let comparison = &args["review"]["comparison"];
+    // Codex shows only a short preview of each approval argument.
+    // Lead with the host-access change and the exact prefix it covers.
+    for (change, heading) in [
+        ("added", "Grant Codex host access outside its sandbox."),
+        ("removed", "Remove Codex host access for these prefixes."),
+    ] {
+        let Some(prefixes) = comparison["codex_prefixes"][change]
+            .as_array()
+            .filter(|rows| !rows.is_empty())
+        else {
+            continue;
+        };
+        lines.push(heading.into());
+        for prefix in prefixes {
+            let positions = prefix["pattern"].as_array().into_iter().flatten();
+            let pattern = positions
+                .map(|position| match position.as_array().map(Vec::as_slice) {
+                    Some([token]) => token.to_string(),
+                    _ => position.to_string(),
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+            lines.push(format!("[{pattern}]"));
+        }
+        lines.push(String::new());
+    }
     if reviewed_files {
         lines.push("Adopt the current edits to this project's .shield policy files.".into());
     }
@@ -125,7 +152,6 @@ pub(super) fn captured_summary(candidate: &Value, reviewed_files: bool, args: &V
             ));
         }
     }
-    let comparison = &args["review"]["comparison"];
     lines.push(String::new());
     if let Some(summary) = override_review(comparison) {
         lines.push(summary);
@@ -162,9 +188,6 @@ pub(super) fn captured_summary(candidate: &Value, reviewed_files: bool, args: &V
                 text(&witness["after"])
             ));
         }
-    }
-    if !comparison["codex_prefixes"].is_null() {
-        lines.push("This also changes Codex command prefixes, which can let matching commands run outside its sandbox.".into());
     }
     for line in comparison["formatting"].as_array().into_iter().flatten() {
         lines.push(text(line));

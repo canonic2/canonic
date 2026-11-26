@@ -119,7 +119,7 @@ fn explicit_project_repair_uses_the_published_schema_and_original_connection_con
 fn pending(project: &Project) -> String {
     use crate::review::hook_approval::{Identity, Key, Outcome, Summary, refused};
     // Native hooks perform launcher maintenance before recording a refusal.
-    let (_, paused) = crate::review::open_native(project.root.path()).unwrap();
+    let (_, paused) = crate::review::open_native(project.root.path(), true).unwrap();
     assert!(paused.is_none());
     let active = &crate::review::runtime::current_identity(&project.review);
     let identity = Identity {

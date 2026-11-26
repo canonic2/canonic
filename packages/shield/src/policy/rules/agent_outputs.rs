@@ -5,9 +5,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// Most prefixes one rule can declare.
-const MAX_PREFIXES: usize = 16;
+pub(in crate::policy) const MAX_PREFIXES: usize = 16;
 /// Most positions in one prefix, and most tokens in one position.
-const MAX_TOKENS: usize = 32;
+pub(in crate::policy) const MAX_TOKENS: usize = 32;
 
 /// A rule's `agents` field.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -20,6 +20,8 @@ pub(crate) struct Agents {
 #[serde(deny_unknown_fields)]
 struct Codex {
     prefixes: Vec<Vec<Token>>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    trust_project_node_tests: bool,
 }
 
 /// One prefix position: a literal token, or a list of accepted tokens.
@@ -47,6 +49,8 @@ pub(crate) struct CodexPrefix {
     pub(crate) owner: String,
     pub(crate) rule: String,
     pub(crate) pattern: Vec<Vec<String>>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub(crate) trust_project_node_tests: bool,
 }
 
 impl CodexPrefix {
@@ -61,6 +65,10 @@ impl CodexPrefix {
 }
 
 impl Agents {
+    pub(super) fn trusts_project_node_tests(&self) -> bool {
+        self.codex.trust_project_node_tests
+    }
+
     /// Refuse prefixes this rule cannot vouch for. Each prefix starts within
     /// the rule's literal executable and argument prefix, so it never names a
     /// command family wider than the rule; later positions narrow it further.
@@ -98,6 +106,13 @@ impl Agents {
                     "each agents.codex prefix starts with the rule's executable and argument prefix",
                 ));
             }
+            if self.trusts_project_node_tests()
+                && (pattern[0].as_slice() != ["node"] || pattern[1].as_slice() != ["--test"])
+            {
+                return Err(Error::Contract(
+                    "trusted Node test prefixes must start with node --test",
+                ));
+            }
         }
         Ok(())
     }
@@ -123,6 +138,7 @@ pub(in crate::policy) fn codex_prefixes(
             owner: owner.into(),
             rule: rule.id.clone(),
             pattern: prefix.iter().map(Token::tokens).collect(),
+            trust_project_node_tests: agents.trusts_project_node_tests(),
         })
         .collect()
 }

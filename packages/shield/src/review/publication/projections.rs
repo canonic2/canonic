@@ -67,10 +67,16 @@ pub(in crate::review) fn projections(
 /// The projection closure without cloning or rendering any artifact bodies.
 pub(in crate::review) fn paths(candidate: &Value, meta: &Value) -> Result<BTreeSet<String>, Error> {
     let config = configuration::layers::merged(candidate)?;
-    let mut paths: BTreeSet<_> = locks(candidate, meta)?.into_keys().collect();
-    paths.extend(["config.yml".into(), "rules.yml".into()]);
+    let mut paths = BTreeSet::from([
+        "config.yml".into(),
+        "rules.yml".into(),
+        "shield.lock".into(),
+    ]);
     if candidate["local_config"].is_string() {
         paths.insert("config.local.yml".into());
+        if local_rows(&config, meta).next().is_some() {
+            paths.insert("shield.local.lock".into());
+        }
     }
     if candidate["local_rules"].is_string()
         && let Some(path) = config["local_rules"].as_str()
@@ -96,31 +102,28 @@ pub(in crate::review) fn locks(
     candidate: &Value,
     meta: &Value,
 ) -> Result<BTreeMap<String, String>, Error> {
+    crate::diagnostics::trace::count("projection.lock_sets_rendered", 1);
     let config = configuration::layers::merged(candidate)?;
-    let mut files = BTreeMap::new();
-    let rows = meta["installed"].as_array().cloned().unwrap_or_default();
-    let layer = |local: bool| {
-        let selected: Vec<_> = rows
-            .iter()
-            .enumerate()
-            .filter(|(index, _)| (config["packs"][*index]["layer"] == "local") == local)
-            .map(|(_, row)| portable(row))
-            .collect();
-        let mut locked = crate::review::packs::summaries(&json!({"installed":selected}));
-        locked["schema_version"] = json!(1);
-        (selected.is_empty(), locked.to_string())
-    };
+    let render = |rows: Vec<Value>| json!({"packs":rows,"schema_version":1}).to_string();
     let shared_rows: Vec<_> = shared_rows(candidate, meta)?.iter().map(portable).collect();
-    let mut shared_lock = crate::review::packs::summaries(&json!({"installed":shared_rows}));
-    shared_lock["schema_version"] = json!(1);
-    files.insert("shield.lock".into(), shared_lock.to_string());
+    let mut files = BTreeMap::from([("shield.lock".into(), render(shared_rows))]);
     if candidate["local_config"].is_string() {
-        let (none, locked) = layer(true);
-        if !none {
-            files.insert("shield.local.lock".into(), locked);
+        let selected: Vec<_> = local_rows(&config, meta).map(portable).collect();
+        if !selected.is_empty() {
+            files.insert("shield.local.lock".into(), render(selected));
         }
     }
     Ok(files)
+}
+
+/// Metadata for the effective selections in the local layer, in lockfile order.
+fn local_rows<'a>(config: &'a Value, meta: &'a Value) -> impl Iterator<Item = &'a Value> {
+    meta["installed"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .enumerate()
+        .filter_map(move |(index, row)| (config["packs"][index]["layer"] == "local").then_some(row))
 }
 
 /// Shared graph records are independent of the local graph's incoming edges.
@@ -131,30 +134,28 @@ pub(in crate::review) fn shared_rows(candidate: &Value, meta: &Value) -> Result<
             .ok_or(Error::Invalid("candidate config missing"))?,
     )?;
     let effective = configuration::layers::merged(candidate)?;
-    let active: Vec<_> = meta["installed"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .enumerate()
-        .filter(|(index, _)| effective["packs"][*index]["layer"] != "local")
-        .map(|(_, row)| row)
-        .collect();
+    let retained: Vec<_> = if let Some(rows) = meta["shared_installed"].as_array() {
+        rows.iter().collect()
+    } else {
+        meta["installed"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .enumerate()
+            .filter_map(|(index, row)| {
+                (effective["packs"][index]["layer"] != "local").then_some(row)
+            })
+            .chain(meta["disabled"].as_array().into_iter().flatten())
+            .collect()
+    };
     Ok(shared["packs"]
         .as_array()
         .into_iter()
         .flatten()
         .filter_map(|selection| {
-            let retained: Vec<_> = if let Some(rows) = meta["shared_installed"].as_array() {
-                rows.iter().collect()
-            } else {
-                active
-                    .iter()
-                    .copied()
-                    .chain(meta["disabled"].as_array().into_iter().flatten())
-                    .collect()
-            };
             retained
-                .into_iter()
+                .iter()
+                .copied()
                 .find(|row| {
                     row["id"] == selection["id"]
                         && (selection["registry_identity"].is_null()
@@ -182,7 +183,7 @@ pub(in crate::review) fn portable(row: &Value) -> Value {
 }
 
 pub(in crate::review) fn digest(files: &BTreeMap<String, String>) -> String {
-    policy::fingerprint(json!(files).to_string().as_bytes())
+    crate::json::fingerprint(files).expect("projection files serialize")
 }
 
 pub(in crate::review) fn file_hashes(files: &BTreeMap<String, String>) -> BTreeMap<String, String> {
@@ -284,4 +285,42 @@ pub(in crate::review) fn projection_hashes(
         hashes.insert(name.clone(), hash);
     }
     Ok(Value::Object(hashes))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn projection_paths_include_the_local_lock_only_for_local_selections() {
+        let selection = json!({"id":"acme/read","version":"1.0.0","profile":"recommended","path":"cache/acme.yml"});
+        for local in [false, true] {
+            let candidate = json!({
+                "config": json!({"schema_version":1,"packs":[]}).to_string(),
+                "local_config": if local {
+                    json!({"schema_version":1,"packs":[selection]}).to_string()
+                } else {
+                    "schema_version: 1\nenforcement: paused\n".to_owned()
+                },
+                "packs": if local { vec!["Acme test artifact"] } else { Vec::new() },
+            });
+            let meta = json!({"installed": if local { vec![&selection] } else { Vec::new() }});
+            let paths = paths(&candidate, &meta).unwrap();
+            let files = projections(&candidate, &meta).unwrap();
+            assert_eq!(paths, files.into_keys().collect::<BTreeSet<_>>());
+            assert_eq!(paths.contains("shield.local.lock"), local);
+        }
+    }
+
+    #[test]
+    fn projection_fingerprint_preserves_the_persisted_json_format() {
+        let files = BTreeMap::from([
+            ("rules.yml".into(), "# Acme Δ\nmessage: \"quoted\"\n".into()),
+            ("config.yml".into(), "schema_version: 1\npacks: []\n".into()),
+        ]);
+        assert_eq!(
+            digest(&files),
+            policy::fingerprint(json!(files).to_string().as_bytes())
+        );
+    }
 }

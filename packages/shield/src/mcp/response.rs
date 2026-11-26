@@ -21,7 +21,7 @@ pub(super) fn with_pack_notice(
     check: &dyn Fn() -> Result<(), Interrupted>,
 ) -> ToolResult {
     if !failed
-        && matches!(name, "status" | "pack_list")
+        && name == "pack_list"
         && let Some(pending) =
             crate::review::pack_updates::pending(review, "mcp", &value["data"]["pack_updates"])
     {

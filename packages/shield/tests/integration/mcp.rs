@@ -17,6 +17,9 @@ struct Server {
     reader: Option<JoinHandle<()>>,
 }
 
+#[cfg(unix)]
+mod combined_setup;
+
 pub(super) fn settle_startup(root: &assert_fs::TempDir) {
     cargo_bin_cmd!("shield")
         .args(["__internal", "history-events", "--project"])
@@ -45,13 +48,18 @@ impl Server {
     }
     fn start_at(cwd: &std::path::Path, selected: &std::path::Path, launch: &[&str]) -> Self {
         let mut command = std::process::Command::new(assert_cmd::cargo::cargo_bin!("shield"));
-        let mut child = command
+        command
             .env("HOME", super::fixture_home(cwd))
             .env("LOCALAPPDATA", super::fixture_home(cwd))
             .current_dir(cwd)
             .args(launch)
             .arg("--project")
-            .arg(selected)
+            .arg(selected);
+        Self::spawn(&mut command)
+    }
+
+    fn spawn(command: &mut std::process::Command) -> Self {
+        let mut child = command
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
@@ -291,6 +299,7 @@ fn historical_mcp_launch_forms_continue_to_serve_project_tools() {
         vec!["__internal", "mcp", "--agent", "claude-code"],
         vec!["__internal", "mcp", "--agent", "codex"],
         vec!["mcp", "serve", "--agent", "claude-code"],
+        vec!["mcp", "serve", "--request-timeout-ms", "1"],
     ] {
         let original = historical_checkpoint(&root);
         let path = root.path().join(".shield/state/state.json");
@@ -566,7 +575,7 @@ fn copied_executable_serves_bundled_content_without_a_project_or_source_files() 
 }
 
 #[test]
-fn deadline_limits_are_rejected_before_startup_or_side_effects() {
+fn invalid_legacy_deadlines_are_rejected_before_startup() {
     for deadline in ["0", "60001", "not-a-number"] {
         let output = cargo_bin_cmd!("shield")
             .args([

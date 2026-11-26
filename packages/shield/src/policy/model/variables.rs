@@ -317,18 +317,42 @@ impl Declaration {
         self.layer.unwrap_or(Layer::Project)
     }
 
+    /// Lists of discovered or explicitly configured absolute executable paths.
+    pub(crate) fn executable_paths(&self) -> bool {
+        self.kind == Kind::List && self.discover.is_some()
+    }
+
     fn validate(&self) -> Result<(), Error> {
         if let Some(candidates) = &self.discover {
-            if self.kind != Kind::String
+            if !matches!(self.kind, Kind::String | Kind::List)
                 || self.layer() != Layer::Local
                 || candidates.is_empty()
                 || candidates.len() > 16
             {
                 return Err(Error::Contract(
-                    "executable discovery requires 1-16 candidates on a local string variable",
+                    "executable discovery requires 1-16 candidates on a local string or executable path list",
+                ));
+            }
+            if self.executable_paths()
+                && (self
+                    .items
+                    .as_ref()
+                    .is_none_or(|items| items.kind != Kind::String)
+                    || self.default.is_some()
+                    || self.suggest.is_some())
+            {
+                return Err(Error::Contract(
+                    "executable path lists require string items and cannot declare defaults or file suggestions",
                 ));
             }
             for candidate in candidates {
+                if matches!(candidate, executables::Candidate::PathSearch { .. })
+                    && !self.executable_paths()
+                {
+                    return Err(Error::Contract(
+                        "PATH discovery requires an executable path list",
+                    ));
+                }
                 candidate.validate()?;
             }
         }
@@ -449,14 +473,9 @@ impl Declaration {
                 if items.len() < min || items.len() > max {
                     return Err(Error::Contract("list value is outside its bounds"));
                 }
-                let declared = self.items.as_ref().ok_or(Error::Syntax)?;
                 let mut seen = BTreeSet::new();
                 for item in items {
-                    if declared.kind == Kind::Choice {
-                        choice(declared.values.as_deref().unwrap_or_default(), item)?;
-                    } else {
-                        string(item, declared.matcher.as_ref(), declared.max_length)?;
-                    }
+                    self.check_list_item(item)?;
                     if !seen.insert(item.as_str()) {
                         return Err(Error::Contract("list value has duplicate items"));
                     }
@@ -467,6 +486,22 @@ impl Declaration {
             return Err(Error::Contract(
                 "variable values cannot contain credentials",
             ));
+        }
+        Ok(())
+    }
+
+    pub(crate) fn check_list_item(&self, item: &Value) -> Result<(), Error> {
+        let declared = self.items.as_ref().ok_or(Error::Syntax)?;
+        if declared.kind == Kind::Choice {
+            return choice(declared.values.as_deref().unwrap_or_default(), item);
+        }
+        string(item, declared.matcher.as_ref(), declared.max_length)?;
+        if self.executable_paths()
+            && !item.as_str().is_some_and(|path| {
+                !path.contains(['\r', '\n']) && std::path::Path::new(path).is_absolute()
+            })
+        {
+            return Err(Error::Contract("executable paths must be absolute"));
         }
         Ok(())
     }

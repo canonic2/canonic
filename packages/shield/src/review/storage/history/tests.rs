@@ -58,33 +58,77 @@ fn event(store: &Store, receipt: &Value) -> Option<Value> {
 }
 
 #[test]
-fn mcp_sql_payloads_are_absent_from_retained_decisions_and_completions() {
-    let (root, context) = enrolled();
-    let operation = json!({"kind":"mcp","alias":"project-data","tool":"execute_sql",
-        "arguments":{"query":"select 'fixture-private-value'"}});
-    let decision = observations::decision(
-        &context,
-        json!({"operation":operation,"original_input":{"tool_input":operation["arguments"]},
-            "evaluation":{"decision":"allow"},"host_decision":"allow","disposition":"allowed"}),
-    )
-    .unwrap();
-    let completion = observations::completion(
-        &context,
-        &review::EventInput {
-            delivery_id: "acme-sql-delivery".into(),
-            request_id: decision["request_id"].as_str().map(str::to_owned),
-            status: "completed".into(),
-        },
-        &operation,
-    )
-    .unwrap();
+fn mcp_sql_calls_keep_distinct_history_links_with_redacted_arguments() {
+    let (root, mut context) = enrolled();
+    context.surface = "hook".into();
+    context.agent = Some("codex".into());
+    context.session_id = Some("acme-session".into());
+    context.tool_use_id = Some("reused-call".into());
+    context.cwd = Some(context.project_root.clone());
+    context.host_event_name = Some("PreToolUse".into());
+    let operations = ["fixture-private-first", "fixture-private-second"].map(|value| {
+        json!({"kind":"mcp","alias":"project-data","tool":"execute_sql",
+            "arguments":{"query":format!("select '{value}'")}})
+    });
+    let decisions = operations.each_ref().map(|operation| {
+        observations::decision(
+            &context,
+            json!({"operation":operation,"original_input":{"tool_input":operation["arguments"]},
+                "evaluation":{"decision":"allow"},"host_decision":"allow","disposition":"allowed"}),
+        )
+        .unwrap()
+    });
+    context.host_event_name = Some("PostToolUse".into());
+    let [first, second, wrong_reference] = [
+        ("first-delivery", &operations[0], None),
+        ("second-delivery", &operations[1], None),
+        (
+            "wrong-reference",
+            &operations[1],
+            decisions[0]["request_id"].as_str(),
+        ),
+    ]
+    .map(|(delivery, operation, request)| {
+        observations::native_mcp_completion(
+            &context,
+            &review::EventInput {
+                delivery_id: delivery.into(),
+                request_id: request.map(str::to_owned),
+                status: "completed".into(),
+            },
+            operation,
+        )
+        .unwrap()
+    });
     let store = Store::open(root.path()).unwrap();
-    for receipt in [&decision, &completion] {
-        let stored = event(&store, receipt).unwrap();
-        assert_eq!(stored["details"]["operation"]["tool"], "execute_sql");
-        assert_eq!(stored["details"]["operation"]["arguments"], "[REDACTED]");
-        assert!(!stored.to_string().contains("fixture-private-value"));
+    let state = store.read_history().unwrap();
+    let get = |receipt: &Value| {
+        state
+            .events
+            .iter()
+            .find(|event| event["event_id"] == receipt["event_id"])
+            .unwrap()
+    };
+    for receipt in decisions.iter().chain([&first, &second, &wrong_reference]) {
+        let displayed = get(receipt);
+        assert_eq!(displayed["details"]["operation"]["tool"], "execute_sql");
+        assert_eq!(displayed["details"]["operation"]["arguments"], "[REDACTED]");
+        assert!(displayed["details"].get("mcp_operation_digest").is_none());
     }
+    assert_eq!(
+        get(&first)["links"]["decision_event_id"],
+        decisions[0]["event_id"]
+    );
+    assert_eq!(
+        get(&second)["links"]["decision_event_id"],
+        decisions[1]["event_id"]
+    );
+    assert!(get(&wrong_reference)["links"]["decision_event_id"].is_null());
+    assert!(
+        !fs::read_to_string(active(&store, &state))
+            .unwrap()
+            .contains("fixture-private-")
+    );
 }
 
 fn history_log(directory: &Path) -> std::sync::Arc<crate::diagnostics::Log> {
@@ -226,12 +270,13 @@ fn callback_work_counters_separate_bounded_append_from_history_inspection() {
 }
 
 #[test]
-fn busy_history_skips_decisions_and_bounds_completion_retries() {
-    let (root, context) = enrolled();
-    let store = Store::open(root.path()).unwrap();
-    let _guard = lock(&store).unwrap();
+fn busy_history_marks_lost_decisions_and_completions() {
     let logs = assert_fs::TempDir::new().unwrap();
     let log = history_log(logs.path());
+    let (root, context) = enrolled();
+    let store = Store::open(root.path()).unwrap();
+    let kept = decision(&context, "kept");
+    let guard = lock(&store).unwrap();
     let request = log.request("hook", "decision", None, None).unwrap();
     {
         let _scope = request.enter();
@@ -242,10 +287,25 @@ fn busy_history_skips_decisions_and_bounds_completion_retries() {
     }
     assert_eq!(request.recorded_count("history.lock_attempts"), 1);
     assert_eq!(request.recorded_count("history.lock_waits"), 1);
-    assert_eq!(request.recorded_count("state.checkpoint_reads"), 0);
+    assert_eq!(request.recorded_count("state.checkpoint_reads"), 1);
+    assert_eq!(request.recorded_count("history.directory_entries"), 0);
     assert_eq!(request.recorded_count("history.appended_records"), 0);
     request.finish("dropped");
+    drop(guard);
+    let state = store.read_history().unwrap();
+    assert!(!state.history_available);
+    assert!(error_path(&store, &state).unwrap().exists());
+    assert!(
+        state
+            .events
+            .iter()
+            .any(|event| event["event_id"] == kept["event_id"])
+    );
 
+    let (root, context) = enrolled();
+    let store = Store::open(root.path()).unwrap();
+    let kept = decision(&context, "kept");
+    let guard = lock(&store).unwrap();
     let request = log.request("hook", "completion", None, None).unwrap();
     {
         let _scope = request.enter();
@@ -260,9 +320,26 @@ fn busy_history_skips_decisions_and_bounds_completion_retries() {
         ));
     }
     assert_eq!(request.recorded_count("history.lock_waits"), 500);
-    assert_eq!(request.recorded_count("state.checkpoint_reads"), 0);
+    assert_eq!(request.recorded_count("state.checkpoint_reads"), 1);
+    assert_eq!(request.recorded_count("history.directory_entries"), 0);
     assert_eq!(request.recorded_count("history.appended_records"), 0);
     request.finish("dropped");
+    drop(guard);
+    let state = store.read_history().unwrap();
+    assert!(!state.history_available);
+    assert!(error_path(&store, &state).unwrap().exists());
+    assert!(
+        state
+            .events
+            .iter()
+            .any(|event| event["event_id"] == kept["event_id"])
+    );
+    assert!(
+        !state
+            .events
+            .iter()
+            .any(|event| event["kind"] == "completion")
+    );
 }
 
 #[cfg(windows)]

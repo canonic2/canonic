@@ -1,5 +1,6 @@
 //! Actual process death releases the execution lease, without replaying preparation.
 use super::*;
+use std::time::Duration;
 use std::{
     io::{BufRead as _, Read as _, Write as _},
     process::{Child, Command, Stdio},

@@ -1,8 +1,14 @@
 //! Existing-only admission and writer-owned bounded private indexes.
 use super::model::{Contexts, INDEX_BYTES, Profiles};
-use crate::review::{Error, storage::private_files};
+use crate::review::{
+    Error,
+    storage::{objects, private_files},
+};
 use serde::de::DeserializeOwned;
-use std::path::{Path, PathBuf};
+use std::{
+    fs::{self, File, TryLockError},
+    path::{Path, PathBuf},
+};
 
 #[cfg(test)]
 thread_local! {
@@ -72,6 +78,35 @@ pub(super) fn contexts(directory: &Path) -> Result<Contexts, Error> {
     });
     contexts.validate()?;
     Ok(contexts)
+}
+
+fn owner_path(directory: &Path, id: &str) -> PathBuf {
+    directory.join(format!("owner-{id}.lock"))
+}
+
+pub(super) fn own_context(directory: &Path, id: &str) -> Result<File, Error> {
+    objects::own_file(&owner_path(directory, id))
+}
+
+pub(super) fn context_alive(directory: &Path, id: &str) -> Result<bool, Error> {
+    match objects::read_file(&owner_path(directory, id)) {
+        Ok(file) => match file.try_lock_shared() {
+            Ok(()) => Ok(false),
+            Err(TryLockError::WouldBlock) => Ok(true),
+            Err(TryLockError::Error(error)) => Err(error.into()),
+        },
+        Err(Error::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(error),
+    }
+}
+
+pub(super) fn remove_owner(directory: &Path, id: &str) -> Result<(), Error> {
+    let path = owner_path(directory, id);
+    match objects::read_file(&path) {
+        Ok(_) => Ok(fs::remove_file(path)?),
+        Err(Error::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error),
+    }
 }
 
 /// Caller owns the namespace's exclusive kernel lease.

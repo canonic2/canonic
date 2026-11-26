@@ -325,9 +325,11 @@ fn preparation_tasks_corrupt_optional_storage_preserves_ordinary_tools() {
 
 #[test]
 fn preparation_tasks_survive_reconnect_then_require_fresh_owned_review_and_confirmation() {
+    let directory = assert_fs::TempDir::new().unwrap();
+    let log = Arc::new(crate::diagnostics::Log::create(directory.path()).unwrap());
     let (server, project) = fixture(Some("claude"));
     let jobs = server.preparations.clone();
-    let first = connect(server);
+    let first = connect(server.with_log(log.clone()));
     let revision = project.revision();
     let request = modern(
         2,
@@ -340,6 +342,25 @@ fn preparation_tasks_survive_reconnect_then_require_fresh_owned_review_and_confi
     assert!(id.is_string());
     first.close().1.unwrap();
     jobs.join();
+    let records = log.records();
+    let parent = &records
+        .iter()
+        .find(|row| row["event"] == "request_start" && row["fields"]["request_id"] == 2)
+        .unwrap()["fields"]["trace_id"];
+    let child = &records
+        .iter()
+        .find(|row| {
+            row["event"] == "request_related"
+                && row["fields"]["relationship"] == "child"
+                && &row["fields"]["origin_trace_id"] == parent
+        })
+        .unwrap()["fields"]["trace_id"];
+    assert_ne!(child, parent);
+    assert!(records.iter().any(|row| {
+        row["event"] == "request_end"
+            && &row["fields"]["trace_id"] == child
+            && row["fields"]["outcome"] == "completed"
+    }));
     assert_eq!(project.revision(), revision);
     let second = connect(Server::for_review((*project.review).clone()).unwrap());
     let completed = get(&second, 3, &id);
@@ -391,6 +412,21 @@ fn preparation_tasks_survive_reconnect_then_require_fresh_owned_review_and_confi
         stale["result"]["structuredContent"]["error"]["code"],
         "stale_revision"
     );
+}
+
+#[test]
+fn preparation_tasks_get_reads_completed_results_alongside_another_reader() {
+    let (server, project) = fixture(Some("claude"));
+    let jobs = server.preparations.clone();
+    let transport = connect(server);
+    let task = completed_task(&transport, &jobs, 2, &rule("acme-poll", "acme"));
+    let mutex = std::path::Path::new(&project.review.project_root)
+        .join(".shield/state/preparation-tasks/.objects.lock");
+    let reader = std::fs::File::open(mutex).unwrap();
+    reader.lock_shared().unwrap();
+    let reply = get(&transport, 4, &task);
+    assert_eq!(reply["result"]["status"], "completed", "{reply}");
+    assert!(reply.to_string().contains("review_arguments"), "{reply}");
 }
 
 #[test]
