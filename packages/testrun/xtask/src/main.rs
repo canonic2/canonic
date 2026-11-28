@@ -11,6 +11,8 @@ Tasks:
       Install testrun into DIR/bin, default ~/.local/bin, ad-hoc signed on
       macOS, and the iOS runner sources, license and notices into
       DIR/share/testrun. CARGO_ARGS reach cargo install, such as --offline.
+  stage-release BINARY PREFIX
+      Copy a built executable and its resources into a new package directory.
   browser-session-checkpoint --installed PATH --cache DIR
       Run the installed 5.5 session checkpoint with synthetic local fixtures.
   browser-feature-checkpoint --installed PATH --cache DIR
@@ -43,6 +45,7 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let result = match args.first().map(String::as_str) {
         Some("install") => install(&args[1..]),
+        Some("stage-release") => stage_release(&args[1..]),
         Some("browser-session-checkpoint") => {
             browser_checkpoint(&args[1..], "installed_browser_session_checkpoint")
         }
@@ -192,13 +195,38 @@ fn install(args: &[String]) -> Result<(), String> {
             .args(["--sign", "-", "--force"])
             .arg(prefix.join("bin/testrun")))?;
     }
-    let share = prefix.join("share/testrun");
-    let runner = share.join("runner/ios");
+    let runner = prefix.join("share/testrun/runner/ios");
     if runner.exists() {
         std::fs::remove_dir_all(&runner)
             .map_err(|error| format!("cannot replace {}: {error}", runner.display()))?;
     }
-    copy_tree(&root.join("runner/ios"), &runner)?;
+    install_resources(&root, &prefix)
+}
+
+fn stage_release(args: &[String]) -> Result<(), String> {
+    let [binary, prefix] = args else {
+        return Err(USAGE.into());
+    };
+    let prefix = Path::new(prefix);
+    let bin = prefix.join("bin");
+    std::fs::create_dir(prefix)
+        .and_then(|()| std::fs::create_dir(&bin))
+        .map_err(|error| {
+            format!(
+                "cannot create release directory {}: {error}",
+                prefix.display()
+            )
+        })?;
+    copy_file(
+        Path::new(binary),
+        &bin.join(format!("testrun{}", std::env::consts::EXE_SUFFIX)),
+    )?;
+    install_resources(&package_root(), prefix)
+}
+
+fn install_resources(root: &Path, prefix: &Path) -> Result<(), String> {
+    let share = prefix.join("share/testrun");
+    copy_tree(&root.join("runner/ios"), &share.join("runner/ios"))?;
     copy_file(&root.join("LICENSE"), &share.join("LICENSE"))?;
     let notices = share.join("browser");
     std::fs::create_dir_all(&notices)

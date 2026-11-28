@@ -133,7 +133,7 @@ function checkRepository(repository) {
   if (!/^[\w.-]+\/[\w.-]+$/.test(repository)) throw new Error('Invalid GitHub repository name');
 }
 
-function listReleases(repository, token, cache = true) {
+export function listReleases(repository, token, cache = true) {
   checkRepository(repository);
   if (!cache) return githubJson(`repos/${repository}/releases?per_page=100`, token);
   if (!releaseLists.has(repository)) {

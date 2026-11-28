@@ -1,0 +1,18 @@
+---
+import { getCollection } from 'astro:content';
+import DocsPage from '../../../components/DocsPage.astro';
+import { docsNavigation } from '../../../lib/docs.js';
+import { testrunDocGroups } from '../../../lib/doc-groups.js';
+import { download, testrunNav } from '../../../lib/testrun.js';
+
+export async function getStaticPaths() {
+  const entries = await getCollection('testrunDocs');
+  const groups = docsNavigation(entries, testrunDocGroups);
+  return entries.map(entry => ({
+    params: { slug: entry.id === 'index' ? undefined : entry.id },
+    props: { entry, groups },
+  }));
+}
+---
+<DocsPage {...Astro.props} product="Testrun" nav={testrunNav('Docs')} download={download}
+  github="https://github.com/canonic2/canonic" />

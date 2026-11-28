@@ -1,13 +1,15 @@
 # Canonic
 
-Canonic builds tools for visual interface review and coding-agent permissions,
-alongside Rust and JavaScript libraries for application developers.
+Canonic builds tools for visual interface review, mobile and browser testing,
+and coding-agent permissions, alongside Rust and JavaScript libraries for
+application developers.
 
-This public repository contains Shield, the Rust kits and Lattice, plus
+This public repository contains Shield, Testrun, the Rust kits and Lattice, plus
 Workbench's documentation and releases. Workbench's implementation is private.
 
 [Review interfaces](#workbench) ·
 [Set agent permissions](#shield) ·
+[Test mobile apps and browsers](#testrun) ·
 [Build with the libraries](#libraries) ·
 [Website](https://canonic.sh/)
 
@@ -50,6 +52,16 @@ profile. Agents can propose changes; you review and confirm them.
 [Set up a project](packages/shield/docs/getting-started.md) ·
 [Documentation](packages/shield/docs/README.md) ·
 [Permission packs](https://github.com/canonic2/shield-registry)
+
+## Testrun
+
+Inspect and control iOS, Android and browser targets from a CLI or coding agent.
+Read screens and UI elements, send input, capture evidence and investigate failures.
+
+[Downloads](https://canonic.sh/testrun/#install) ·
+[Build and install](packages/testrun/README.md#install) ·
+[Get started](packages/testrun/docs/getting-started.md) ·
+[Changelog](packages/testrun/CHANGELOG.md)
 
 ## Development
 

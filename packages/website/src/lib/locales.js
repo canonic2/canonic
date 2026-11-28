@@ -20,7 +20,7 @@ function pagePath(pathname, base) {
 export function localizeHref(href, locale, base = '/') {
   if (!href.startsWith(base) || href.startsWith('//')) return href;
   const path = pagePath(href, base);
-  if (path && !/^(?:workbench|shield)(?:\/|$)/.test(path)) return href;
+  if (path && !/^(?:workbench|shield|testrun)(?:\/|$)/.test(path)) return href;
   if (locale === defaultLocale) return `${base}${path}`;
   return `${base}${locale.toLowerCase()}/${path || 'workbench/'}`;
 }

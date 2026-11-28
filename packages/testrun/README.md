@@ -11,11 +11,13 @@ Use [pagination](docs/pagination.md) to read complete lists, UI trees and logs.
 
 ## Install
 
+See [downloads](https://canonic.sh/testrun/#install) for release archives and the
+[changelog](CHANGELOG.md) for version notes.
+
 For development, build Testrun locally from source. You need Rust and the
 prerequisites for your selected platform. See the
 [host requirements](docs/distribution.md#host-requirements) for iOS, Android,
-and browser testing, and [Distribution](docs/distribution.md) for public
-installer availability.
+and browser testing.
 
 From the Canonic repository root:
 

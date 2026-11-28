@@ -28,7 +28,7 @@ function mark(svg, name) {
 
 export const products = [
   { name: 'Workbench', tagline: 'Design tool', module: true },
-  { name: 'Testrun', tagline: 'QA', module: false },
+  { name: 'Testrun', tagline: 'QA', module: true },
   { name: 'Playground', tagline: 'API playground', module: false },
   { name: 'Shield', tagline: 'Agent safeguards & skills', module: true },
 ].map(product => ({ ...product, ...mark(productIcons[product.name.toLowerCase()], product.name) }));

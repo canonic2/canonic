@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { docGroups } from './doc-groups.js';
 
 const repositoryRoot = fileURLToPath(new URL('../../../../', import.meta.url));
-const docSources = ['workbench', 'shield'].map(product => ({
+const docSources = ['workbench', 'shield', 'testrun'].map(product => ({
   product,
   root: path.join(repositoryRoot, 'packages', product, 'docs'),
 }));

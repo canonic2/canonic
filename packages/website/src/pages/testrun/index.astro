@@ -1,0 +1,62 @@
+---
+import Base from '../../layouts/Base.astro';
+import PageHero from '../../components/PageHero.astro';
+import { getCollection } from 'astro:content';
+import { docs, testrunNav } from '../../lib/testrun.js';
+import { testrunDownloads } from '../../lib/testrun-releases.js';
+
+const nav = testrunNav('Overview', (await getCollection('testrunDocs')).length > 0);
+const release = import.meta.env.DEV ? null : await testrunDownloads();
+---
+<Base title="Canonic Testrun" description="Inspect and control iOS, Android and browser targets from a CLI or coding agent."
+  product="Testrun" {nav}>
+  <PageHero kicker="Canonic Testrun" title="Test mobile apps and browsers">
+    Use the Testrun CLI or connect a coding agent through MCP. Inspect screens and UI elements, send input and capture evidence from iOS, Android and browser sessions. iOS testing requires macOS.
+  </PageHero>
+
+  <section id="install" class="band" aria-labelledby="install-title" data-testrun-release={release?.version}>
+    <div class="wrap narrow add-steps">
+      <div class="section-head">
+        <h2 id="install-title">Download Testrun</h2>
+        {release ? (
+          <p class="lede">Testrun {release.version} is available as a portable archive. Linux downloads have Canonic signatures. macOS and Windows downloads are available without publisher signing.</p>
+        ) : (
+          <p class="lede">The first binary release is pending. <a href="https://github.com/canonic2/canonic/tree/main/packages/testrun#install">Build Testrun from source</a>.</p>
+        )}
+      </div>
+      {release && (
+        <>
+          <ul class="downloads">
+            {release.files.map(file => (
+              <li>
+                <a href={file.archive}>{file.label}</a>
+                <span>
+                  <a href={file.checksum} aria-label={`SHA-256 checksum for ${file.label}`}>SHA-256</a>
+                  {file.signature && <a href={file.signature} aria-label={`Signature for ${file.label}`}>Signature</a>}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p><a href={`${docs}distribution/#install-a-release-archive`}>Installation</a> · <a href={release.url}>Release notes</a></p>
+        </>
+      )}
+    </div>
+  </section>
+</Base>
+
+<style>
+  .downloads {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  .downloads li, .downloads span {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+  }
+  .downloads li {
+    justify-content: space-between;
+    padding: 0.55rem 0;
+  }
+</style>

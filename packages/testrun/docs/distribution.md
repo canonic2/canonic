@@ -1,12 +1,30 @@
 # Distribution
 
-Signed binaries are planned for macOS, Windows and Linux on ARM64 and x64
-(AMD64). The [install preview](https://canonic.sh/testrun/#install) shows the
-one-line commands for each platform. Installation is pending.
+The [download page](https://canonic.sh/testrun/#install) lists the latest complete
+release when available. Release archives target macOS, Windows and Linux on
+ARM64 and x64 (AMD64). Linux archives carry Canonic signatures. Windows and
+macOS archives are offered without publisher signing or notarization.
 
-If you already have a Testrun build, run `testrun --help` to verify command
-discovery. Use `testrun --version` to identify the installed build and
-`testrun docs list` to find the guides embedded in it.
+## Install a release archive
+
+1. Download the archive for your operating system and architecture. Compare its
+   SHA-256 with the published checksum. On Linux, verify the Sigstore bundle with
+   Cosign and the trusted Canonic Linux release public key as well.
+2. Extract the archive to a directory you own. Keep `bin/` and `share/` together so
+   the executable can find the bundled runner resources. Add that `bin/` directory
+   to your PATH.
+3. Run `testrun --version` to confirm the installed version. See
+   [host requirements](#host-requirements) before connecting to a target.
+
+For Linux signature verification, use a copy of the Canonic public key obtained
+through a trusted channel. Replace `ARCHIVE` with the downloaded `.tar.gz` path.
+
+```sh
+cosign verify-blob --key canonic-linux-release.pub --bundle ARCHIVE.sigstore.json --insecure-ignore-tlog=true ARCHIVE
+```
+
+Run `testrun --help` to see the available commands and `testrun docs list` to
+find the guides embedded in your build.
 
 ## Host requirements
 

@@ -7,6 +7,15 @@ export const docGroups = [
   { title: 'Reference', ids: ['configuration', 'design-system-export', 'extension', 'troubleshooting'] },
 ];
 
+export const testrunDocGroups = [
+  { title: 'Get started', ids: ['index', 'getting-started', 'distribution'] },
+  { title: 'Test apps and browsers', ids: ['ios', 'android', 'browser', 'builds', 'projects', 'playback', 'viewer-control'] },
+  { title: 'Use the CLI and MCP', ids: ['cli', 'mcp', 'configuration', 'pagination'] },
+  { title: 'Investigate failures', ids: ['debugging', 'diagnostic-access', 'diagnostic-workflows', 'diagnostic-reproduction', 'diagnostic-reports', 'diagnostic-testing', 'diagnostic-interactive'] },
+  { title: 'Platform and framework diagnostics', ids: ['diagnostic-android', 'diagnostic-android-state', 'diagnostic-apple', 'diagnostic-browser', 'diagnostic-frameworks', 'diagnostic-react-native', 'diagnostic-dart', 'diagnostic-services', 'diagnostic-observability'] },
+  { title: 'Reference', ids: ['diagnostic-formats', 'diagnostic-performance', 'diagnostic-native-traces', 'diagnostic-memory', 'diagnostic-network-data', 'diagnostic-scenario-context', 'troubleshooting'] },
+];
+
 export const shieldDocGroups = [
   { title: 'Get started', ids: ['index', 'introduction', 'getting-started', 'policy-decisions', 'operator-experience'] },
   { title: 'Work with your project', ids: ['policy-files', 'project-review', 'local-registry', 'claude-project', 'mcp-connections', 'troubleshooting'] },
