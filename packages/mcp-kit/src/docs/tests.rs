@@ -348,6 +348,14 @@ fn invalid_arguments_are_refused_before_preparation() {
         ("read", json!({})),
         ("read", json!({"path":""})),
         ("read", json!({"path":"faq.md","start_line":0})),
+        ("read", json!({"path":"faq.md","offset":-1})),
+        ("read", json!({"path":"faq.md","offset":1.5})),
+        ("read", json!({"path":"faq.md","offset":null})),
+        ("read", json!({"path":"faq.md","offset":MAX_PAGE_BYTES + 1})),
+        (
+            "read",
+            json!({"path":"faq.md","offset":0,"cursor":"opaque"}),
+        ),
         ("read", json!({"path":"faq.md","limit":401})),
         ("search", json!({})),
         ("search", json!({"query":" \t "})),
@@ -391,7 +399,7 @@ fn defaults_equal_their_explicit_values() {
         (
             "read",
             json!({"path":"faq.md"}),
-            json!({"path":"faq.md","limit":100}),
+            json!({"path":"faq.md","offset":0,"limit":100}),
         ),
     ] {
         assert_eq!(call(&docs, tool, &implicit), call(&docs, tool, &explicit));
@@ -435,17 +443,32 @@ fn reads_reproduce_every_page_byte_for_byte() {
             assert_eq!(reassemble(&docs, path, limit), source, "{path} {limit}");
         }
     }
-    let read = call(&docs, "read", &read_at(&docs, "guide.md", 1, 2)).unwrap();
+    let read = call(
+        &docs,
+        "read",
+        &json!({"path":"guide.md","offset":1,"limit":2}),
+    )
+    .unwrap();
     assert_eq!(
         read,
-        json!({"version":"1.2.3","path":"guide.md","title":"Acme guide","start_line":2,
+        call(&docs, "read", &read_at(&docs, "guide.md", 1, 2)).unwrap()
+    );
+    assert_eq!(
+        read,
+        json!({"version":"1.2.3","path":"guide.md","title":"Acme guide","start_line":2,"end_line":3,
             "total_lines":4,"content":"\r\nInstall Acme.\r\n","next_cursor":read["next_cursor"]})
     );
-    let past = call(&docs, "read", &read_at(&docs, "guide.md", 4, 100)).unwrap();
+    let past = call(&docs, "read", &json!({"path":"guide.md","offset":4})).unwrap();
+    assert_eq!(past["start_line"], 5);
+    assert!(past["end_line"].is_null());
     assert_eq!(
         (past["content"].clone(), past["next_cursor"].clone()),
         (json!(""), Value::Null)
     );
+    assert!(matches!(
+        call(&docs, "read", &json!({"path":"guide.md","offset":5})),
+        Err(DocsError::InvalidArguments(_))
+    ));
 }
 
 #[test]
@@ -507,7 +530,7 @@ fn paths_must_match_a_bundled_page_exactly() {
 }
 
 #[test]
-fn search_is_literal_case_insensitive_and_keeps_surrounding_spaces() {
+fn search_matches_all_literal_terms_case_insensitively_and_keeps_surrounding_spaces() {
     let (docs, _) = sample();
     let acme = call(&docs, "search", &json!({"query":"ACME"})).unwrap();
     assert!(acme.get("total").is_none());
@@ -526,6 +549,9 @@ fn search_is_literal_case_insensitive_and_keeps_surrounding_spaces() {
         ("  spaced  ", 1),
         (" spaced  text ", 0),
         ("CAFÉ", 1),
+        ("CAFÉ\tconfigure  ACME", 1),
+        ("guide install", 0),
+        ("configure absent ACME", 0),
     ] {
         assert_eq!(
             call(&docs, "search", &json!({"query":query})).unwrap()["matches"]
@@ -575,6 +601,7 @@ fn large_lines_end_results_early_with_continuation() {
     assert!(returned.len() <= MAX_RESULT_TEXT_BYTES && returned.ends_with('\n'));
     let taken = returned.matches('\n').count();
     assert!(taken < 16);
+    assert_eq!(read["end_line"], taken);
     assert!(read["next_cursor"].is_string());
     assert_eq!(reassemble(&docs, "wide.md", 400), line.repeat(16));
 

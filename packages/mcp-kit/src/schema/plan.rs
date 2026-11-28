@@ -15,6 +15,7 @@ struct Node {
     names: Vec<usize>,
     cost: usize,
     comparison: usize,
+    constant: bool,
     unique: bool,
     name_tests: usize,
 }
@@ -22,6 +23,7 @@ impl Node {
     fn new(schema: &Value) -> Self {
         let mut node = Self {
             cost: 1 + schema.as_object().map_or(0, serde_json::Map::len),
+            constant: schema.is_boolean(),
             unique: schema["uniqueItems"] == true,
             name_tests: schema["patternProperties"]
                 .as_object()
@@ -183,6 +185,7 @@ impl Plan {
     pub(super) fn check(
         &self,
         value: &Value,
+        max_value_bytes: usize,
         check: &dyn Fn() -> Result<(), Interrupted>,
     ) -> Result<(), ArgumentErrorKind> {
         let mut pending = vec![(0, Instance::Value(value), 0)];
@@ -193,11 +196,13 @@ impl Plan {
                 return Err(ArgumentErrorKind::Limit);
             }
             let node = &self.nodes[id];
-            work = work
-                .saturating_add(node.cost)
-                .saturating_add(value.immediate());
+            work = work.saturating_add(node.cost);
+            // Boolean schemas have a fixed result and never inspect instance bytes.
+            if !node.constant {
+                work = work.saturating_add(value.immediate());
+            }
             if node.comparison > 0 || node.unique {
-                let bytes = value.bytes(check)?;
+                let bytes = value.bytes(max_value_bytes, check)?;
                 work = work.saturating_add(bytes.saturating_mul(node.comparison));
                 if node.unique
                     && let Instance::Value(Value::Array(items)) = value
@@ -306,23 +311,26 @@ impl Instance<'_> {
     }
     fn bytes(
         self,
+        max_value_bytes: usize,
         check: &dyn Fn() -> Result<(), Interrupted>,
     ) -> Result<usize, ArgumentErrorKind> {
         match self {
             Self::Name(name) => Ok(name.len() + 2),
             // The raw instance was already admitted. Measure with the same encoder,
             // without retaining a second serialized copy for every comparison visit.
-            Self::Value(value) => crate::json::measure(value, super::MAX_VALUE_BYTES, check)
-                .map_err(|error| match error {
+            Self::Value(value) => {
+                crate::json::measure(value, max_value_bytes, check).map_err(|error| match error {
                     crate::json::EncodeError::Interrupted => ArgumentErrorKind::Interrupted,
                     _ => ArgumentErrorKind::Limit,
-                }),
+                })
+            }
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::super::MAX_VALUE_BYTES;
     use super::*;
     use serde_json::json;
     use std::cell::Cell;
@@ -335,14 +343,16 @@ mod tests {
             json!("a".repeat(256 * 1024)),
         ] {
             assert_eq!(
-                Instance::Value(&value).bytes(&|| Ok(())).unwrap(),
+                Instance::Value(&value)
+                    .bytes(MAX_VALUE_BYTES, &|| Ok(()))
+                    .unwrap(),
                 serde_json::to_vec(&value).unwrap().len()
             );
         }
         let calls = Cell::new(0);
         let value = json!(["acme", "\n".repeat(1024)]);
         assert_eq!(
-            Instance::Value(&value).bytes(&|| {
+            Instance::Value(&value).bytes(MAX_VALUE_BYTES, &|| {
                 calls.set(calls.get() + 1);
                 if calls.get() > 8 {
                     Err(Interrupted)

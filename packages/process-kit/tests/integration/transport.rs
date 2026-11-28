@@ -18,6 +18,44 @@ use std::{
     path::Path,
 };
 
+#[test]
+fn request_frame_limit_can_grow_without_growing_reply_frames() {
+    use canonic_process_kit::core::Explicit;
+    use std::sync::atomic::Ordering;
+
+    let (_temp, root) = root();
+    let lease = Lease::acquire(&root, Duration::ZERO).unwrap();
+    let handler = Arc::new(Acme::default());
+    let observed = handler.clone();
+    let server = std::thread::spawn(move || {
+        server::serve_with_request_limit(
+            lease,
+            identity(),
+            Admission::new(),
+            handler,
+            &Explicit,
+            server::Options {
+                frame_limit: 1024,
+                ..server::Options::default()
+            },
+            4096,
+        )
+    });
+    ready(&root);
+    let accepted = client::call(&root, &request(json!("x".repeat(2048))), &options());
+    let refused = client::call(&root, &request(json!("x".repeat(4096))), &options());
+    stop(&root, "drain");
+    server.join().unwrap().unwrap();
+
+    let accepted = accepted.unwrap();
+    assert_eq!(accepted.accepted, None);
+    assert_eq!(accepted.code, Some(Code::FrameTooLarge));
+    let refused = refused.unwrap();
+    assert_eq!(refused.accepted, Some(false));
+    assert_eq!(refused.code, Some(Code::FrameTooLarge));
+    assert_eq!(observed.dispatched.load(Ordering::SeqCst), 1);
+}
+
 /// The same incremental framing and kernel peer binding on every native host.
 #[test]
 fn lease_writer_revalidation_refuses_a_replaced_lock_anchor() {
@@ -934,23 +972,25 @@ fn an_abandoned_submission_closes_its_connection_without_replay() {
     let (_temp, root) = root();
     let lease = Lease::acquire(&root, Duration::ZERO).unwrap();
     let endpoint = lease.bind(false).unwrap();
-    let path = root.clone();
-    let caller =
-        std::thread::spawn(move || client::submit(&path, &request(json!("acme")), &options()));
-    let mut stream = acknowledge_submission(&endpoint);
-    let admitted = caller.join().unwrap().unwrap();
-    let abandon = admitted.abandon_handle().unwrap();
-    let waiting = std::thread::spawn(move || admitted.result());
-    abandon.abandon();
-    assert!(
-        matches!(waiting.join().unwrap(), Err(Error::OutcomeUnknown(id)) if id == "acme-request")
-    );
-    // The manager side observes the client's departure.
-    stream
-        .set_read_timeout(Some(Duration::from_secs(3)))
-        .unwrap();
-    let mut byte = [0_u8; 1];
-    assert_eq!(std::io::Read::read(&mut stream, &mut byte).unwrap(), 0);
+    for result_timeout in [Some(options().io), None] {
+        let path = root.clone();
+        let caller =
+            std::thread::spawn(move || client::submit(&path, &request(json!("acme")), &options()));
+        let mut stream = acknowledge_submission(&endpoint);
+        let admitted = caller.join().unwrap().unwrap();
+        let abandon = admitted.abandon_handle().unwrap();
+        let waiting = std::thread::spawn(move || admitted.result_with_timeout(result_timeout));
+        abandon.abandon();
+        assert!(
+            matches!(waiting.join().unwrap(), Err(Error::OutcomeUnknown(id)) if id == "acme-request")
+        );
+        // The manager side observes the client's departure.
+        stream
+            .set_read_timeout(Some(Duration::from_secs(3)))
+            .unwrap();
+        let mut byte = [0_u8; 1];
+        assert_eq!(std::io::Read::read(&mut stream, &mut byte).unwrap(), 0);
+    }
     assert!(endpoint.listener().accept().is_err());
 }
 

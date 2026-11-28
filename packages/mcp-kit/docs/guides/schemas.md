@@ -106,7 +106,7 @@ Same-value cycles and expansion beyond the fixed budget are refused.
 | Same-value expanded subschema visits | 4096 |
 | JSON/schema/reference depth | 64 |
 | Instance-aware evaluation depth / queued visits | 256 / 32768 |
-| Encoded instance being validated | 4 MiB |
+| Encoded instance being validated | 4 MiB by default |
 | Conservative work estimate | At most 8,388,608 units |
 | Regex program / DFA cache | 32 KiB each |
 
@@ -118,9 +118,9 @@ if a particular value does not visit them.
 Objects/arrays and each contained value count as nodes. These are selected
 operating limits, not performance guarantees or upstream protocol ceilings.
 Frame, output and task snapshot limits also apply.
-Instance nodes have no separate restrictive cap: their ceiling follows the
-encoded byte bound. The schema-aware work walk can still refuse expensive
-validation within that byte budget.
+Use `Catalog::new_with_argument_byte_limits` to configure an encoded argument
+budget per tool. Set the transport frame limit to fit the complete request.
+The node, work and depth ceilings apply at every byte limit.
 
 Budget refusal is distinct from a schema mismatch and cannot become a successful
 `not`, `anyOf` or conditional branch. Input refusals produce failed tool results

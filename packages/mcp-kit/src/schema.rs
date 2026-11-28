@@ -18,9 +18,9 @@ pub const MAX_DEPTH: usize = 64;
 pub const MAX_SCHEMA_BYTES: usize = 256 * 1024;
 /// Maximum raw JSON nodes in a schema document.
 pub const MAX_SCHEMA_NODES: usize = 32768;
-/// Derived node ceiling; the encoded byte bound is at least as restrictive.
+/// Maximum raw JSON nodes in an instance, including scalars.
 pub const MAX_VALUE_NODES: usize = MAX_VALUE_BYTES;
-/// Maximum encoded bytes in a value being validated.
+/// Default maximum encoded bytes in a value being validated.
 pub const MAX_VALUE_BYTES: usize = 4 * 1024 * 1024;
 /// Conservative instance-aware validation work ceiling.
 pub const MAX_WORK: usize = 8 * 1024 * 1024;
@@ -95,7 +95,10 @@ impl SchemaError {
 
 /// Immutable validator prepared once; clones share the compiled representation.
 #[derive(Debug, Clone)]
-pub struct PreparedSchema(Arc<Prepared>);
+pub struct PreparedSchema {
+    prepared: Arc<Prepared>,
+    max_value_bytes: usize,
+}
 
 #[derive(Debug)]
 struct Prepared {
@@ -106,7 +109,8 @@ struct Prepared {
 
 impl PartialEq for PreparedSchema {
     fn eq(&self, other: &Self) -> bool {
-        self.0.source == other.0.source
+        self.max_value_bytes == other.max_value_bytes
+            && self.prepared.source == other.prepared.source
     }
 }
 
@@ -142,11 +146,22 @@ impl PreparedSchema {
                 pointer: error.instance_path().to_string(),
                 problem: error.to_string(),
             })?;
-        Ok(Self(Arc::new(Prepared {
-            source: schema.clone(),
-            validator,
-            plan,
-        })))
+        Ok(Self {
+            prepared: Arc::new(Prepared {
+                source: schema.clone(),
+                validator,
+                plan,
+            }),
+            max_value_bytes: MAX_VALUE_BYTES,
+        })
+    }
+
+    /// Sets the encoded instance byte budget while sharing the prepared schema.
+    /// The node, depth and conservative work ceilings continue to apply.
+    #[must_use]
+    pub fn with_value_byte_limit(mut self, max_value_bytes: usize) -> Self {
+        self.max_value_bytes = max_value_bytes;
+        self
     }
 
     /// Validates a value, naming paths from `arguments`.
@@ -178,16 +193,17 @@ impl PreparedSchema {
     ) -> Result<(), ArgumentError> {
         let interrupted = || ArgumentError::refusal(path, ArgumentErrorKind::Interrupted);
         check().map_err(|_| interrupted())?;
-        bounds::value(value, check).map_err(|kind| ArgumentError::refusal(path, kind))?;
-        self.0
+        bounds::value(value, self.max_value_bytes, check)
+            .map_err(|kind| ArgumentError::refusal(path, kind))?;
+        self.prepared
             .plan
-            .check(value, check)
+            .check(value, self.max_value_bytes, check)
             .map_err(|kind| ArgumentError::refusal(path, kind))?;
         let result = self
-            .0
+            .prepared
             .validator
             .validate(value)
-            .map_err(|error| diagnostic::argument(&self.0.source, value, &error, path));
+            .map_err(|error| diagnostic::argument(&self.prepared.source, value, &error, path));
         check().map_err(|_| interrupted())?;
         result
     }

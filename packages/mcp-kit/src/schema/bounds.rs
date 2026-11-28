@@ -1,8 +1,8 @@
 //! Pure schema/reference admission and conservative per-validation work accounting.
 
 use super::{
-    ArgumentErrorKind, DIALECT, MAX_DEPTH, MAX_SCHEMA_BYTES, MAX_SCHEMA_NODES, MAX_VALUE_BYTES,
-    MAX_VALUE_NODES, SchemaError,
+    ArgumentErrorKind, DIALECT, MAX_DEPTH, MAX_SCHEMA_BYTES, MAX_SCHEMA_NODES, MAX_VALUE_NODES,
+    SchemaError,
 };
 use crate::{control::Interrupted, json};
 use referencing::{Draft, Registry, Resolver, ResourceRef};
@@ -247,11 +247,12 @@ fn count(
 
 pub(super) fn value(
     value: &Value,
+    max_value_bytes: usize,
     check: &dyn Fn() -> Result<(), Interrupted>,
 ) -> Result<(usize, usize), ArgumentErrorKind> {
     let mut nodes = 0;
     count(value, 0, &mut nodes, check, MAX_VALUE_NODES)?;
-    let bytes = json::measure(value, MAX_VALUE_BYTES, check).map_err(|error| match error {
+    let bytes = json::measure(value, max_value_bytes, check).map_err(|error| match error {
         json::EncodeError::Interrupted => ArgumentErrorKind::Interrupted,
         _ => ArgumentErrorKind::Limit,
     })?;

@@ -130,16 +130,21 @@ the version you passed to `Documentation::new`.
 | --- | --- | --- |
 | `list` | Optional `cursor`, `limit` (1–100, default 50) | `documents`: `path`, `title` and `total_lines` for each page; `total`; nullable `next_cursor` |
 | `search` | `query` (required), `path`, `cursor`, `limit` as for list | `matches`: `path`, one-based `line` and the line's `text`; nullable `next_cursor` |
-| `read` | `path` (required), optional `cursor`, `limit` (1–400 lines, default 100) | `path`, `title`, `start_line`, `total_lines`, `content` and nullable `next_cursor` |
+| `read` | `path` (required), optional `offset` or `cursor`, `limit` (1–400 lines, default 100) | `path`, `title`, `start_line`, `end_line`, `total_lines`, `content` and nullable `next_cursor` |
 
-Search is a literal, case-insensitive substring match within one line. `.*`
-and `[` match themselves, and spaces around the query are kept. A query must be
-1–1024 bytes, not only whitespace and without line breaks. With `path`, only
+Search matches every whitespace-separated term as a case-insensitive substring
+on the same line, in any order. `.*` and `[` match themselves. A query with
+leading or trailing whitespace matches the entire string literally. A query
+must be 1–1024 bytes, contain text, and have no line breaks. With `path`, only
 that page is searched.
 
 `read` returns the selected lines exactly as stored, line breaks included, so
-joining the `content` of successive reads reproduces the page. Without a cursor,
-reading begins at line 1. Search omits `total` to avoid scanning remaining matches.
+joining the `content` of successive reads reproduces the page. Reads default to
+line 1. Set `offset` to the number of lines to skip, or use `cursor` to continue
+a prior read. A search hit's one-based `line` minus one is its read offset.
+`start_line` and `end_line` are one-based and inclusive. At the end of a page,
+an empty read has a null `end_line`. Search omits `total` to avoid scanning
+remaining matches.
 
 `limit` is a maximum. Pages stop at 256 KiB of serialized items (rows or line
 strings), except that one larger first item can be returned alone within the

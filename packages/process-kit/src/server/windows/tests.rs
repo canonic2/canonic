@@ -65,6 +65,7 @@ impl Running {
                 io_timeout: Duration::from_secs(30),
                 ..Options::default()
             },
+            request_frame_limit: frame::DEFAULT_LIMIT,
             ordinary_count: Arc::new(AtomicUsize::new(0)),
             control_count: Arc::new(AtomicUsize::new(0)),
             connections: Slots::new(0),

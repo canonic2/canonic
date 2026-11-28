@@ -16,11 +16,11 @@ macOS archives are offered without publisher signing or notarization.
 3. Run `testrun --version` to confirm the installed version. See
    [host requirements](#host-requirements) before connecting to a target.
 
-For Linux signature verification, use a copy of the Canonic public key obtained
-through a trusted channel. Replace `ARCHIVE` with the downloaded `.tar.gz` path.
+For Linux signature verification, download the [Canonic Linux release public key](https://canonic.sh/testrun/linux-release.pub)
+from the Canonic website. Replace `ARCHIVE` with the downloaded `.tar.gz` path.
 
 ```sh
-cosign verify-blob --key canonic-linux-release.pub --bundle ARCHIVE.sigstore.json --insecure-ignore-tlog=true ARCHIVE
+cosign verify-blob --key linux-release.pub --bundle ARCHIVE.sigstore.json --insecure-ignore-tlog=true ARCHIVE
 ```
 
 Run `testrun --help` to see the available commands and `testrun docs list` to

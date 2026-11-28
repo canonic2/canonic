@@ -374,10 +374,10 @@ impl Documentation {
             ),
             Tool::new(
                 self.search.clone(),
-                format!("Search the bundled {product} documentation for literal text and return matching lines."),
+                format!("Search the bundled {product} documentation and return lines containing all query terms."),
                 object(json!({
                     "query":{"type":"string","minLength":1,"maxLength":MAX_QUERY_BYTES,
-                        "description":"Case-insensitive literal text, not a pattern; surrounding spaces are kept. Must not be blank or contain line breaks."},
+                        "description":"Case-insensitive literal terms separated by whitespace, all on the same line in any order. A query with leading or trailing whitespace matches literally as a whole. Must not be blank or contain line breaks."},
                     "path":{"type":"string","minLength":1,
                         "description":format!("Search only this exact page path from {list}.")},
                     "cursor":cursor,"limit":rows}), &["query"]),
@@ -388,6 +388,8 @@ impl Documentation {
                 object(json!({
                     "path":{"type":"string","minLength":1,
                         "description":format!("Exact page path returned by {list}.")},
+                    "offset":{"type":"integer","minimum":0,"maximum":MAX_PAGE_BYTES,
+                        "description":"Number of lines to skip before reading. Offset 0 starts at line 1. Use either offset or cursor."},
                     "cursor":cursor,
                     "limit":read_properties["limit"]}),
                     &["path"]),
@@ -438,13 +440,17 @@ impl Documentation {
                 self.search(&query, path, &request, check)
             }
             Kind::Read => {
-                arguments.only(&["path", "cursor", "limit"])?;
+                arguments.only(&["path", "offset", "cursor", "limit"])?;
                 let path = arguments
                     .string("path")?
                     .ok_or_else(|| invalid("`path` is required."))?;
+                let line_offset = arguments.line_offset()?;
+                if line_offset.is_some() && input.get("cursor").is_some() {
+                    return Err(invalid("Use either `offset` or `cursor`."));
+                }
                 let request = Request::from_mcp_units(input, READ_LIMITS)?;
                 check()?;
-                self.read(path, &request, check)
+                self.read(path, line_offset, &request, check)
             }
         }
     }
@@ -519,6 +525,11 @@ impl Documentation {
         let text = self.bundle.text()?;
         let lowered = self.bundle.lowered()?;
         let needle = query.to_lowercase();
+        let terms = if query.trim() == query {
+            needle.split_whitespace().collect::<Vec<_>>()
+        } else {
+            vec![needle.as_str()]
+        };
         let starts = self.bundle.lines()?;
         let lowered_starts = self.bundle.lowered_lines()?;
         let mut builder = Builder::new(
@@ -544,7 +555,7 @@ impl Documentation {
                 if number % CHECK_INTERVAL == 0 {
                     check()?;
                 }
-                if !lower.contains(&needle) {
+                if !terms.iter().all(|&term| lower.contains(term)) {
                     continue;
                 }
                 let next = page_base + number + 1;
@@ -569,21 +580,28 @@ impl Documentation {
     fn read(
         &self,
         path: &str,
+        line_offset: Option<usize>,
         request: &Request,
         check: &dyn Fn() -> Result<(), Interrupted>,
     ) -> Result<Value, DocsError> {
         let (index, _) = self.bundle.index()?;
         let (page_index, page) = self.page(index, path)?;
-        let text = self.bundle.text()?;
+        if line_offset.is_some_and(|offset| offset > page.lines) {
+            return Err(invalid("`offset` must not exceed the page's line count."));
+        }
         let scope = self.bundle.scope(
             &format!("{}:{}", self.product, self.read),
             &json!({"path":path}),
         );
-        let first = offset(&scope, request)?;
-        let lines = &self.bundle.lines()?[page_index];
+        let first = match line_offset {
+            Some(offset) => offset,
+            None => offset(&scope, request)?,
+        };
         if first > page.lines {
             return Err(page::Error::InvalidCursor.into());
         }
+        let text = self.bundle.text()?;
+        let lines = &self.bundle.lines()?[page_index];
         let mut content = String::new();
         let mut taken = 0usize;
         let mut builder =
@@ -602,12 +620,13 @@ impl Documentation {
                 break;
             }
         }
-        let next = first.saturating_add(taken);
+        let next = first + taken;
         Ok(json!({
             "version": self.version,
             "path": page.path,
             "title": page.title,
             "start_line": first + 1,
+            "end_line": (taken > 0).then_some(next),
             "total_lines": page.lines,
             "content": content,
             "next_cursor": builder.finish(next < page.lines).next_cursor,
@@ -699,6 +718,23 @@ impl<'a> Arguments<'a> {
             Some(Value::String(text)) if !text.is_empty() => Ok(Some(text)),
             Some(_) => Err(invalid(&format!("`{key}` must be a nonempty string."))),
         }
+    }
+
+    fn line_offset(&self) -> Result<Option<usize>, DocsError> {
+        self.0
+            .get("offset")
+            .map(|value| {
+                value
+                    .as_u64()
+                    .and_then(|offset| usize::try_from(offset).ok())
+                    .filter(|offset| *offset <= MAX_PAGE_BYTES)
+                    .ok_or_else(|| {
+                        invalid(&format!(
+                            "`offset` must be an integer from 0 to {MAX_PAGE_BYTES}."
+                        ))
+                    })
+            })
+            .transpose()
     }
 
     fn query(&self) -> Result<String, DocsError> {

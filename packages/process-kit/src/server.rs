@@ -114,6 +114,7 @@ pub struct Options {
     /// Maximum transferred connections, including prepared handshakes. Zero
     /// disables handoff. Slots remain occupied through product cleanup.
     pub connection_capacity: usize,
+    /// Reply payload limit and the default request limit.
     pub frame_limit: usize,
     /// Total frame read/write deadline, not a per-byte renewable timeout.
     /// The read budget starts when a worker takes the connection, after queueing.
@@ -145,6 +146,7 @@ struct Shared<H> {
     gate: Admission,
     handler: Arc<H>,
     options: Options,
+    request_frame_limit: usize,
     ordinary_count: Arc<AtomicUsize>,
     control_count: Arc<AtomicUsize>,
     connections: Arc<Slots>,
@@ -288,12 +290,41 @@ impl Drop for Pool {
 /// Product dispatch errors are framed replies; they never stop the server.
 pub fn serve<H: Handler>(
     lease: impl Into<Arc<Lease>>,
-    mut identity: Identity,
+    identity: Identity,
     gate: Admission,
     handler: Arc<H>,
     policy: &impl ExitPolicy,
     options: Options,
 ) -> Result<()> {
+    let request_frame_limit = options.frame_limit;
+    serve_with_request_limit(
+        lease,
+        identity,
+        gate,
+        handler,
+        policy,
+        options,
+        request_frame_limit,
+    )
+}
+
+/// Serve with a separate request limit while bounding replies with `options.frame_limit`.
+///
+/// # Errors
+/// Returns the same errors as [`serve`]. The request limit must fit the frame
+/// length field and be at least 1024 bytes.
+pub fn serve_with_request_limit<H: Handler>(
+    lease: impl Into<Arc<Lease>>,
+    mut identity: Identity,
+    gate: Admission,
+    handler: Arc<H>,
+    policy: &impl ExitPolicy,
+    options: Options,
+    request_frame_limit: usize,
+) -> Result<()> {
+    if !(1024..=u32::MAX as usize).contains(&request_frame_limit) {
+        return Err(Error::Options);
+    }
     let lease = lease.into();
     let version = Version::parse(&identity.build).ok();
     identity.capabilities.retain(|c| {
@@ -324,6 +355,7 @@ pub fn serve<H: Handler>(
         gate,
         handler,
         options,
+        request_frame_limit,
         ordinary_count: Arc::new(AtomicUsize::new(0)),
         control_count: Arc::new(AtomicUsize::new(0)),
     });
@@ -481,7 +513,7 @@ fn handle<H: Handler>(s: &Shared<H>, job: &mut Job, control_lane: bool) -> Resul
             stream: &job.stream,
             until,
         },
-        s.options.frame_limit,
+        s.request_frame_limit,
     ) {
         Ok(bytes) => bytes,
         Err(Error::FrameTooLarge) => return refuse(s, &mut stream, "", Code::FrameTooLarge),
@@ -819,6 +851,7 @@ mod tests {
             gate: Admission::new(),
             handler: Arc::new(Unused),
             options: Options::default(),
+            request_frame_limit: frame::DEFAULT_LIMIT,
             ordinary_count: Arc::new(AtomicUsize::new(0)),
             control_count: Arc::new(AtomicUsize::new(0)),
             connections: Slots::new(0),
@@ -870,6 +903,7 @@ mod tests {
             gate: gate.clone(),
             handler: Arc::new(Cleanup(Arc::clone(&calls))),
             options: Options::default(),
+            request_frame_limit: frame::DEFAULT_LIMIT,
             ordinary_count: Arc::new(AtomicUsize::new(0)),
             control_count: Arc::new(AtomicUsize::new(0)),
             connections: Slots::new(0),
@@ -909,6 +943,7 @@ mod tests {
                 gate: gate.clone(),
                 handler: Arc::new(Cleanup(draining)),
                 options: Options::default(),
+                request_frame_limit: frame::DEFAULT_LIMIT,
                 ordinary_count: Arc::new(AtomicUsize::new(0)),
                 control_count: Arc::new(AtomicUsize::new(0)),
                 connections: Slots::new(0),
@@ -965,6 +1000,7 @@ mod tests {
                 gate,
                 handler: Arc::new(Unused),
                 options: Options::default(),
+                request_frame_limit: frame::DEFAULT_LIMIT,
                 ordinary_count: Arc::new(AtomicUsize::new(0)),
                 control_count: Arc::new(AtomicUsize::new(0)),
                 connections: Slots::new(0),

@@ -349,13 +349,15 @@ signal a PID or bypass the live lease.
 | `control_workers` | 1 | Reserved control workers |
 | `control_capacity` | 9 | Active plus queued control connections |
 | `connection_capacity` | 64 | Prepared plus product-owned connections through cleanup; zero disables handoff |
-| `frame_limit` | 1 MiB | Payload size, excluding four-byte prefix |
+| `frame_limit` | 1 MiB | Reply payload size and default request payload size, excluding the four-byte prefix |
 | `io_timeout` | 3 seconds | Total frame-read deadline from worker pickup; bounded response writes |
 | `client::Options::readiness` | 15 seconds | Overall probe budget, shared by connection, writes, admission and identity replies |
 | `io` | 3 seconds | Per-frame read/write deadline, including prefix and body; readiness probes use the earlier overall deadline |
 
 Server capacities must be at least their positive worker counts and at most
 65,536. Frame limits are 1,024 through `u32::MAX`. Timeouts must be nonzero.
+Use `server::serve_with_request_limit` when requests need a different byte
+budget from replies.
 All limits refuse explicitly. There is no truncation. Products enforce their own
 handler and operation deadlines and separately bound retained owner channels.
 Refusals on the accept thread use an absolute write budget of at most 20 ms,
@@ -457,7 +459,9 @@ by ID and content.
 `client::submit(&root, &request, &options)` sends the same one-shot request and
 returns an `Admitted` value once the acknowledgement arrives, so a caller can
 wait for the result on one thread and give up on another. `Admitted::result`
-reads the result frame within `options.io`. `Admitted::abandon_handle` returns
+reads the result frame within `options.io`. Use `result_with_timeout` to set a
+separate result timeout, or pass `None` to wait until the result or socket
+closure. `Admitted::abandon_handle` returns
 an `Abandon` whose `abandon()` closes the connection in both directions: a
 pending `result` returns `OutcomeUnknown(request_id)`, and the manager's handler
 can observe the closed peer through `Context::stream`. Abandoning withdraws

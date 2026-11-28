@@ -1,4 +1,4 @@
-//! Cooperative cancellation and one monotonic deadline for a unit of work.
+//! Cooperative cancellation and an optional monotonic deadline for a unit of work.
 
 use std::{
     sync::atomic::{AtomicBool, Ordering},
@@ -20,7 +20,7 @@ pub struct Interrupted;
 #[derive(Debug)]
 pub struct Control {
     cancelled: AtomicBool,
-    deadline: Instant,
+    deadline: Option<Instant>,
 }
 
 impl Control {
@@ -35,7 +35,16 @@ impl Control {
     pub fn until(deadline: Instant) -> Self {
         Self {
             cancelled: AtomicBool::new(false),
-            deadline,
+            deadline: Some(deadline),
+        }
+    }
+
+    /// Starts a control that stops only when cancelled.
+    #[must_use]
+    pub fn without_deadline() -> Self {
+        Self {
+            cancelled: AtomicBool::new(false),
+            deadline: None,
         }
     }
 
@@ -52,14 +61,17 @@ impl Control {
 
     /// The deadline fixed at creation.
     #[must_use]
-    pub fn deadline(&self) -> Instant {
+    pub fn deadline(&self) -> Option<Instant> {
         self.deadline
     }
 
-    /// Time left before the deadline, zero once it has passed.
+    /// Time left before the deadline, zero once it has passed, or
+    /// `Duration::MAX` when there is no deadline.
     #[must_use]
     pub fn remaining(&self) -> Duration {
-        self.deadline.saturating_duration_since(Instant::now())
+        self.deadline.map_or(Duration::MAX, |deadline| {
+            deadline.saturating_duration_since(Instant::now())
+        })
     }
 
     /// Whether the deadline has passed.

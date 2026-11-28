@@ -902,7 +902,7 @@ impl Scheduler {
         for lane in self.lanes.iter_mut().filter(|_| queue_counts) {
             let mut kept = VecDeque::new();
             for job in lane.queue.drain(..) {
-                if now < job.control.deadline() {
+                if job.control.deadline().is_none_or(|deadline| now < deadline) {
                     kept.push_back(job);
                     continue;
                 }
@@ -923,7 +923,12 @@ impl Scheduler {
             lane.queue = kept;
         }
         for running in self.running.values_mut() {
-            if !running.answered && now >= running.control.deadline() {
+            if !running.answered
+                && running
+                    .control
+                    .deadline()
+                    .is_some_and(|deadline| now >= deadline)
+            {
                 running.answered = true;
                 running.control.cancel();
                 refuse(

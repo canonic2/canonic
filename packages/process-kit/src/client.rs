@@ -421,7 +421,8 @@ pub fn open(root: &Root, request: &Request, options: &Options) -> Result<(Reply,
 /// without waiting for its result. The caller may wait for the result on one
 /// thread and abandon the request from another, for example when its own
 /// caller is cancelled: abandoning closes the connection, which the manager
-/// observes as the client's departure. This never replays work.
+/// observes as the client's departure. The result wait may use a separate
+/// timeout. This never replays work.
 ///
 /// # Errors
 /// As [`call`] before the acknowledgement: definite refusal codes, or
@@ -484,13 +485,32 @@ impl Admitted {
     /// # Errors
     /// Returns `OutcomeUnknown` when the result is lost, late or abandoned,
     /// or `Envelope` for a result that does not match the acknowledgement.
-    pub fn result(mut self) -> Result<Reply> {
-        let options = Options {
-            io: self.io,
-            frame_limit: self.frame_limit,
-            ..Options::default()
+    pub fn result(self) -> Result<Reply> {
+        let timeout = self.io;
+        self.result_with_timeout(Some(timeout))
+    }
+
+    /// Wait for the acknowledged result using a separate per-frame timeout.
+    /// With no timeout, wait for a result or connection closure. Keep an
+    /// [abandon handle](Self::abandon_handle) when the owner can cancel the wait.
+    ///
+    /// # Errors
+    /// Returns `OutcomeUnknown` for a lost, late or abandoned result,
+    /// or `Envelope` for a result that does not match the acknowledgement.
+    pub fn result_with_timeout(mut self, timeout: Option<Duration>) -> Result<Reply> {
+        let reply = if let Some(io) = timeout {
+            let options = Options {
+                io,
+                frame_limit: self.frame_limit,
+                ..Options::default()
+            };
+            read_reply(&mut self.stream, &self.id, &options, None)?
+        } else {
+            crate::connection::clear_deadlines(&self.stream)
+                .map_err(|_| Error::OutcomeUnknown(self.id.clone()))?;
+            decode_reply(&mut self.stream, &self.id, self.frame_limit)?
         };
-        finish(&mut self.stream, &self.ack, &self.id, &options, None)
+        validate_result(reply, &self.ack, &self.id)
     }
 }
 
@@ -536,8 +556,12 @@ fn read_reply(
         stream,
         until: frame_until(options.io, deadline),
     };
-    let reply: Reply = frame::read_json(&mut input, options.frame_limit)
-        .map_err(|_| Error::OutcomeUnknown(id.into()))?;
+    decode_reply(&mut input, id, options.frame_limit)
+}
+
+fn decode_reply(input: &mut impl std::io::Read, id: &str, frame_limit: usize) -> Result<Reply> {
+    let reply: Reply =
+        frame::read_json(input, frame_limit).map_err(|_| Error::OutcomeUnknown(id.into()))?;
     if reply.control_version != 1 || (!reply.request_id.is_empty() && reply.request_id != id) {
         return Err(Error::Envelope);
     }
@@ -587,7 +611,10 @@ fn finish(
     options: &Options,
     deadline: Option<Instant>,
 ) -> Result<Reply> {
-    let reply = read_reply(stream, id, options, deadline)?;
+    validate_result(read_reply(stream, id, options, deadline)?, ack, id)
+}
+
+fn validate_result(reply: Reply, ack: &Reply, id: &str) -> Result<Reply> {
     if reply.manager_id != ack.manager_id || reply.request_id != id || reply.accepted.is_some() {
         return Err(Error::Envelope);
     }
@@ -665,5 +692,35 @@ mod tests {
         };
         let reply: String = frame::read_json(&mut input, frame::DEFAULT_LIMIT).unwrap();
         assert_eq!(reply, "acme");
+    }
+
+    #[test]
+    fn admitted_result_can_override_the_submission_timeout() {
+        let (stream, mut peer) = Stream::pair().unwrap();
+        let ack = Reply {
+            control_version: 1,
+            manager_id: "acme-manager".into(),
+            request_id: "acme-request".into(),
+            accepted: Some(true),
+            code: None,
+            data: serde_json::Value::Null,
+        };
+        let reply = Reply {
+            accepted: None,
+            data: serde_json::json!("done"),
+            ..ack.clone()
+        };
+        frame::write_json(&mut peer, &reply, frame::DEFAULT_LIMIT).unwrap();
+        let admitted = Admitted {
+            stream,
+            ack,
+            id: "acme-request".into(),
+            io: Duration::ZERO,
+            frame_limit: frame::DEFAULT_LIMIT,
+        };
+        assert_eq!(
+            admitted.result_with_timeout(None).unwrap().data,
+            serde_json::json!("done")
+        );
     }
 }

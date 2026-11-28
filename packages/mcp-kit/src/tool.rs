@@ -190,6 +190,19 @@ impl Catalog {
     /// case, on a `string`, `integer` or `boolean` property reached only through
     /// `properties`, with at most [`MAX_PARAMETER_HEADERS`] per tool.
     pub fn new(tools: Vec<Tool>) -> Result<Self, CatalogError> {
+        Self::new_with_argument_byte_limits(tools, |_| schema::MAX_VALUE_BYTES)
+    }
+
+    /// Prepares tools with an encoded argument byte budget selected by tool name.
+    /// Set the transport frame limit separately. Tool results use their default
+    /// validation budgets.
+    ///
+    /// # Errors
+    /// Returns the same catalog construction errors as [`Self::new`].
+    pub fn new_with_argument_byte_limits(
+        tools: Vec<Tool>,
+        argument_byte_limit: impl Fn(&str) -> usize,
+    ) -> Result<Self, CatalogError> {
         let mut names = HashMap::new();
         let mut inputs = Vec::new();
         let mut headers = Vec::new();
@@ -223,7 +236,8 @@ impl Catalog {
             }
             inputs.push(
                 schema::PreparedSchema::new(&tool.input_schema)
-                    .map_err(|error| schema_error("inputSchema", error.to_string()))?,
+                    .map_err(|error| schema_error("inputSchema", error.to_string()))?
+                    .with_value_byte_limit(argument_byte_limit(&tool.name)),
             );
             headers.push(
                 headers::prepare(&tool.input_schema)
@@ -820,6 +834,44 @@ mod tests {
 
     fn object() -> Value {
         json!({"type":"object","additionalProperties":false})
+    }
+
+    #[test]
+    fn catalog_argument_byte_limits_apply_only_to_the_selected_input() {
+        let schema = json!({"type":"object","properties":{"content":{"type":"string"}},"additionalProperties":false});
+        let tools = ["acme_large", "acme_default"]
+            .into_iter()
+            .map(|name| {
+                Tool::new(name, "Accept Acme data.", schema.clone())
+                    .with_output_schema(schema.clone())
+            })
+            .collect();
+        let catalog = Catalog::new_with_argument_byte_limits(tools, |name| {
+            if name == "acme_large" {
+                6 * 1024 * 1024
+            } else {
+                schema::MAX_VALUE_BYTES
+            }
+        })
+        .unwrap();
+        let data = json!({"content":"a".repeat(5 * 1024 * 1024)});
+        catalog.validate_arguments("acme_large", &data).unwrap();
+        assert_eq!(
+            catalog
+                .validate_arguments("acme_default", &data)
+                .unwrap_err()
+                .kind,
+            schema::ArgumentErrorKind::Limit,
+        );
+        assert_eq!(
+            catalog
+                .result_schema("acme_large")
+                .unwrap()
+                .validate(&ToolResult::structured(data, false))
+                .unwrap_err()
+                .kind,
+            schema::ArgumentErrorKind::Limit,
+        );
     }
 
     #[test]
