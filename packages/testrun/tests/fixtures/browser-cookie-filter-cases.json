@@ -1,0 +1,297 @@
+{
+  "cookies": [
+    {
+      "name": "Acme",
+      "value": "root",
+      "domain": "example.com",
+      "path": "/"
+    },
+    {
+      "name": "Acme",
+      "value": "domain",
+      "domain": ".example.com",
+      "path": "/acme"
+    },
+    {
+      "name": "Acme42",
+      "value": "lookaround",
+      "domain": "example.com",
+      "path": "/acme"
+    },
+    {
+      "name": "aabaa",
+      "value": "backreference",
+      "domain": "example.com",
+      "path": "/"
+    },
+    {
+      "name": "aaba",
+      "value": "nonmatch",
+      "domain": "example.com",
+      "path": "/beta"
+    },
+    {
+      "name": "Other",
+      "value": "kept",
+      "domain": "example.com",
+      "path": "/beta"
+    },
+    {
+      "name": "beforeAcme",
+      "value": "suffix",
+      "domain": "example.com",
+      "path": "/"
+    },
+    {
+      "name": "K",
+      "value": "casefold",
+      "domain": "example.com",
+      "path": "/"
+    }
+  ],
+  "cases": [
+    {
+      "name": "whole",
+      "options": {}
+    },
+    {
+      "name": "exact-name",
+      "options": {
+        "name": "Acme"
+      }
+    },
+    {
+      "name": "exact-domain",
+      "options": {
+        "domain": "example.com"
+      }
+    },
+    {
+      "name": "domain-dot",
+      "options": {
+        "domain": ".example.com"
+      }
+    },
+    {
+      "name": "exact-path",
+      "options": {
+        "path": "/acme"
+      }
+    },
+    {
+      "name": "and",
+      "options": {
+        "name": "Acme",
+        "domain": "example.com",
+        "path": "/"
+      }
+    },
+    {
+      "name": "no-match",
+      "options": {
+        "name": "missing"
+      }
+    },
+    {
+      "name": "empty-regexp",
+      "options": {
+        "name": {
+          "regex": ""
+        }
+      }
+    },
+    {
+      "name": "ignore-case",
+      "options": {
+        "name": {
+          "regex": "acme",
+          "flags": "i"
+        }
+      }
+    },
+    {
+      "name": "global-reset",
+      "options": {
+        "name": {
+          "regex": "Acme",
+          "flags": "g"
+        }
+      }
+    },
+    {
+      "name": "sticky",
+      "options": {
+        "name": {
+          "regex": "Acme",
+          "flags": "y"
+        }
+      }
+    },
+    {
+      "name": "indices",
+      "options": {
+        "name": {
+          "regex": "^A",
+          "flags": "d"
+        }
+      }
+    },
+    {
+      "name": "lookbehind",
+      "options": {
+        "name": {
+          "regex": "(?<=Acme)42$"
+        }
+      }
+    },
+    {
+      "name": "lookahead",
+      "options": {
+        "name": {
+          "regex": "^Acme(?=42$)"
+        }
+      }
+    },
+    {
+      "name": "negative-lookahead",
+      "options": {
+        "name": {
+          "regex": "^Acme(?!42$)"
+        }
+      }
+    },
+    {
+      "name": "negative-lookbehind",
+      "options": {
+        "name": {
+          "regex": "(?<!before)Acme"
+        }
+      }
+    },
+    {
+      "name": "backreference",
+      "options": {
+        "name": {
+          "regex": "^(a+)b\\1$"
+        }
+      }
+    },
+    {
+      "name": "named-backreference",
+      "options": {
+        "name": {
+          "regex": "^(?<part>a+)b\\k<part>$"
+        }
+      }
+    },
+    {
+      "name": "unicode-property",
+      "options": {
+        "name": {
+          "regex": "^\\p{ASCII}+$",
+          "flags": "u"
+        }
+      }
+    },
+    {
+      "name": "unicode-intersection",
+      "options": {
+        "name": {
+          "regex": "^[\\p{ASCII}&&\\p{Letter}]+$",
+          "flags": "v"
+        }
+      }
+    },
+    {
+      "name": "unicode-strings",
+      "options": {
+        "name": {
+          "regex": "^[\\q{Acme|Other}]$",
+          "flags": "v"
+        }
+      }
+    },
+    {
+      "name": "unicode-casefold",
+      "options": {
+        "name": {
+          "regex": "^K$",
+          "flags": "iu"
+        }
+      }
+    },
+    {
+      "name": "literal-casefold",
+      "options": {
+        "name": {
+          "regex": "^K$",
+          "flags": "i"
+        }
+      }
+    },
+    {
+      "name": "combined-flags",
+      "options": {
+        "name": {
+          "regex": "^acme",
+          "flags": "dgimsuy"
+        }
+      }
+    },
+    {
+      "name": "domain-regexp-and-path",
+      "options": {
+        "domain": {
+          "regex": "^\\.example\\.com$"
+        },
+        "path": {
+          "regex": "^/acme$"
+        }
+      }
+    },
+    {
+      "name": "syntax-invalid",
+      "options": {
+        "name": {
+          "regex": "["
+        }
+      }
+    },
+    {
+      "name": "duplicate-flag",
+      "options": {
+        "name": {
+          "regex": "x",
+          "flags": "ii"
+        }
+      }
+    },
+    {
+      "name": "incompatible-flags",
+      "options": {
+        "name": {
+          "regex": "x",
+          "flags": "uv"
+        }
+      }
+    },
+    {
+      "name": "unknown-flag",
+      "options": {
+        "name": {
+          "regex": "x",
+          "flags": "z"
+        }
+      }
+    },
+    {
+      "name": "unicode-17-script-invalid",
+      "options": {
+        "name": {
+          "regex": "\\p{Script=Tolong_Siki}",
+          "flags": "u"
+        }
+      }
+    }
+  ]
+}

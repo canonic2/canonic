@@ -1,0 +1,12 @@
+{
+  "paths": {
+    "/page": "<!doctype html><title>Acme evaluation</title><body></body>",
+    "/frames": "<!doctype html><title>Acme frames</title><iframe id=child src=\"/child-one\"></iframe>",
+    "/child-one": "<!doctype html><p id=marker>one</p>",
+    "/child-two": "<!doctype html><p id=marker>two</p>",
+    "/worker.js": "onmessage=async e=>{const r=await fetch(e.data);postMessage(await r.text())}",
+    "/sw.js": "self.addEventListener('install',()=>self.skipWaiting())"
+  },
+  "lifecycle": "async serviceWorker=>{const frame=document.createElement('iframe');frame.src='/child-one';const loaded=new Promise(resolve=>frame.onload=resolve);document.body.append(frame);await loaded;frame.remove();globalThis.acmeWorker=new Worker('/worker.js');if(serviceWorker)await navigator.serviceWorker.register('/sw.js');}",
+  "headers": "async()=>{const page=await (await fetch('/headers')).text();const worker=await new Promise(resolve=>{const w=new Worker('/worker.js');w.onmessage=e=>resolve(e.data);w.postMessage('/headers')});return JSON.stringify({page,worker});}"
+}

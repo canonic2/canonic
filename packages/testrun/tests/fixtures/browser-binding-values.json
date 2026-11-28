@@ -1,0 +1,16 @@
+[
+  {"name":"undefined","typed":{"kind":"undefined"},"make":"()=>undefined","check":"value=>value===undefined"},
+  {"name":"null","typed":{"kind":"json","value":null},"make":"()=>null","check":"value=>value===null"},
+  {"name":"nan","typed":{"kind":"number","value":"nan"},"make":"()=>NaN","check":"value=>Number.isNaN(value)"},
+  {"name":"infinity","typed":{"kind":"number","value":"positive_infinity"},"make":"()=>Infinity","check":"value=>value===Infinity"},
+  {"name":"negative-infinity","typed":{"kind":"number","value":"negative_infinity"},"make":"()=>-Infinity","check":"value=>value===-Infinity"},
+  {"name":"negative-zero","typed":{"kind":"number","value":"negative_zero"},"make":"()=>-0","check":"value=>Object.is(value,-0)"},
+  {"name":"bigint","typed":{"kind":"bigint","value":"90071992547409931234"},"make":"()=>90071992547409931234n","check":"value=>value===90071992547409931234n"},
+  {"name":"date","typed":{"kind":"date","value":"2026-10-25T00:00:00.000Z"},"make":"()=>new Date('2026-10-25T00:00:00.000Z')","check":"value=>value instanceof Date&&value.toISOString()==='2026-10-25T00:00:00.000Z'"},
+  {"name":"url","typed":{"kind":"url","value":"https://example.com/Acme?value=1"},"make":"()=>new URL('https://example.com/Acme?value=1')","check":"value=>value instanceof URL&&value.href==='https://example.com/Acme?value=1'"},
+  {"name":"regexp","typed":{"kind":"regexp","pattern":"Acme+","flags":"gi"},"make":"()=>/Acme+/gi","check":"value=>value instanceof RegExp&&value.source==='Acme+'&&value.flags==='gi'"},
+  {"name":"error","typed":{"kind":"error","name":"TypeError","message":"Acme private binding error","stack":"TypeError: Acme private binding error\nAcme private binding stack"},"make":"()=>{const value=new TypeError('Acme private binding error');value.stack='Acme private binding stack';return value;}","check":"value=>value instanceof Error&&value.name==='TypeError'&&value.message==='Acme private binding error'&&value.stack==='TypeError: Acme private binding error\\nAcme private binding stack'"},
+  {"name":"typed-array","typed":{"kind":"typed_array","element":"uint16","base64":"AQACAA=="},"make":"()=>new Uint16Array([1,2])","check":"value=>value instanceof Uint16Array&&value.length===2&&value[0]===1&&value[1]===2"},
+  {"name":"cyclic","typed":{"kind":"object","id":1,"entries":[{"key":"label","value":{"kind":"json","value":"Acme private graph"}},{"key":"self","value":{"kind":"reference","id":1}}]},"make":"()=>{const value={label:'Acme private graph'};value.self=value;return value;}","check":"value=>value.label==='Acme private graph'&&value.self===value"},
+  {"name":"shared","typed":{"kind":"object","id":1,"entries":[{"key":"first","value":{"kind":"object","id":2,"entries":[{"key":"label","value":{"kind":"json","value":"Acme private shared"}}]}},{"key":"second","value":{"kind":"reference","id":2}}]},"make":"()=>{const shared={label:'Acme private shared'};return {first:shared,second:shared};}","check":"value=>value.first===value.second&&value.first.label==='Acme private shared'"}
+]

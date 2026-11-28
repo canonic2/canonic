@@ -1,0 +1,5 @@
+{
+  "name": "acme-diagnostic-fixtures",
+  "private": true,
+  "type": "module"
+}

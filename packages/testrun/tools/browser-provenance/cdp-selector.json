@@ -1,0 +1,15 @@
+{
+  "version": "1.64.1",
+  "license": "Apache-2.0",
+  "copyright": "Microsoft Corporation",
+  "licenseFile": "third-party/browser/upstream-notices/LICENSE",
+  "notice": "third-party/browser/upstream-notices/NOTICE",
+  "source": "lib/coreBundle.js#packages/playwright-core/src/generated/injectedScriptSource.ts",
+  "sourceSha256": "829521b67ed7be90c7d6d6098ff39f2241562d47e4ad7ccab13710924a56001d",
+  "helper": "src/browser/reading/selector.js",
+  "helperSha256": "852e40f938e72e6129b6c9a8bde3f4cc6cfe5cecb5ac734b6b06c8ad1fde42bf",
+  "adapter": "src/browser/reading/factory.js",
+  "adapterSha256": "f1b1ee53a334abb2f45501ddea82c0a06819863f983d3a48d8c343051fa181ad",
+  "macEditingCommands": "src/browser/cdp/mac-editing-commands.json",
+  "macEditingCommandsSha256": "fea0a0060b7836da3e0e842b58b2449e9d06e2ae4ff3a7a7e61912ac21fdbb13"
+}

@@ -1,0 +1,15 @@
+plugins { id 'com.android.application' }
+android {
+    namespace 'com.example.acme.diagnostics'
+    compileSdk 36
+    defaultConfig {
+        applicationId 'com.example.acme.diagnostics'
+        minSdk 24
+        targetSdk 36
+        versionCode 1
+        versionName '1.0'
+    }
+    sourceSets.main.java.srcDirs += ['../../../android']
+    sourceSets.main.kotlin.srcDirs += ['../../../android']
+    buildTypes.release { minifyEnabled false }
+}

@@ -1,0 +1,13 @@
+{
+  "vanilla": {"builder":"vite","packages":["vite"]},
+  "react": {"builder":"vite","packages":["vite","react","react-dom"]},
+  "vue": {"builder":"vite","packages":["vite","vue"]},
+  "svelte": {"builder":"vite","packages":["vite","svelte","@sveltejs/vite-plugin-svelte"]},
+  "solid": {"builder":"vite","packages":["vite","solid-js","vite-plugin-solid"],"entry":"main.jsx"},
+  "preact": {"builder":"vite","packages":["vite","preact"]},
+  "lit": {"builder":"vite","packages":["vite","lit"]},
+  "angular": {"builder":"vite","packages":["vite","@angular/core","@angular/common","@angular/compiler","@angular/platform-browser","rxjs"]},
+  "next": {"builder":"next","packages":["next","react","react-dom"]},
+  "nuxt": {"builder":"nuxt","packages":["nuxt","vue"]},
+  "astro": {"builder":"astro","packages":["astro"]}
+}

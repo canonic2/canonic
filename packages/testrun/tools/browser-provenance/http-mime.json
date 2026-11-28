@@ -1,0 +1,13 @@
+{
+  "playwrightVersion": "1.64.1",
+  "mimeVersion": "4.1.0",
+  "source": "lib/utilsBundle.js",
+  "sourceSha256": "75f1431ea7ee00b2b291a0a72d4fa1c07ae04d999f21a00cd03b8f454a5840fc",
+  "data": "src/browser/http/mime-types.json",
+  "dataSha256": "57254bcf4be00ce6d1cf95e464f2728c7081c920de62cd6cb5ed7761e387d3b8",
+  "license": "third-party/browser/mime-notices/LICENSE",
+  "fulfillSource": "lib/coreBundle.js",
+  "fulfillSourceSha256": "829521b67ed7be90c7d6d6098ff39f2241562d47e4ad7ccab13710924a56001d",
+  "fulfillData": "src/browser/routing/fulfill-mime.json",
+  "fulfillDataSha256": "3634ab6cc0604f79d81836298b249170b51cd05afcc053f4814f577ec17e81c6"
+}

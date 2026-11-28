@@ -1,0 +1,12 @@
+/target/
+/dist/
+/labs/
+/rustc-ice-*.txt
+/tests/fixtures/diagnostics/apps/android/.gradle/
+/tests/fixtures/diagnostics/apps/android/.kotlin/
+/tests/fixtures/diagnostics/apps/android/build/
+/tests/fixtures/diagnostics/apps/android/app/build/
+/tests/fixtures/diagnostics/apps/android/local.properties
+/tests/fixtures/diagnostics/apps/ios/AcmeDiagnostics.xcodeproj/xcuserdata/
+/tests/fixtures/diagnostics/apps/ios/AcmeDiagnostics.xcodeproj/project.xcworkspace/
+

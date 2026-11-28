@@ -1,0 +1,16 @@
+[
+  {"action":{"kind":"install","timeMs":1700000000000}},
+  {"action":{"kind":"set_fixed_time","timeMs":1700000000000}},
+  {"action":{"kind":"pause_at","timeMs":1700000000000}},
+  {"evaluate":"()=>{globalThis.acmeTicks=0;globalThis.acmeFrames=[];globalThis.acmeBaseline=performance.now();setInterval(()=>acmeTicks++,1000);requestAnimationFrame(t=>acmeFrames.push(t));return JSON.stringify([Date.now(),+new Date(),+new Date(0)]);}"},
+  {"action":{"kind":"run_for","durationMs":2000}},
+  {"evaluate":"()=>JSON.stringify({ticks:acmeTicks,frames:{count:acmeFrames.length,aligned:acmeFrames.every(t=>t%16===0&&t>acmeBaseline&&t<=acmeBaseline+16)},time:Date.now(),performance:performance.now()-acmeBaseline})"},
+  {"action":{"kind":"fast_forward","durationMs":86400000}},
+  {"evaluate":"()=>JSON.stringify({ticks:acmeTicks,time:Date.now(),performance:performance.now()-acmeBaseline})"},
+  {"action":{"kind":"set_system_time","timeMs":1700000010000}},
+  {"future":"()=>JSON.stringify(Date.now())"},
+  {"action":{"kind":"run_for","durationMs":2000}},
+  {"evaluate":"()=>JSON.stringify({ticks:acmeTicks,time:Date.now()})"},
+  {"action":{"kind":"resume"}},
+  {"evaluate":"()=>new Promise(resolve=>setTimeout(()=>resolve(JSON.stringify(true)),5))"}
+]

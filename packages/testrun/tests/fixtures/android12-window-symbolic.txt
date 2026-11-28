@@ -1,0 +1,14 @@
+WINDOW MANAGER WINDOWS (dumpsys window windows)
+  Window #0 Window{abc001 u0 StatusBar}:
+    mDisplayId=0
+    mAttrs={(0,0)(fillxwrap) ty=STATUS_BAR
+      fl=NOT_FOCUSABLE LAYOUT_IN_SCREEN HARDWARE_ACCELERATED}
+    isOnScreen=true
+    isVisible=true
+  Window #1 Window{abc002 u0 com.example.acme/com.example.acme.Main}:
+    mDisplayId=0
+    mAttrs={(0,0)(fillxfill) ty=BASE_APPLICATION
+      fl=KEEP_SCREEN_ON SECURE LAYOUT_IN_SCREEN HARDWARE_ACCELERATED}
+    isOnScreen=true
+    isVisible=true
+  mCurrentFocus=Window{abc002 u0 com.example.acme/com.example.acme.Main}

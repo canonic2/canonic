@@ -1,0 +1,16 @@
+{
+  "version": "1.64.1",
+  "license": "Apache-2.0",
+  "copyright": "Microsoft Corporation",
+  "licenseFile": "third-party/browser/upstream-notices/LICENSE",
+  "notice": "third-party/browser/upstream-notices/NOTICE",
+  "source": "lib/coreBundle.js#packages/playwright-core/src/generated/clockSource.ts",
+  "sourceSha256": "829521b67ed7be90c7d6d6098ff39f2241562d47e4ad7ccab13710924a56001d",
+  "upstreamHelperSha256": "63a9b4f13fd1afe975e3eb9aca70fcb9bca7803fc76e044b3c5c7202322fd494",
+  "corrections": [
+    "minimum-interval-delay-1ms",
+    "pause-replay-preserves-fixed-time-and-ticks"
+  ],
+  "helper": "src/browser/reading/clock.js",
+  "helperSha256": "39a116ebf1b410b4fc356b64c8c41f3031d56406f275e797e0be25f545816fe5"
+}

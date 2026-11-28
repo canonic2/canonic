@@ -1,0 +1,6 @@
+<!doctype html><h1>Acme secure form</h1>
+<label>Password<input id=secret type=password value="Acme-secret-sentinel"></label>
+<input type=password role=button aria-label="Private control" value="Acme-role-secret">
+<input autocomplete="section-acme current-password" value="Acme-autocomplete-secret">
+<label>Ordinary<input id=ordinary value="Visible ordinary text"></label>
+<script>globalThis.inputEvents=0;document.addEventListener('input',()=>++globalThis.inputEvents);</script>

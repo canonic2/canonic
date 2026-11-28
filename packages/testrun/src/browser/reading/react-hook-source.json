@@ -1,0 +1,9 @@
+{
+  "repository": "vercel-labs/agent-browser",
+  "commit": "04ba5264dade678062c3cdcce0f4f293e748249f",
+  "path": "cli/src/native/react/installHook.js",
+  "bytes": 182992,
+  "sha256": "0f76517ae59068da5aa0e80dce8eb5ed1ced20173489a7830276afc2e3e5c581",
+  "license": "MIT",
+  "upstream": "facebook/react"
+}

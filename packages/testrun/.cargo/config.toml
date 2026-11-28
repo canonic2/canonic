@@ -1,0 +1,16 @@
+# Development tasks beyond single Cargo commands: `cargo xtask --help`.
+[alias]
+xtask = "run --quiet --package xtask --"
+
+# Cargo, not rustc's `-D warnings`, fails every command on warnings: rustc
+# keeps no incremental results from a compilation that ends in errors, so
+# `-D warnings` turns each failing lint run into a full recheck of the crate.
+# The parallel front end checks each crate on up to eight threads.
+[build]
+warnings = "deny"
+rustflags = ["-Zthreads=8"]
+
+# Unoptimized MCP request futures outgrow the default 2 MiB test-thread stack.
+# An exported RUST_MIN_STACK still takes precedence.
+[env]
+RUST_MIN_STACK = "16777216"

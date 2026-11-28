@@ -1,0 +1,42 @@
+{
+  "page": "<!doctype html><title>Acme socket closure</title>",
+  "worker": "onmessage=e=>{const s=new WebSocket(e.data);s.onmessage=m=>{postMessage(String(m.data));s.close(1000)};s.onerror=()=>postMessage('error')}",
+  "scenarios": [
+    {
+      "name": "relay",
+      "routed": "relay",
+      "relay": true,
+      "argument": {"path": "relay"},
+      "page": "({base,path})=>new Promise(resolve=>{const s=new WebSocket(base+'/'+path);const got=[];const done=v=>resolve(JSON.stringify(v));s.onopen=()=>s.send('Acme hello');s.onmessage=e=>{got.push(String(e.data));if(got.length===2)s.close(1000,'Acme done')};s.onclose=e=>done({got,code:e.code,reason:e.reason});setTimeout(()=>done({got,timeout:true}),5000)})"
+    },
+    {
+      "name": "mock",
+      "routed": "mock",
+      "relay": false,
+      "argument": {"path": "mock"},
+      "page": "({base,path})=>new Promise(resolve=>{const s=new WebSocket(base+'/'+path);const got=[];const done=v=>resolve(JSON.stringify(v));s.onopen=()=>{s.send('Acme dropped');setTimeout(()=>s.close(1000,'Acme done'),200)};s.onmessage=e=>got.push(String(e.data));s.onclose=e=>done({opened:true,got,code:e.code,reason:e.reason});setTimeout(()=>done({got,timeout:true}),5000)})"
+    },
+    {
+      "name": "regex",
+      "regex": {"source": "(?<=/)regex-routed(?=\\?)", "flags": ""},
+      "relay": false,
+      "argument": {},
+      "page": "({base})=>new Promise(resolve=>{const out={};let n=0;const done=()=>{if(++n===2)resolve(JSON.stringify(out))};const routed=new WebSocket(base+'/regex-routed?x=1');routed.onopen=()=>{out.routed='open';routed.close(1000);done()};const plain=new WebSocket(base+'/regex-plain?x=1');plain.onmessage=e=>{out.plain=String(e.data);plain.close(1000);done()};setTimeout(()=>resolve(JSON.stringify({...out,timeout:true})),5000)})"
+    },
+    {
+      "name": "worker",
+      "routed": "worker-socket",
+      "relay": false,
+      "argument": {"path": "worker-socket"},
+      "page": "({base,path})=>new Promise(resolve=>{const w=new Worker('/socket-worker.js');w.onmessage=e=>{resolve(JSON.stringify({first:e.data}));w.terminate()};w.postMessage(base+'/'+path);setTimeout(()=>resolve(JSON.stringify({timeout:true})),5000)})"
+    },
+    {
+      "name": "large",
+      "routed": "large",
+      "relay": true,
+      "argument": {"path": "large"},
+      "page": "({base,path})=>new Promise(resolve=>{const s=new WebSocket(base+'/'+path);const big='x'.repeat(524288);let oversized='none';const done=v=>resolve(JSON.stringify(v));s.onopen=()=>{s.send(big);try{s.send(big+'x')}catch(e){oversized=e.name}};s.onmessage=e=>{const t=String(e.data);if(t.length>=524288){s.close(1000);done({echoed:t.length,oversized})}};setTimeout(()=>done({timeout:true,oversized}),10000)})"
+    }
+  ],
+  "connections": {"relay": 1, "regex-plain": 1, "worker-socket": 1, "large": 1}
+}

@@ -1,0 +1,41 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+const {installDiagnosticProbe} = createRequire(import.meta.url)('../probes/react-native.js');
+const metadata = {appId: 'com.example.acme', targetId: 'android:ACME', buildMode: 'debug'};
+test('RN probe retains bounded immutable markers and actual Profiler commit fields', () => {
+  const host = {performance: {now: () => 12}};
+  const probe = installDiagnosticProbe(metadata, host);
+  for (let i = 0; i < 70; i++) probe.mark('load', 'action:acme', {index: i});
+  const snapshot = probe.snapshot();
+  assert.equal(snapshot.events.length, 64); assert.equal(snapshot.dropped, 6);
+  snapshot.events[0].fields.index = -1;
+  assert.notEqual(probe.snapshot().events[0].fields.index, -1);
+  probe.onRender('App', 'update', 2, 4, 10, 12);
+  const commit = probe.snapshot().events.at(-1);
+  assert.equal(commit.kind, 'react_commit'); assert.equal(commit.fields.actualDuration, 2);
+  assert.equal(commit.fields.commitTime, 12); assert.equal(commit.actionId, null);
+  assert.equal(probe.snapshot().metadata.buildMode, 'debug');
+  assert.throws(() => installDiagnosticProbe(metadata, host));
+  assert.equal(probe.uninstall(), true); assert.equal(host.__TESTRUN_DIAGNOSTICS_V1__, undefined);
+});
+test('RN probe rejects getters, arbitrary payloads and invalid intervals without reading them', () => {
+  const host = {}; const probe = installDiagnosticProbe(metadata, host);
+  let reads = 0;
+  assert.throws(() => probe.mark('bad', null, {get secret() {reads++; return 'never';}}));
+  assert.equal(reads, 0);
+  assert.throws(() => probe.mark('bad', null, {object: {nested: true}}));
+  assert.throws(() => probe.measure('backwards', 10, 2));
+  assert.throws(() => probe.onRender('App', 'render-attempt', 2, 4, 0, 12));
+  probe.measure('bridge latency', 1, 4, 'action:bridge');
+  assert.equal(probe.snapshot().events.at(-1).fields.durationMs, 3);
+  assert.equal(probe.snapshot().events.at(-1).timestamp, null);
+});
+test('RN probe uninstall preserves a replacement owner and epochs differ after reinstall', () => {
+  const host = {}; const probe = installDiagnosticProbe(metadata, host);
+  const epoch = probe.snapshot().metadata.runtimeGeneration;
+  Object.defineProperty(host, '__TESTRUN_DIAGNOSTICS_V1__', {value: 'replacement', configurable: true});
+  assert.equal(probe.uninstall(), false); assert.equal(host.__TESTRUN_DIAGNOSTICS_V1__, 'replacement');
+  delete host.__TESTRUN_DIAGNOSTICS_V1__;
+  assert.notEqual(installDiagnosticProbe(metadata, host).snapshot().metadata.runtimeGeneration, epoch);
+});

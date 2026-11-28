@@ -1,0 +1,29 @@
+plugins { id 'com.android.application' }
+if (System.getenv('API_URL') != 'https://staging.example.com') {
+    throw new GradleException('Acme fixture requires the staging build environment')
+}
+android {
+    namespace 'com.example.acme.buildfixture'
+    compileSdk 36
+    defaultConfig {
+        applicationId 'com.example.acme.buildfixture'
+        minSdk 24
+        targetSdk 36
+        versionCode 1
+        versionName '1.0'
+        buildConfigField 'String', 'API_URL', '"' + System.getenv('API_URL') + '"'
+    }
+    buildFeatures { buildConfig true }
+    signingConfigs {
+        testing {
+            storeFile rootProject.file('fixture.keystore')
+            storePassword 'acme-fixture'
+            keyAlias 'acme'
+            keyPassword 'acme-fixture'
+        }
+    }
+    buildTypes {
+        debug { signingConfig signingConfigs.testing }
+        release { signingConfig signingConfigs.testing; minifyEnabled false }
+    }
+}

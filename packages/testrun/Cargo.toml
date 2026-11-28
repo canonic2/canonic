@@ -1,0 +1,105 @@
+[package]
+name = "canonic-testrun"
+version = "0.20.0"
+edition = "2024"
+rust-version = "1.102"
+license-file = "LICENSE"
+description = "Owned mobile QA sessions and MCP transport"
+
+# Testrun is the workspace root; xtask holds the development tasks run as
+# `cargo xtask <task>`. Commands in this folder still select Testrun alone.
+[workspace]
+members = ["xtask"]
+
+[lib]
+name = "testrun"
+
+[[bin]]
+name = "testrun"
+path = "src/main.rs"
+
+[features]
+# Explicit acceptance suites require their documented target or download access.
+acceptance-ios-device = []
+acceptance-ios-runner = []
+acceptance-ios-simulator = []
+acceptance-android = []
+acceptance-downloads = []
+acceptance-builds = []
+acceptance-browser-driver = []
+acceptance-browser-lifecycle = []
+acceptance-browser-public = []
+
+[dependencies]
+canonic-agent-kit = { path = "../agent-kit", version = "0.7.0" }
+canonic-process-kit = { path = "../process-kit", version = "0.9.0" }
+canonic-mcp-kit = { path = "../mcp-kit", version = "0.29.0" }
+canonic-tui-kit = { path = "../tui-kit", version = "0.6.0" }
+clap = { version = "4.6", features = ["derive"] }
+dirs = "7.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+serde-saphyr = { version = "1.3", default-features = false, features = ["deserialize"] }
+libc = "0.2"
+tokio = { version = "1.53.3", features = ["io-util", "io-std", "macros", "process", "rt-multi-thread", "sync", "time", "fs", "signal"] }
+uuid = { version = "1.24", features = ["v4", "serde"] }
+sha2 = "0.10"
+sha1 = "0.10"
+axum = { version = "0.8", features = ["ws"] }
+futures-util = "0.3"
+tokio-tungstenite = "0.29"
+plist = "1.8"
+quick-xml = "0.42"
+image = {version="0.25",default-features=false,features=["png","jpeg"]}
+base64 = "0.22"
+regex = "1.13"
+regex-automata = { version = "0.4", default-features = false, features = ["std", "syntax", "dfa-build", "dfa-search"] }
+rustls = { version = "0.23", default-features = false, features = ["std"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
+webpki-roots = "1.0.10"
+openssl = { version = "0.10.82", features = ["vendored"] }
+ureq = { version = "~3.3.0", default-features = false, features = ["rustls"] }
+url = "2.5"
+cookie_store = { version = "0.22", default-features = false }
+time = { version="0.3",features=["formatting","parsing"] }
+idevice = { version = "=0.1.68", default-features = false, features = ["ring", "usbmuxd", "core_device_proxy", "tunnel_tcp_stack", "display_stream", "amfi", "mobile_image_mounter", "cryptexd"] }
+flate2 = "1.1"
+brotli-decompressor = "5.0"
+tar = { version = "0.4", default-features = false }
+zip = { version = "9.0", default-features = false, features = ["deflate-flate2"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_Com", "Win32_System_RemoteDesktop", "Win32_System_SystemInformation", "Win32_System_Threading", "Win32_UI_Shell"] }
+
+[dev-dependencies]
+tokio = { version = "1.53.3", features = ["test-util"] }
+tempfile = "3.27"
+
+[build-dependencies]
+canonic-mcp-kit = { path = "../mcp-kit", version = "0.29.0", features = ["docs-build"] }
+cc = "1.2"
+sha2 = "0.10"
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+too_many_lines = "warn"
+mod_module_files = "deny"
+
+[lints.rustdoc]
+broken_intra_doc_links = "deny"
+private_intra_doc_links = "deny"
+
+# Without debug info, macOS builds keep no per-unit object files in deps/.
+# Kept objects pile up with every edit, and a crowded deps/ slows every test
+# process launch.
+[profile.dev]
+debug = false
+
+# Optimized dependencies: built once and cached, so edits to this package
+# rebuild as before, while tests spend far less CPU in JSON, hashing and codecs.
+[profile.dev.package."*"]
+opt-level = 2

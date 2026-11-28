@@ -1,0 +1,27 @@
+<!doctype html><title>Acme agent journey</title>
+<style>button,input,select{margin:8px}#covered{position:relative;width:180px;height:50px}#cover{position:absolute;inset:0;background:#777;z-index:2}#drag,#drop{display:inline-block;width:100px;height:50px;border:1px solid}</style>
+<main><h1>Acme checkout</h1><label>Name<input id=name></label>
+<input type=password value=Acme-secret-sentinel>
+<label><input id=check type=checkbox>Agree</label>
+<select id=plan><option value=a>A</option><option value=b>B</option></select>
+<button id=save onclick="document.querySelector('#result').textContent='Saved '+document.querySelector('#name').value;this.textContent=event.isTrusted?'Saved':'Untrusted'">Save</button>
+<button id=prompt onclick="document.querySelector('#result').textContent=prompt('Acme prompt')">Prompt</button>
+<button id=popup onclick="window.open('/popup')">Popup</button>
+<button id=duplicate>Duplicate</button><button>Duplicate</button>
+<p id=result role=status>Ready</p><div id=shadow></div>
+<div id=covered><button id=blocked onclick="this.textContent='Activated'">Covered</button><button id=cover onclick="document.querySelector('#result').textContent='Wrong target'">Overlay</button></div>
+<button id=uncover onclick="document.querySelector('#cover')?.remove()">Uncover</button>
+<div id=drag draggable=true ondragstart="event.dataTransfer.setData('text/plain','Acme drag')">Drag</div>
+<div id=drop ondragover="event.preventDefault()" ondrop="event.preventDefault();this.textContent=event.dataTransfer.getData('text/plain')">Drop</div>
+<input id=file type=file><input id=directory type=file webkitdirectory>
+<a id=download download=Acme.txt>Download</a>
+<iframe id=same srcdoc="<button onclick='this.textContent=event.isTrusted?&quot;Pressed&quot;:&quot;Untrusted&quot;'>Frame button</button>"></iframe>
+<iframe id=cross></iframe>
+<button id=hideframe onclick="document.querySelector('#same').style.visibility='hidden'">Hide frame</button>
+</main>
+<script>
+document.querySelector('#shadow').attachShadow({mode:'open'}).innerHTML='<button onclick="this.textContent=event.isTrusted?\'Shadow pressed\':\'Untrusted\'">Shadow button</button>';
+document.querySelector('#file').onchange=async event=>{const file=event.target.files[0];document.querySelector('#result').textContent=file?file.name+':'+await file.text():'Cleared';};
+document.querySelector('#directory').onchange=event=>{document.querySelector('#result').textContent=Array.from(event.target.files,file=>file.webkitRelativePath).sort().join(',');};
+document.querySelector('#download').href=URL.createObjectURL(new Blob(['Acme download'],{type:'text/plain'}));
+</script>

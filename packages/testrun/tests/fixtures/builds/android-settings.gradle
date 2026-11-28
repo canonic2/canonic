@@ -1,0 +1,17 @@
+pluginManagement {
+    gradle.startParameter.offline = System.getenv('ACME_FIXTURE_NETWORK') != '1'
+    repositories { google(); mavenCentral(); gradlePluginPortal() }
+    resolutionStrategy {
+        eachPlugin {
+            if (requested.id.id == 'com.android.application' && requested.version != null) {
+                useModule('com.android.tools.build:gradle:' + requested.version)
+            }
+        }
+    }
+}
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories { google(); mavenCentral() }
+}
+rootProject.name = 'Acme'
+include ':app'

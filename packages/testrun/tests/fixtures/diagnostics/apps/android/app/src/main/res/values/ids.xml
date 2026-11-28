@@ -1,0 +1,5 @@
+<resources>
+    <item name="acme_corrected" type="id" />
+    <item name="acme_armed" type="id" />
+    <item name="acme_result" type="id" />
+</resources>

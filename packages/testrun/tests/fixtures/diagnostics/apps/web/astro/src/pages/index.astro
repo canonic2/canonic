@@ -1,0 +1,11 @@
+---
+---
+<html lang="en"><head><meta charset="utf-8" /><title>Acme Astro diagnostics</title></head><body>
+<h1>Acme Astro</h1><div id="controls"></div><output></output>
+<script>
+  import {mountControls} from '../controls.js';
+  const disposeControls = mountControls(document.querySelector('#controls'), state => { document.querySelector('output').textContent = JSON.stringify(state); });
+  function dispose() { document.removeEventListener('astro:before-swap', dispose); disposeControls(); }
+  document.addEventListener('astro:before-swap', dispose, {once: true});
+  if (import.meta.hot) import.meta.hot.dispose(dispose);
+</script></body></html>
